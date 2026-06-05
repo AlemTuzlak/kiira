@@ -74,6 +74,37 @@ describe("formatPretty", () => {
 		expect(out).toContain("^")
 	})
 
+	it("counts failed snippets (not error messages) so Passed never goes negative", () => {
+		const r: TypedownCheckResult = {
+			snippets: [],
+			virtualFiles: [],
+			diagnostics: [
+				{
+					severity: "error",
+					code: 2322,
+					source: "typescript",
+					message: "err 1",
+					markdownFile: "a.md",
+					markdownRange: { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } },
+					virtualFile: "a__snippet_000.ts",
+				},
+				{
+					severity: "error",
+					code: 2304,
+					source: "typescript",
+					message: "err 2",
+					markdownFile: "a.md",
+					markdownRange: { start: { line: 2, character: 0 }, end: { line: 2, character: 1 } },
+					virtualFile: "a__snippet_000.ts",
+				},
+			],
+			stats: { markdownFiles: 1, snippets: 1, checked: 1, ignored: 0, errors: 2, warnings: 0 },
+		}
+		const out = formatPretty(r, { cwd: "/repo" })
+		// One snippet with two errors -> Passed 0, Failed 1 (not Passed -1).
+		expect(out).toContain("Passed 0. Failed 1.")
+	})
+
 	it("reports success when there are no diagnostics", () => {
 		const clean: TypedownCheckResult = {
 			snippets: [],

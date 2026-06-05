@@ -33,19 +33,25 @@ runs:
     - name: Run Typedown
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      # Inputs are passed via the environment (never interpolated into the script
+      # body) so that config/reporter/files values cannot inject shell commands.
+      env:
+        TD_COMMAND: ${{ inputs.command }}
+        TD_CONFIG: ${{ inputs.config }}
+        TD_REPORTER: ${{ inputs.reporter }}
+        TD_FILES: ${{ inputs.files }}
       run: |
         set -euo pipefail
         args=()
-        if [ -n "${{ inputs.config }}" ]; then
-          args+=(--config "${{ inputs.config }}")
+        if [ -n "${TD_CONFIG}" ]; then
+          args+=(--config "${TD_CONFIG}")
         fi
-        if [ -n "${{ inputs.reporter }}" ]; then
-          args+=(--reporter "${{ inputs.reporter }}")
+        if [ -n "${TD_REPORTER}" ]; then
+          args+=(--reporter "${TD_REPORTER}")
         fi
-        if [ -n "${{ inputs.files }}" ]; then
-          # shellcheck disable=SC2206
-          extra=(${{ inputs.files }})
-          ${{ inputs.command }} "${extra[@]}" "${args[@]}"
+        if [ -n "${TD_FILES}" ]; then
+          read -ra extra <<< "${TD_FILES}"
+          ${TD_COMMAND} "${extra[@]}" "${args[@]}"
         else
-          ${{ inputs.command }} "${args[@]}"
+          ${TD_COMMAND} "${args[@]}"
         fi

@@ -144,10 +144,13 @@ function mapTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): TypedownDi
 	const mdEnd = mapVirtualLine(vf.mappings, endLC.line)
 	base.markdownRange = {
 		start: { line: mdStart, character: startLC.character },
+		// When the end maps into generated lines, there is no real end column to
+		// map to, so anchor a one-character range at the start rather than adding
+		// the (possibly multi-line) virtual span length to the start column.
 		end:
-			mdEnd !== null
+			mdEnd !== null && mdEnd >= mdStart
 				? { line: mdEnd, character: endLC.character }
-				: { line: mdStart, character: startLC.character + Math.max(1, diagnostic.length ?? 1) },
+				: { line: mdStart, character: startLC.character + 1 },
 	}
 	return base
 }

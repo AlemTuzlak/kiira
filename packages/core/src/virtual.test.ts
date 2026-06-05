@@ -66,6 +66,17 @@ describe("buildVirtualFile", () => {
 	})
 })
 
+describe("createVirtualFiles uniqueness", () => {
+	it("disambiguates filenames when distinct paths flatten to the same base", async () => {
+		const { createVirtualFiles } = await import("./virtual")
+		const a = snippet({ id: "a/b.md#0", markdownFile: "a/b.md", lang: "ts", code: "const x = 1" })
+		const b = snippet({ id: "a__b.md#0", markdownFile: "a__b.md", lang: "ts", code: "const y = 1" })
+		const { virtualFiles } = await createVirtualFiles({ cwd: "/repo", snippets: [a, b], config: {} })
+		const names = virtualFiles.map((v) => v.fileName)
+		expect(new Set(names).size).toBe(2)
+	})
+})
+
 describe("mapVirtualLine", () => {
 	it("returns null for generated lines and out-of-range lines", () => {
 		const mappings = buildVirtualFile({ snippet: snippet({ code: "x" }), before: "gen" }).mappings

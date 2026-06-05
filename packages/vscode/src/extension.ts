@@ -126,23 +126,27 @@ function scheduleCheck(document: vscode.TextDocument, delayMs: number): void {
 	)
 }
 
-async function checkWorkspaceCommand(provider: VirtualContentProvider): Promise<void> {
-	void provider
+async function checkWorkspaceCommand(): Promise<void> {
 	collection.clear()
 	const settings = readSettings()
-	for (const folder of vscode.workspace.workspaceFolders ?? []) {
-		const cwd = folder.uri.fsPath
-		const config = await loadWorkspaceConfig(cwd, settings.configPath)
-		const result = await checkMarkdownFiles({ cwd, config })
-		const byFile = new Map<string, TypedownDiagnostic[]>()
-		for (const d of selectDiagnostics(result.diagnostics, { showGenerated: settings.showGeneratedDiagnostics })) {
-			const list = byFile.get(d.markdownFile) ?? []
-			list.push(d)
-			byFile.set(d.markdownFile, list)
+	try {
+		for (const folder of vscode.workspace.workspaceFolders ?? []) {
+			const cwd = folder.uri.fsPath
+			const config = await loadWorkspaceConfig(cwd, settings.configPath)
+			const result = await checkMarkdownFiles({ cwd, config })
+			const byFile = new Map<string, TypedownDiagnostic[]>()
+			for (const d of selectDiagnostics(result.diagnostics, { showGenerated: settings.showGeneratedDiagnostics })) {
+				const list = byFile.get(d.markdownFile) ?? []
+				list.push(d)
+				byFile.set(d.markdownFile, list)
+			}
+			for (const [file, diags] of byFile) {
+				collection.set(vscode.Uri.file(join(cwd, file)), diags.map(toVscodeDiagnostic))
+			}
 		}
-		for (const [file, diags] of byFile) {
-			collection.set(vscode.Uri.file(join(cwd, file)), diags.map(toVscodeDiagnostic))
-		}
+	} catch (error) {
+		output.appendLine(`Workspace check failed: ${(error as Error).message}`)
+		void vscode.window.showErrorMessage(`Typedown: workspace check failed — ${(error as Error).message}`)
 	}
 }
 
@@ -231,7 +235,7 @@ export function activate(context: vscode.ExtensionContext): void {
 				void checkAndPublish(document)
 			}
 		}),
-		vscode.commands.registerCommand("typedown.checkWorkspace", () => void checkWorkspaceCommand(provider)),
+		vscode.commands.registerCommand("typedown.checkWorkspace", () => void checkWorkspaceCommand()),
 		vscode.commands.registerCommand("typedown.openVirtualFile", () => void openVirtualFileCommand(provider)),
 		vscode.commands.registerCommand("typedown.restartServer", () => {
 			collection.clear()

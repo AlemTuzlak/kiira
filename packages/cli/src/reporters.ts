@@ -98,6 +98,15 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 		blocks.push([header, d.message, frame].filter(Boolean).join("\n"))
 	}
 
+	// Count failed *snippets* (a single snippet can emit several errors), not
+	// raw error messages, so "Passed" never goes negative.
+	const failedSnippets = new Set(
+		result.diagnostics
+			.filter((d) => d.severity === "error")
+			.map((d) => d.virtualFile ?? `${d.markdownFile}:${d.markdownRange.start.line}`)
+	).size
+	const passedSnippets = Math.max(0, stats.checked - failedSnippets)
+
 	const summary: string[] = []
 	if (stats.errors === 0 && stats.warnings === 0) {
 		summary.push(`Typedown found no errors in ${pluralize(stats.markdownFiles, "file")}.`)
@@ -109,7 +118,7 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 		summary.push(`Typedown found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`)
 	}
 	summary.push(
-		`Checked ${pluralize(stats.checked, "snippet")}. Passed ${stats.checked - stats.errors}. Failed ${stats.errors}. Ignored ${stats.ignored}.`
+		`Checked ${pluralize(stats.checked, "snippet")}. Passed ${passedSnippets}. Failed ${failedSnippets}. Ignored ${stats.ignored}.`
 	)
 
 	return [...blocks, blocks.length > 0 ? "" : "", summary.join("\n")].filter((s) => s !== undefined).join("\n")

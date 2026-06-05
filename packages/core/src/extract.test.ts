@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { extractMarkdownSnippets } from "./extract"
+import { resolveConfig } from "./config"
+import { extractMarkdownSnippets, extractSnippetsFromContent } from "./extract"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = resolve(here, "../tests/fixtures/markdown")
@@ -73,5 +74,15 @@ describe("extractMarkdownSnippets", () => {
 			config: { include: ["**/*.md"], languages: ["tsx"] },
 		})
 		expect(snippets.map((s) => s.lang)).toEqual(["tsx"])
+	})
+
+	it("recognizes fence-language aliases via codeFenceLanguages", () => {
+		const config = resolveConfig({
+			markdown: { codeFenceLanguages: ["typescript", "ts"] },
+		})
+		const content = ["```typescript", "const a = 1", "```", "", "```ts", "const b = 2", "```"].join("\n")
+		const { snippets } = extractSnippetsFromContent({ markdownFile: "a.md", content, config })
+		// Both fences are recognized and normalized to "ts".
+		expect(snippets.map((s) => s.lang)).toEqual(["ts", "ts"])
 	})
 })

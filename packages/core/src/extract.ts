@@ -30,6 +30,24 @@ export interface SnippetExtraction {
 	diagnostics: TypedownDiagnostic[]
 }
 
+/** Map recognized fence language identifiers (incl. common aliases) to a TypedownLanguage. */
+const LANG_ALIASES: Record<string, TypedownLanguage> = {
+	ts: "ts",
+	typescript: "ts",
+	tsx: "tsx",
+	typescriptreact: "tsx",
+	js: "js",
+	javascript: "js",
+	mjs: "js",
+	cjs: "js",
+	jsx: "jsx",
+	javascriptreact: "jsx",
+}
+
+function normalizeLang(raw: string): TypedownLanguage | undefined {
+	return LANG_ALIASES[raw.toLowerCase()]
+}
+
 function collectCodeNodes(node: Nodes, out: Code[]): void {
 	if (node.type === "code") {
 		out.push(node)
@@ -55,14 +73,21 @@ export function extractSnippetsFromContent({
 	const codeNodes: Code[] = []
 	collectCodeNodes(tree, codeNodes)
 
-	const languages = new Set<string>(config.languages)
+	// `codeFenceLanguages` controls which fence identifiers are recognized
+	// (it defaults to `languages`); the identifier is then normalized to a
+	// TypedownLanguage so aliases like ```typescript work.
+	const recognized = new Set<string>(config.markdown.codeFenceLanguages.map((l) => l.toLowerCase()))
 	const snippets: ExtractedSnippet[] = []
 	const diagnostics: TypedownDiagnostic[] = []
 	let index = 0
 
 	for (const node of codeNodes) {
-		const lang = node.lang
-		if (!lang || !languages.has(lang) || !node.position) {
+		const rawLang = node.lang
+		if (!rawLang || !recognized.has(rawLang.toLowerCase()) || !node.position) {
+			continue
+		}
+		const lang = normalizeLang(rawLang)
+		if (!lang) {
 			continue
 		}
 
@@ -77,7 +102,7 @@ export function extractSnippetsFromContent({
 		const snippet: ExtractedSnippet = {
 			id: `${markdownFile}#${index}`,
 			markdownFile,
-			lang: lang as TypedownLanguage,
+			lang,
 			code: node.value,
 			meta: parsed.meta,
 			markdownRange,
@@ -105,7 +130,13 @@ export function extractSnippetsFromContent({
 	return { snippets, diagnostics }
 }
 
-/** Read and extract snippets from a set of Markdown files relative to `cwd`. */
+/**
+ * Read and extract snippets from a set of Markdown files relative to `cwd`.
+ *
+ * This convenience wrapper returns only the snippets. Fence-metadata warnings
+ * (e.g. an invalid `validate=` value) are surfaced by `extractSnippetsFromContent`
+ * and by the end-to-end `checkMarkdownFiles`; use those if you need them.
+ */
 export async function extractMarkdownSnippets(input: ExtractInput): Promise<ExtractedSnippet[]> {
 	const config = resolveConfig(input.config)
 	const all: ExtractedSnippet[] = []

@@ -88,6 +88,30 @@ export function buildVirtualFile({ snippet, before, after }: BuildVirtualInput):
 	return { content: allLines.join("\n"), mappings }
 }
 
+/**
+ * Ensure a virtual filename is unique within a run. Distinct Markdown files can
+ * flatten to the same base (e.g. `a/b.md` and `a__b.md`); disambiguate by
+ * inserting a counter before the extension so the compiler host never serves
+ * one snippet's content for another.
+ */
+function uniqueName(name: string, used: Set<string>): string {
+	if (!used.has(name)) {
+		used.add(name)
+		return name
+	}
+	const dot = name.lastIndexOf(".")
+	const stem = dot === -1 ? name : name.slice(0, dot)
+	const ext = dot === -1 ? "" : name.slice(dot)
+	let counter = 1
+	let candidate = `${stem}_${counter}${ext}`
+	while (used.has(candidate)) {
+		counter += 1
+		candidate = `${stem}_${counter}${ext}`
+	}
+	used.add(candidate)
+	return candidate
+}
+
 /** Resolve a virtual line to its originating Markdown line, or `null` if generated. */
 export function mapVirtualLine(mappings: SourceMapping[], virtualLine: number): number | null {
 	return mappings.find((m) => m.virtualLine === virtualLine)?.markdownLine ?? null
@@ -148,6 +172,7 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 	const config = resolveConfig(input.config)
 	const virtualFiles: VirtualFile[] = []
 	const diagnostics: TypedownDiagnostic[] = []
+	const usedNames = new Set<string>()
 
 	for (const snippet of input.snippets) {
 		if (!isCheckable(snippet, config)) {
@@ -174,7 +199,7 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 		// isolated per snippet (no cross-snippet "cannot redeclare" false errors).
 		const afterWithModuleMarker = [after, MODULE_MARKER].filter((s) => s.length > 0).join("\n")
 		const { content, mappings } = buildVirtualFile({ snippet, before, after: afterWithModuleMarker })
-		const name = virtualFileName(snippet)
+		const name = uniqueName(virtualFileName(snippet), usedNames)
 
 		virtualFiles.push({
 			id: snippet.id,
