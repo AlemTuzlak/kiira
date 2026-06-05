@@ -33,11 +33,15 @@ jobs:
         run: pnpm exec nx run @typedown/cli:build
 
       - name: 🔎 Type-check example docs
+        # Invoke the freshly-built CLI by path. The `typedown` bin shim is only
+        # linked when @typedown/cli's dist exists at install time, which it does
+        # not in a from-source checkout (it is built in the step above).
         run: |
           status=0
+          cli="$PWD/packages/cli/dist/index.mjs"
           for example in basic react monorepo; do
             echo "::group::typedown check (examples/${example})"
-            pnpm --filter "@typedown-example/${example}" exec typedown check --reporter github || status=1
+            (cd "examples/${example}" && node "$cli" check --reporter github) || status=1
             echo "::endgroup::"
           done
           exit $status
