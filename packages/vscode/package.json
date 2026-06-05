@@ -1,0 +1,107 @@
+{
+	"name": "typedown-vscode",
+	"displayName": "Typedown",
+	"version": "0.1.0",
+	"description": "Live type-checking for TypeScript and JavaScript code fences inside Markdown files.",
+	"publisher": "CodeForge",
+	"private": true,
+	"type": "commonjs",
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": ["Linters", "Programming Languages"],
+	"keywords": ["markdown", "typescript", "docs", "typedown", "validation"],
+	"galleryBanner": {
+		"color": "#0d1117",
+		"theme": "dark"
+	},
+	"pricing": "Free",
+	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"bugs": {
+		"url": "https://github.com/AlemTuzlak/typedown/issues"
+	},
+	"qna": "marketplace",
+	"main": "./out/extension.cjs",
+	"activationEvents": ["onLanguage:markdown"],
+	"contributes": {
+		"commands": [
+			{
+				"command": "typedown.checkCurrentFile",
+				"title": "Typedown: Check Current File"
+			},
+			{
+				"command": "typedown.checkWorkspace",
+				"title": "Typedown: Check Workspace"
+			},
+			{
+				"command": "typedown.openVirtualFile",
+				"title": "Typedown: Open Virtual File For Snippet"
+			},
+			{
+				"command": "typedown.restartServer",
+				"title": "Typedown: Restart Typedown Server"
+			}
+		],
+		"configuration": {
+			"title": "Typedown",
+			"properties": {
+				"typedown.enable": {
+					"type": "boolean",
+					"default": true,
+					"description": "Enable Typedown diagnostics in Markdown files."
+				},
+				"typedown.configPath": {
+					"type": "string",
+					"default": "typedown.config.ts",
+					"description": "Path to the Typedown config file, relative to the workspace root."
+				},
+				"typedown.debounceMs": {
+					"type": "number",
+					"default": 300,
+					"description": "Delay in milliseconds before re-checking a document after a change."
+				},
+				"typedown.checkOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Re-check the document when it is saved."
+				},
+				"typedown.checkOnChange": {
+					"type": "boolean",
+					"default": true,
+					"description": "Re-check the document as it changes (debounced)."
+				},
+				"typedown.showGeneratedDiagnostics": {
+					"type": "boolean",
+					"default": false,
+					"description": "Show diagnostics that originate from generated fixture code (for debugging)."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"build": "tsdown && node scripts/copy-ts-lib.mjs",
+		"vscode:prepublish": "pnpm run build",
+		"package": "vsce package --no-dependencies",
+		"test:unit": "vitest run --passWithNoTests",
+		"test:types": "tsc"
+	},
+	"author": "AlemTuzlak",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/AlemTuzlak/typedown.git",
+		"directory": "packages/vscode"
+	},
+	"dependencies": {
+		"@alemtuzlak/typedown": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "22.14.1",
+		"@types/vscode": "^1.85.0",
+		"@vscode/vsce": "^3.6.0",
+		"ovsx": "^0.10.2",
+		"tsdown": "^0.22.2",
+		"typescript": "^5.4.0",
+		"vitest": "^3.1.1"
+	}
+}

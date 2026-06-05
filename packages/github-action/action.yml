@@ -1,0 +1,60 @@
+name: Typedown
+description: Type-check TypeScript and JavaScript code fences in Markdown files.
+author: AlemTuzlak
+branding:
+  icon: check-circle
+  color: blue
+
+inputs:
+  command:
+    description: The Typedown command to run.
+    required: false
+    default: typedown check
+  config:
+    description: Path to a Typedown config file.
+    required: false
+    default: ""
+  reporter:
+    description: "Reporter to use: pretty, github, json, or sarif."
+    required: false
+    default: github
+  files:
+    description: Optional space-separated list of Markdown files/globs to check.
+    required: false
+    default: ""
+  working-directory:
+    description: Directory to run Typedown in.
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Run Typedown
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # Inputs are passed via the environment (never interpolated into the script
+      # body) so that config/reporter/files values cannot inject shell commands.
+      env:
+        TD_COMMAND: ${{ inputs.command }}
+        TD_CONFIG: ${{ inputs.config }}
+        TD_REPORTER: ${{ inputs.reporter }}
+        TD_FILES: ${{ inputs.files }}
+      run: |
+        set -euo pipefail
+        args=()
+        if [ -n "${TD_CONFIG}" ]; then
+          args+=(--config "${TD_CONFIG}")
+        fi
+        if [ -n "${TD_REPORTER}" ]; then
+          args+=(--reporter "${TD_REPORTER}")
+        fi
+        # Split the command on whitespace into an array so shell metacharacters
+        # in the input are treated as literal argv, never re-interpreted.
+        read -ra cmd <<< "${TD_COMMAND}"
+        if [ -n "${TD_FILES}" ]; then
+          read -ra extra <<< "${TD_FILES}"
+          "${cmd[@]}" "${extra[@]}" "${args[@]}"
+        else
+          "${cmd[@]}" "${args[@]}"
+        fi

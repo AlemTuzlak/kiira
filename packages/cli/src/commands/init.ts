@@ -1,0 +1,59 @@
+import { existsSync } from "node:fs"
+import { writeFile } from "node:fs/promises"
+import { join } from "node:path"
+
+const CONFIG_TEMPLATE = `import { defineConfig } from "@alemtuzlak/typedown"
+
+export default defineConfig({
+\tinclude: ["docs/**/*.md", "README.md"],
+\ttsconfig: "tsconfig.docs.json",
+\tdefaultValidate: "type",
+\tlanguages: ["ts", "tsx", "js", "jsx"],
+\tfixtures: {
+\t\tnode: { type: "prepend", content: "export {}" },
+\t\treact: { type: "prepend", content: 'import * as React from "react"' },
+\t},
+})
+`
+
+const TSCONFIG_TEMPLATE = `${JSON.stringify(
+	{
+		extends: "./tsconfig.json",
+		compilerOptions: {
+			target: "ES2022",
+			module: "ESNext",
+			moduleResolution: "Bundler",
+			jsx: "react-jsx",
+			strict: true,
+			noEmit: true,
+			allowJs: true,
+			checkJs: true,
+			skipLibCheck: true,
+			types: ["node"],
+		},
+	},
+	null,
+	2
+)}\n`
+
+interface RunInitOptions {
+	cwd: string
+	log: (message: string) => void
+}
+
+async function writeIfMissing(path: string, content: string, name: string, log: (m: string) => void): Promise<void> {
+	if (existsSync(path)) {
+		log(`• ${name} already exists, skipping.`)
+		return
+	}
+	await writeFile(path, content, "utf8")
+	log(`✓ Created ${name}.`)
+}
+
+/** Scaffold a Typedown config and a docs tsconfig. Existing files are left untouched. */
+export async function runInit(options: RunInitOptions): Promise<number> {
+	await writeIfMissing(join(options.cwd, "typedown.config.ts"), CONFIG_TEMPLATE, "typedown.config.ts", options.log)
+	await writeIfMissing(join(options.cwd, "tsconfig.docs.json"), TSCONFIG_TEMPLATE, "tsconfig.docs.json", options.log)
+	options.log("\nDone. Run `typedown check` to validate your Markdown.")
+	return 0
+}

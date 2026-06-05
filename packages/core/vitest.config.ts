@@ -1,0 +1,21 @@
+/// <reference types="vitest" />
+import { defineConfig } from "vitest/config"
+
+export default defineConfig({
+	test: {
+		environment: "node",
+		globals: true,
+		testTimeout: 30000,
+		coverage: {
+			all: false,
+			provider: "v8",
+			reporter: ["json-summary", "html"],
+			thresholds: {
+				statements: 80,
+				branches: 80,
+				functions: 80,
+				lines: 80,
+			},
+		},
+	},
+})
