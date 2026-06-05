@@ -30,6 +30,7 @@ async function main(argv: string[]): Promise<number> {
 				reporter: parsed.reporter,
 				fix: parsed.fix,
 				verbose: parsed.verbose,
+				raw: parsed.raw,
 				log: (m) => console.log(m),
 				error: (m) => console.error(m),
 			})

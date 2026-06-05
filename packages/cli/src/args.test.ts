@@ -14,6 +14,12 @@ describe("parseArgs", () => {
 		expect(parseArgs(["--fix"]).fix).toBe(true)
 	})
 
+	it("parses the --verbose and --raw flags", () => {
+		expect(parseArgs(["check", "--verbose"]).verbose).toBe(true)
+		expect(parseArgs(["check", "--raw"]).raw).toBe(true)
+		expect(parseArgs([]).raw).toBe(false)
+	})
+
 	it("parses an explicit command and positional file args", () => {
 		const parsed = parseArgs(["check", "docs/a.md", "README.md"])
 		expect(parsed.command).toBe("check")

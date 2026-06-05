@@ -64,7 +64,7 @@ describe("runCheck", () => {
 			await runCheck({ cwd: dir, files: ["comp.md"], reporter: "json", fix: true, ...io })
 
 			expect(readFileSync(join(dir, "comp.md"), "utf8").split("\n")[2]).toBe("```tsx")
-			expect(io.logs.join("\n")).toContain("Fixed 1 fence language tag")
+			expect(io.logs.join("\n")).toContain("Fixed 1 fence")
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}

@@ -66,7 +66,27 @@ export function Chat() {
 ````
 
 Supported metadata: `ignore`, `validate=type|runtime|none`, `fixture=<name>`, `name=<id>`,
-`package=workspace|packed`.
+`package=workspace|packed`, `group=<id>`.
+
+### Grouping snippets
+
+By default each fence is checked as an isolated module. When a walkthrough is split across
+several fences (a later fence uses a `const` declared in an earlier one), tag them with the
+same `group`:
+
+````md
+```ts group=quickstart
+const client = createClient()
+```
+
+```ts group=quickstart
+await client.send("hi")   // resolves: same group as the snippet above
+```
+````
+
+Typedown also **detects** ungrouped continuations automatically — if grouping a document's
+snippets would resolve "cannot find name" errors, it warns and `typedown check --fix` adds the
+`group=` tags for you.
 
 ## Monorepos
 

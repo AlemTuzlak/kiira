@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TypedownDiagnostic } from "@typedown/core"
 import { afterEach, beforeEach } from "vitest"
-import { applyFenceLanguageFixes } from "./fix"
+import { applyFixes } from "./fix"
 
 let dir: string
 
@@ -27,12 +27,12 @@ function diag(line: number, file = "doc.md"): TypedownDiagnostic {
 	}
 }
 
-describe("applyFenceLanguageFixes", () => {
+describe("applyFixes", () => {
 	it("rewrites the language identifier on the opening fence line", async () => {
 		const md = ["# Doc", "", "```ts", "export const C = () => <div />", "```", ""].join("\n")
 		writeFileSync(join(dir, "doc.md"), md)
 
-		const summary = await applyFenceLanguageFixes(dir, [diag(2)])
+		const summary = await applyFixes(dir, [diag(2)])
 
 		expect(summary).toEqual({ filesChanged: 1, fixesApplied: 1 })
 		expect(readFileSync(join(dir, "doc.md"), "utf8").split("\n")[2]).toBe("```tsx")
@@ -42,14 +42,34 @@ describe("applyFenceLanguageFixes", () => {
 		const md = ["```typescript fixture=react", "export const C = () => <div />", "```"].join("\n")
 		writeFileSync(join(dir, "doc.md"), md)
 
-		await applyFenceLanguageFixes(dir, [diag(0)])
+		await applyFixes(dir, [diag(0)])
 
 		expect(readFileSync(join(dir, "doc.md"), "utf8").split("\n")[0]).toBe("```tsx fixture=react")
 	})
 
-	it("reports nothing changed when there are no fence-language fixes", async () => {
+	it("appends a fence-meta token (group=) to the info string", async () => {
+		const md = ["```ts", "const a = 1", "```"].join("\n")
+		writeFileSync(join(dir, "doc.md"), md)
+
+		const summary = await applyFixes(dir, [
+			{
+				severity: "warning",
+				code: "group",
+				source: "typedown",
+				message: "group it",
+				markdownFile: "doc.md",
+				markdownRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+				fix: { kind: "fence-meta", line: 0, append: "group=auth" },
+			},
+		])
+
+		expect(summary).toEqual({ filesChanged: 1, fixesApplied: 1 })
+		expect(readFileSync(join(dir, "doc.md"), "utf8").split("\n")[0]).toBe("```ts group=auth")
+	})
+
+	it("reports nothing changed when there are no fixes", async () => {
 		writeFileSync(join(dir, "doc.md"), "```ts\nconst a = 1\n```")
-		const summary = await applyFenceLanguageFixes(dir, [
+		const summary = await applyFixes(dir, [
 			{
 				severity: "error",
 				source: "typescript",

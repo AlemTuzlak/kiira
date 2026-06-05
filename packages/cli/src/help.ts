@@ -15,6 +15,7 @@ Options:
   --reporter <name>    Output format: pretty (default), json, or github.
   --fix                Rewrite mistagged code fences (e.g. ts -> tsx for JSX).
   --verbose            Show full error messages and code frames.
+  --raw                Disable colored output (plain text).
   -h, --help           Show this help.
   -v, --version        Show the version.
 

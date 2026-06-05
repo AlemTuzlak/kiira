@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
 import { type TypedownConfig, checkMarkdownFiles, loadConfig, loadConfigFile } from "@typedown/core"
 import type { ReporterName } from "../args"
-import { applyFenceLanguageFixes } from "../fix"
+import { applyFixes } from "../fix"
 import { formatReport } from "../reporters"
 
 interface RunCheckOptions {
@@ -12,6 +12,7 @@ interface RunCheckOptions {
 	reporter: ReporterName
 	fix?: boolean
 	verbose?: boolean
+	raw?: boolean
 	log: (message: string) => void
 	error: (message: string) => void
 }
@@ -53,10 +54,10 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	// `--fix`: rewrite mistagged fences in the source, then re-check so the report
 	// reflects the corrected files.
 	if (options.fix) {
-		const summary = await applyFenceLanguageFixes(cwd, result.diagnostics)
+		const summary = await applyFixes(cwd, result.diagnostics)
 		if (summary.fixesApplied > 0) {
 			options.log(
-				`Fixed ${summary.fixesApplied} fence language tag${summary.fixesApplied === 1 ? "" : "s"} in ${summary.filesChanged} file${summary.filesChanged === 1 ? "" : "s"}.\n`
+				`Fixed ${summary.fixesApplied} fence${summary.fixesApplied === 1 ? "" : "s"} in ${summary.filesChanged} file${summary.filesChanged === 1 ? "" : "s"}.\n`
 			)
 			result = await checkMarkdownFiles({ cwd, config })
 		}
@@ -66,6 +67,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 		cwd,
 		getSourceLines: createSourceLineReader(cwd),
 		verbose: options.verbose,
+		raw: options.raw,
 	})
 	if (output.length > 0) {
 		options.log(output)

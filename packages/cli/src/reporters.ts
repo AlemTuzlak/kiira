@@ -1,5 +1,5 @@
 import type { TypedownCheckResult, TypedownDiagnostic } from "@typedown/core"
-import chalk from "chalk"
+import { Chalk, type ChalkInstance } from "chalk"
 import type { ReporterName } from "./args"
 
 interface ReporterContext {
@@ -8,13 +8,23 @@ interface ReporterContext {
 	getSourceLines?: (markdownFile: string) => string[] | undefined
 	/** When true, render full messages and code frames; otherwise one line per diagnostic. */
 	verbose?: boolean
+	/** When true, strip ANSI styling (same layout, no colors). */
+	raw?: boolean
 }
 
-const SEVERITY_COLOR = {
-	error: chalk.red,
-	warning: chalk.yellow,
-	info: chalk.blue,
-} as const
+// Default instance honors TTY auto-detection; `raw` forces styling off.
+const styled = new Chalk()
+const plain = new Chalk({ level: 0 })
+
+function severityColor(c: ChalkInstance, severity: TypedownDiagnostic["severity"]): ChalkInstance["red"] {
+	if (severity === "error") {
+		return c.red
+	}
+	if (severity === "warning") {
+		return c.yellow
+	}
+	return c.blue
+}
 
 /** Render a TS code (e.g. 2305) as `TS2305`; pass other codes through. */
 function codeLabel(code: TypedownDiagnostic["code"]): string {
@@ -78,54 +88,52 @@ export function formatGithub(result: TypedownCheckResult): string {
 
 // --- Pretty ---------------------------------------------------------------
 
-function renderCodeFrame(lines: string[], diagnostic: TypedownDiagnostic): string {
+function renderCodeFrame(lines: string[], diagnostic: TypedownDiagnostic, c: ChalkInstance): string {
 	const lineIndex = diagnostic.markdownRange.start.line
 	const source = lines[lineIndex]
 	if (source === undefined) {
 		return ""
 	}
-	const displayLineNo = lineIndex + 1
-	const gutter = String(displayLineNo)
+	const gutter = String(lineIndex + 1)
 	const startCol = diagnostic.markdownRange.start.character
 	const sameLine = diagnostic.markdownRange.end.line === lineIndex
 	const endCol = sameLine ? Math.max(diagnostic.markdownRange.end.character, startCol + 1) : source.length
 	const caretPad = " ".repeat(gutter.length)
 	const underline = `${" ".repeat(startCol)}${"^".repeat(Math.max(1, endCol - startCol))}`
-	const color = SEVERITY_COLOR[diagnostic.severity]
-	return [`  ${chalk.dim(`${gutter} |`)} ${source}`, `  ${chalk.dim(`${caretPad} |`)} ${color(underline)}`].join("\n")
+	return [
+		`  ${c.dim(`${gutter} |`)} ${source}`,
+		`  ${c.dim(`${caretPad} |`)} ${severityColor(c, diagnostic.severity)(underline)}`,
+	].join("\n")
+}
+
+function location(d: TypedownDiagnostic, c: ChalkInstance): string {
+	return c.cyan(`${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`)
 }
 
 /** One compact line per diagnostic: `file:line:col severity CODE message`. */
-function compactLine(d: TypedownDiagnostic): string {
-	const location = chalk.cyan(
-		`${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`
-	)
-	const severity = SEVERITY_COLOR[d.severity](d.severity)
+function compactLine(d: TypedownDiagnostic, c: ChalkInstance): string {
+	const severity = severityColor(c, d.severity)(d.severity)
 	const code = codeLabel(d.code)
-	const codePart = code ? `${chalk.dim(code)} ` : ""
-	const firstLine = d.message.split("\n")[0]
-	return `${location} ${severity} ${codePart}${firstLine}`
+	const codePart = code ? `${c.dim(code)} ` : ""
+	return `${location(d, c)} ${severity} ${codePart}${d.message.split("\n")[0]}`
 }
 
 /** A verbose block: header, full message, and a code frame. */
-function verboseBlock(d: TypedownDiagnostic, ctx: ReporterContext): string {
-	const location = chalk.cyan(
-		`${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`
-	)
-	const severity = SEVERITY_COLOR[d.severity](d.severity)
+function verboseBlock(d: TypedownDiagnostic, ctx: ReporterContext, c: ChalkInstance): string {
 	const code = codeLabel(d.code)
-	const header = `${location} ${severity}${code ? ` ${chalk.dim(code)}` : ""}`
+	const header = `${location(d, c)} ${severityColor(c, d.severity)(d.severity)}${code ? ` ${c.dim(code)}` : ""}`
 	const frameLines = ctx.getSourceLines?.(d.markdownFile)
-	const frame = frameLines ? renderCodeFrame(frameLines, d) : ""
+	const frame = frameLines ? renderCodeFrame(frameLines, d, c) : ""
 	return [header, d.message, frame].filter(Boolean).join("\n")
 }
 
 export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext): string {
 	const { stats } = result
+	const c = ctx.raw ? plain : styled
 	const sections: string[] = []
 
 	if (ctx.verbose) {
-		sections.push(...result.diagnostics.map((d) => verboseBlock(d, ctx)))
+		sections.push(...result.diagnostics.map((d) => verboseBlock(d, ctx, c)))
 	} else {
 		// Group compact lines under a per-file header.
 		const byFile = new Map<string, TypedownDiagnostic[]>()
@@ -135,7 +143,7 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 			byFile.set(d.markdownFile, list)
 		}
 		for (const [file, diags] of byFile) {
-			sections.push([chalk.underline(file), ...diags.map((d) => `  ${compactLine(d)}`)].join("\n"))
+			sections.push([c.underline(file), ...diags.map((d) => `  ${compactLine(d, c)}`)].join("\n"))
 		}
 	}
 
@@ -150,18 +158,16 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 
 	const summary: string[] = []
 	if (stats.errors === 0 && stats.warnings === 0) {
-		summary.push(chalk.green(`✓ Typedown found no errors in ${pluralize(stats.markdownFiles, "file")}.`))
+		summary.push(c.green(`✓ Typedown found no errors in ${pluralize(stats.markdownFiles, "file")}.`))
 	} else {
-		const parts = [chalk.red(pluralize(stats.errors, "error"))]
+		const parts = [c.red(pluralize(stats.errors, "error"))]
 		if (stats.warnings > 0) {
-			parts.push(chalk.yellow(pluralize(stats.warnings, "warning")))
+			parts.push(c.yellow(pluralize(stats.warnings, "warning")))
 		}
-		summary.push(
-			`${chalk.red("✖")} Typedown found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`
-		)
+		summary.push(`${c.red("✖")} Typedown found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`)
 	}
 	summary.push(
-		chalk.dim(
+		c.dim(
 			`Checked ${pluralize(stats.checked, "snippet")}. Passed ${passedSnippets}. Failed ${failedSnippets}. Ignored ${stats.ignored}.`
 		)
 	)

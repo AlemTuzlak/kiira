@@ -9,6 +9,7 @@ interface ParsedArgs {
 	reporter: ReporterName
 	fix: boolean
 	verbose: boolean
+	raw: boolean
 }
 
 const REPORTERS: ReporterName[] = ["pretty", "json", "github"]
@@ -25,16 +26,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
 	let reporter: ReporterName = "pretty"
 	let fix = false
 	let verbose = false
+	let raw = false
 	const files: string[] = []
 
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i] ?? ""
 
 		if (arg === "--help" || arg === "-h") {
-			return { command: "help", files, reporter, fix, verbose }
+			return { command: "help", files, reporter, fix, verbose, raw }
 		}
 		if (arg === "--version" || arg === "-v") {
-			return { command: "version", files, reporter, fix, verbose }
+			return { command: "version", files, reporter, fix, verbose, raw }
 		}
 
 		if (arg === "--fix") {
@@ -43,6 +45,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		}
 		if (arg === "--verbose") {
 			verbose = true
+			continue
+		}
+		if (arg === "--raw") {
+			raw = true
 			continue
 		}
 		if (arg === "--config" || arg.startsWith("--config=")) {
@@ -69,5 +75,5 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		}
 	}
 
-	return { command: command ?? "check", files, config, reporter, fix, verbose }
+	return { command: command ?? "check", files, config, reporter, fix, verbose, raw }
 }

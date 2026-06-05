@@ -114,6 +114,13 @@ describe("formatPretty", () => {
 		expect(out).toContain("Passed 0. Failed 1.")
 	})
 
+	it("emits no ANSI escape codes in raw mode", () => {
+		const out = formatPretty(result(), { cwd: "/repo", raw: true })
+		// ESC (char 27) introduces every ANSI sequence; raw mode must emit none.
+		expect(out.includes(String.fromCharCode(27))).toBe(false)
+		expect(out).toContain("docs/quickstart.md:42:10")
+	})
+
 	it("reports success when there are no diagnostics", () => {
 		const clean: TypedownCheckResult = {
 			snippets: [],

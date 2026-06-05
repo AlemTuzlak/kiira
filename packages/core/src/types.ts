@@ -45,6 +45,8 @@ export interface TypedownFenceMeta {
 	fixture?: string
 	name?: string
 	package?: "workspace" | "packed"
+	/** Snippets sharing a group id (within one file) are type-checked together, in document order. */
+	group?: string
 }
 
 export interface TypedownConfig {
@@ -130,6 +132,17 @@ export interface TypedownFenceLanguageFix {
 	language: TypedownLanguage
 }
 
+/** An auto-fix that appends metadata to a code fence's info string (e.g. `group=foo`). */
+export interface TypedownFenceMetaFix {
+	kind: "fence-meta"
+	/** Zero-based line of the opening fence to amend. */
+	line: number
+	/** Metadata token to append after the language (e.g. "group=foo"). */
+	append: string
+}
+
+export type TypedownFix = TypedownFenceLanguageFix | TypedownFenceMetaFix
+
 export interface TypedownDiagnostic {
 	severity: "error" | "warning" | "info"
 	code?: string | number
@@ -142,7 +155,7 @@ export interface TypedownDiagnostic {
 	/** True when the diagnostic originates from generated fixture code, not the snippet itself. */
 	generated?: boolean
 	/** An optional automatic fix applied by `typedown check --fix`. */
-	fix?: TypedownFenceLanguageFix
+	fix?: TypedownFix
 }
 
 export interface TypedownCheckStats {

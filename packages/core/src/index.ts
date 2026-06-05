@@ -25,6 +25,7 @@ export {
 export {
 	type BuildVirtualInput,
 	type BuiltVirtualFile,
+	buildGroupedVirtualFile,
 	buildVirtualFile,
 	type CreateVirtualFilesInput,
 	type CreateVirtualFilesResult,

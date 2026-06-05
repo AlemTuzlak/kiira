@@ -81,6 +81,11 @@ export function parseFenceMeta(raw: string | null | undefined): ParsedFenceMeta 
 					meta.name = value
 				}
 				break
+			case "group":
+				if (value !== null) {
+					meta.group = value
+				}
+				break
 			default:
 				unknown[key] = value === null ? true : value
 				break

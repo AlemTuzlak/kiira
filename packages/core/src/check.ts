@@ -6,8 +6,21 @@ import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { extractSnippetsFromContent } from "./extract"
 import type { TypedownCheckResult, TypedownConfig, TypedownDiagnostic, TypedownLanguage, VirtualFile } from "./types"
-import { createVirtualFiles, mapVirtualLine } from "./virtual"
+import { createVirtualFiles, isCheckable, mapVirtualLine } from "./virtual"
 import { buildWorkspaceResolution } from "./workspace"
+
+/** TS codes meaning "cannot find name X" — the signature of a continuation snippet. */
+const CANNOT_FIND_NAME = new Set([2304, 2552])
+
+function groupSlug(markdownFile: string): string {
+	const base = (markdownFile.split(/[\\/]/).pop() ?? markdownFile).replace(/\.[^.]+$/, "")
+	return (
+		base
+			.replace(/[^a-zA-Z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "")
+			.toLowerCase() || "group"
+	)
+}
 
 const DEFAULT_COMPILER_OPTIONS: ts.CompilerOptions = {
 	target: ts.ScriptTarget.ES2022,
@@ -211,6 +224,62 @@ export async function checkVirtualFiles({
 	return diagnostics
 }
 
+interface SuggestGroupingInput {
+	cwd: string
+	files: string[]
+	snippets: TypedownCheckResult["snippets"]
+	diagnostics: TypedownDiagnostic[]
+	config: Partial<TypedownConfig>
+	resolved: ReturnType<typeof resolveConfig>
+}
+
+/**
+ * For each fully-ungrouped document whose isolated check reported "cannot find
+ * name" errors, probe whether checking its snippets *together* resolves them. If
+ * grouping strictly reduces the error count (and introduces no new errors such as
+ * redeclarations), suggest a `group=<slug>` annotation on each fence, with a fix.
+ */
+async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDiagnostic[]> {
+	const { cwd, files, snippets, diagnostics, config, resolved } = input
+	const suggestions: TypedownDiagnostic[] = []
+
+	for (const file of files) {
+		const checkable = snippets.filter((s) => s.markdownFile === file && isCheckable(s, resolved))
+		// Only attempt on docs the author hasn't already grouped.
+		if (checkable.length < 2 || checkable.some((s) => s.meta.group)) {
+			continue
+		}
+		const docErrors = diagnostics.filter((d) => d.markdownFile === file && d.severity === "error")
+		const hasCannotFind = docErrors.some((d) => typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code))
+		if (!hasCannotFind) {
+			continue
+		}
+
+		// Probe: check the doc's snippets as a single group.
+		const probe = checkable.map((s) => ({ ...s, meta: { ...s.meta, group: "__typedown_probe__" } }))
+		const { virtualFiles } = await createVirtualFiles({ cwd, snippets: probe, config })
+		const groupedErrors = (await checkVirtualFiles({ cwd, virtualFiles, config })).filter((d) => d.severity === "error")
+		if (groupedErrors.length >= docErrors.length) {
+			continue // grouping didn't strictly help (or added new errors like redeclaration)
+		}
+
+		const slug = groupSlug(file)
+		for (const snippet of checkable) {
+			suggestions.push({
+				severity: "warning",
+				code: "group",
+				source: "typedown",
+				message: `These snippets reference shared declarations. Tag them \`group=${slug}\` to type-check them together (run \`typedown check --fix\` to apply).`,
+				markdownFile: file,
+				markdownRange: { start: snippet.markdownRange.start, end: snippet.markdownRange.start },
+				fix: { kind: "fence-meta", line: snippet.markdownRange.start.line, append: `group=${slug}` },
+			})
+		}
+	}
+
+	return suggestions
+}
+
 export interface CheckMarkdownFilesInput {
 	cwd: string
 	files?: string[]
@@ -242,6 +311,10 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	})
 	diagnostics.push(...fixtureDiagnostics)
 	diagnostics.push(...(await checkVirtualFiles({ cwd, virtualFiles, config: userConfig })))
+
+	// Suggest grouping: for a fully-ungrouped doc whose snippets reference names
+	// from each other, check whether grouping resolves it; if so, suggest `group=`.
+	diagnostics.push(...(await suggestGrouping({ cwd, files, snippets, diagnostics, config: userConfig, resolved })))
 
 	const errors = diagnostics.filter((d) => d.severity === "error").length
 	const warnings = diagnostics.filter((d) => d.severity === "warning").length

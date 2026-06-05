@@ -59,6 +59,10 @@ describe("parseFenceMeta", () => {
 		expect(result.meta.name).toBe("basic chat example")
 	})
 
+	it("parses group=<id>", () => {
+		expect(parseFenceMeta("group=auth").meta.group).toBe("auth")
+	})
+
 	it("combines flags and pairs in one info string", () => {
 		const result = parseFenceMeta("ignore fixture=node validate=none")
 		expect(result.meta).toEqual({ ignore: true, fixture: "node", validate: "none" })
