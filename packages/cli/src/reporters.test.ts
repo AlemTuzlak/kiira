@@ -59,19 +59,28 @@ describe("formatPretty", () => {
 		expect(out).toContain("has no exported member 'useAgentChat'")
 	})
 
-	it("renders a code frame with a caret when source lines are available", () => {
-		const lines = ["# Quickstart", "", "```tsx", 'import { useAgentChat } from "@tanstack/ai/react"']
-		// Pad so index 41 exists.
+	it("renders a code frame with a caret in verbose mode", () => {
+		const lines: string[] = ["# Quickstart", "", "```tsx"]
 		while (lines.length < 42) {
 			lines.push("")
 		}
 		lines[41] = 'import { useAgentChat } from "@tanstack/ai/react"'
-		const out = formatPretty(result(), {
-			cwd: "/repo",
-			getSourceLines: () => lines,
-		})
+		const out = formatPretty(result(), { cwd: "/repo", getSourceLines: () => lines, verbose: true })
 		expect(out).toContain("import { useAgentChat }")
 		expect(out).toContain("^")
+	})
+
+	it("is compact by default: location + message, no code frame", () => {
+		const lines: string[] = []
+		while (lines.length < 42) {
+			lines.push("")
+		}
+		lines[41] = 'import { useAgentChat } from "@tanstack/ai/react"'
+		const out = formatPretty(result(), { cwd: "/repo", getSourceLines: () => lines })
+		expect(out).not.toContain("import { useAgentChat }") // source line is verbose-only
+		expect(out).not.toContain("^^^")
+		expect(out).toContain("docs/quickstart.md:42:10")
+		expect(out).toContain("has no exported member 'useAgentChat'")
 	})
 
 	it("counts failed snippets (not error messages) so Passed never goes negative", () => {

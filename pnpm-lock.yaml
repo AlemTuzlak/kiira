@@ -86,6 +86,9 @@ importers:
       '@typedown/core':
         specifier: workspace:*
         version: link:../core
+      chalk:
+        specifier: ^5.4.1
+        version: 5.4.1
     devDependencies:
       '@types/node':
         specifier: 22.14.1

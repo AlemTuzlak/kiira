@@ -31,13 +31,16 @@ describe("discoverWorkspacePackages", () => {
 })
 
 describe("buildWorkspaceResolution", () => {
-	it("maps package names to absolute source paths and adds node_modules fallbacks", async () => {
+	it("maps exports to absolute source paths, even for renamed subpaths", async () => {
 		const resolution = await buildWorkspaceResolution(workspace)
-		const entries = resolution?.paths["@demo/lib"]
-		// Absolute paths so resolution is independent of any tsconfig baseUrl.
-		expect(entries?.[0]?.endsWith("packages/lib/src/index.ts")).toBe(true)
-		expect(entries?.[0]?.startsWith("/") || /^[A-Za-z]:/.test(entries?.[0] ?? "")).toBe(true)
-		expect(resolution?.paths["@demo/lib/*"]?.[0]?.endsWith("packages/lib/src/*")).toBe(true)
+		const root = resolution?.paths["@demo/lib"]
+		// "." export points at dist, but resolves to the source file.
+		expect(root?.[0]?.endsWith("packages/lib/src/index.ts")).toBe(true)
+		expect(root?.[0]?.startsWith("/") || /^[A-Za-z]:/.test(root?.[0] ?? "")).toBe(true)
+		// "./helpers" -> dist/internal/helpers; the renamed subpath still resolves
+		// to its source (src/internal/helpers.ts), keeping the package on one side
+		// of the src/dist line.
+		expect(resolution?.paths["@demo/lib/helpers"]?.[0]?.endsWith("packages/lib/src/internal/helpers.ts")).toBe(true)
 	})
 
 	it("returns undefined when cwd is not a workspace", async () => {

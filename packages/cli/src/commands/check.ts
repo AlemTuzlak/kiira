@@ -11,6 +11,7 @@ interface RunCheckOptions {
 	config?: string
 	reporter: ReporterName
 	fix?: boolean
+	verbose?: boolean
 	log: (message: string) => void
 	error: (message: string) => void
 }
@@ -64,6 +65,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	const output = formatReport(options.reporter, result, {
 		cwd,
 		getSourceLines: createSourceLineReader(cwd),
+		verbose: options.verbose,
 	})
 	if (output.length > 0) {
 		options.log(output)

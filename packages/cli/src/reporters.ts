@@ -1,11 +1,20 @@
 import type { TypedownCheckResult, TypedownDiagnostic } from "@typedown/core"
+import chalk from "chalk"
 import type { ReporterName } from "./args"
 
 interface ReporterContext {
 	cwd: string
 	/** Return the lines of a Markdown file (for code frames), or undefined if unavailable. */
 	getSourceLines?: (markdownFile: string) => string[] | undefined
+	/** When true, render full messages and code frames; otherwise one line per diagnostic. */
+	verbose?: boolean
 }
+
+const SEVERITY_COLOR = {
+	error: chalk.red,
+	warning: chalk.yellow,
+	info: chalk.blue,
+} as const
 
 /** Render a TS code (e.g. 2305) as `TS2305`; pass other codes through. */
 function codeLabel(code: TypedownDiagnostic["code"]): string {
@@ -82,20 +91,52 @@ function renderCodeFrame(lines: string[], diagnostic: TypedownDiagnostic): strin
 	const endCol = sameLine ? Math.max(diagnostic.markdownRange.end.character, startCol + 1) : source.length
 	const caretPad = " ".repeat(gutter.length)
 	const underline = `${" ".repeat(startCol)}${"^".repeat(Math.max(1, endCol - startCol))}`
-	return [`  ${gutter} | ${source}`, `  ${caretPad} | ${underline}`].join("\n")
+	const color = SEVERITY_COLOR[diagnostic.severity]
+	return [`  ${chalk.dim(`${gutter} |`)} ${source}`, `  ${chalk.dim(`${caretPad} |`)} ${color(underline)}`].join("\n")
+}
+
+/** One compact line per diagnostic: `file:line:col severity CODE message`. */
+function compactLine(d: TypedownDiagnostic): string {
+	const location = chalk.cyan(
+		`${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`
+	)
+	const severity = SEVERITY_COLOR[d.severity](d.severity)
+	const code = codeLabel(d.code)
+	const codePart = code ? `${chalk.dim(code)} ` : ""
+	const firstLine = d.message.split("\n")[0]
+	return `${location} ${severity} ${codePart}${firstLine}`
+}
+
+/** A verbose block: header, full message, and a code frame. */
+function verboseBlock(d: TypedownDiagnostic, ctx: ReporterContext): string {
+	const location = chalk.cyan(
+		`${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`
+	)
+	const severity = SEVERITY_COLOR[d.severity](d.severity)
+	const code = codeLabel(d.code)
+	const header = `${location} ${severity}${code ? ` ${chalk.dim(code)}` : ""}`
+	const frameLines = ctx.getSourceLines?.(d.markdownFile)
+	const frame = frameLines ? renderCodeFrame(frameLines, d) : ""
+	return [header, d.message, frame].filter(Boolean).join("\n")
 }
 
 export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext): string {
 	const { stats } = result
-	const blocks: string[] = []
+	const sections: string[] = []
 
-	for (const d of result.diagnostics) {
-		const location = `${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`
-		const code = codeLabel(d.code)
-		const header = code ? `${location} - ${code} ${d.severity}` : `${location} - ${d.severity}`
-		const lines = ctx.getSourceLines?.(d.markdownFile)
-		const frame = lines ? renderCodeFrame(lines, d) : ""
-		blocks.push([header, d.message, frame].filter(Boolean).join("\n"))
+	if (ctx.verbose) {
+		sections.push(...result.diagnostics.map((d) => verboseBlock(d, ctx)))
+	} else {
+		// Group compact lines under a per-file header.
+		const byFile = new Map<string, TypedownDiagnostic[]>()
+		for (const d of result.diagnostics) {
+			const list = byFile.get(d.markdownFile) ?? []
+			list.push(d)
+			byFile.set(d.markdownFile, list)
+		}
+		for (const [file, diags] of byFile) {
+			sections.push([chalk.underline(file), ...diags.map((d) => `  ${compactLine(d)}`)].join("\n"))
+		}
 	}
 
 	// Count failed *snippets* (a single snippet can emit several errors), not
@@ -109,19 +150,25 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 
 	const summary: string[] = []
 	if (stats.errors === 0 && stats.warnings === 0) {
-		summary.push(`Typedown found no errors in ${pluralize(stats.markdownFiles, "file")}.`)
+		summary.push(chalk.green(`✓ Typedown found no errors in ${pluralize(stats.markdownFiles, "file")}.`))
 	} else {
-		const parts = [pluralize(stats.errors, "error")]
+		const parts = [chalk.red(pluralize(stats.errors, "error"))]
 		if (stats.warnings > 0) {
-			parts.push(pluralize(stats.warnings, "warning"))
+			parts.push(chalk.yellow(pluralize(stats.warnings, "warning")))
 		}
-		summary.push(`Typedown found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`)
+		summary.push(
+			`${chalk.red("✖")} Typedown found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`
+		)
 	}
 	summary.push(
-		`Checked ${pluralize(stats.checked, "snippet")}. Passed ${passedSnippets}. Failed ${failedSnippets}. Ignored ${stats.ignored}.`
+		chalk.dim(
+			`Checked ${pluralize(stats.checked, "snippet")}. Passed ${passedSnippets}. Failed ${failedSnippets}. Ignored ${stats.ignored}.`
+		)
 	)
 
-	return [...blocks, blocks.length > 0 ? "" : "", summary.join("\n")].filter((s) => s !== undefined).join("\n")
+	const body = sections.join(ctx.verbose ? "\n\n" : "\n")
+	const parts = body.length > 0 ? [body, "", summary.join("\n")] : [summary.join("\n")]
+	return parts.join("\n")
 }
 
 // --- Dispatch -------------------------------------------------------------

@@ -93,6 +93,7 @@ typedown check "docs/**/*.md"      # validate specific files/globs
 typedown check --reporter json     # machine-readable output
 typedown check --reporter github   # GitHub Actions annotations
 typedown check --fix               # rewrite mistagged code fences (ts -> tsx)
+typedown check --verbose           # full messages + code frames (default is compact)
 typedown init                      # scaffold typedown.config.ts + tsconfig.docs.json
 ```
 

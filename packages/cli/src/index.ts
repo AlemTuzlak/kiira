@@ -29,6 +29,7 @@ async function main(argv: string[]): Promise<number> {
 				config: parsed.config,
 				reporter: parsed.reporter,
 				fix: parsed.fix,
+				verbose: parsed.verbose,
 				log: (m) => console.log(m),
 				error: (m) => console.error(m),
 			})

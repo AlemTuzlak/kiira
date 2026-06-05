@@ -39,7 +39,8 @@
 		"provenance": true
 	},
 	"dependencies": {
-		"@typedown/core": "workspace:*"
+		"@typedown/core": "workspace:*",
+		"chalk": "^5.4.1"
 	},
 	"devDependencies": {
 		"@types/node": "22.14.1",
