@@ -20,3 +20,16 @@ export {
 	extractSnippetsFromContent,
 	type SnippetExtraction,
 } from "./extract"
+export {
+	type BuildVirtualInput,
+	type BuiltVirtualFile,
+	buildVirtualFile,
+	type CreateVirtualFilesInput,
+	type CreateVirtualFilesResult,
+	createVirtualFiles,
+	dedent,
+	effectiveValidate,
+	isCheckable,
+	mapVirtualLine,
+	virtualFileName,
+} from "./virtual"
