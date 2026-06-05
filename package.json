@@ -1,10 +1,10 @@
 {
-	"name": "open-source-stack-template",
-	"version": "1.0.0",
-	"description": "Minimal open-source stack to help you ship an open-source package in TS",
+	"name": "typedown-monorepo",
+	"version": "0.0.0",
+	"description": "TypeScript + Markdown validation tooling: type-check code fences in Markdown against the real project API.",
 	"scripts": {
-		"build": "nx affected --targets=build --exclude=test-apps/**",
-		"build:all": "nx run-many --targets=build --exclude=test-apps/**",
+		"build": "nx affected --targets=build --exclude=examples/**",
+		"build:all": "nx run-many --targets=build --exclude=examples/**",
 		"clean": "git clean -fdX .",
 		"clean:build": "git clean -fdx -e node_modules .",
 		"dev": "pnpm run build:all && nx watch --all -i -- pnpm run build:all",
@@ -12,10 +12,10 @@
 		"check:fix": "biome check --fix .",
 		"test": "pnpm run test:ci",
 		"test:ci": "nx run-many --targets=check,test:deps,test:unused,test:unit,test:types,test:publint,build",
-		"test:types": "nx affected --target=test:types --exclude=test-apps/**",
-		"test:unit": "nx affected --target=test:unit --exclude=test-apps/**",
-		"test:cov": "nx affected --target=test:cov --exclude=test-apps/**",
-		"test:publint": "nx affected --target=test:publint --exclude=test-apps/**",
+		"test:types": "nx affected --target=test:types --exclude=examples/**",
+		"test:unit": "nx affected --target=test:unit --exclude=examples/**",
+		"test:cov": "nx affected --target=test:cov --exclude=examples/**",
+		"test:publint": "nx affected --target=test:publint --exclude=examples/**",
 		"test:unused": "knip",
 		"test:deps": "sherif",
 		"changeset": "changeset",
@@ -24,16 +24,16 @@
 		"version": "changeset version",
 		"watch": ""
 	},
-	"author": "forge-42",
+	"author": "AlemTuzlak",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/forge-42/open-source-stack.git"
+		"url": "https://github.com/AlemTuzlak/typedown.git"
 	},
 	"bugs": {
-		"url": "https://github.com/forge-42/open-source-stack/issues"
+		"url": "https://github.com/AlemTuzlak/typedown/issues"
 	},
-	"homepage": "https://github.com/forge-42/open-source-stack#readme",
+	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"@changesets/cli": "^2.29.0",
@@ -51,9 +51,6 @@
 	},
 	"nx": {
 		"includedScripts": ["test:unused", "test:deps", "check"]
-	},
-	"overrides": {
-		"open-source-stack": "workspace:*"
 	},
 	"private": true
 }

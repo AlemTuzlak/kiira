@@ -1,0 +1,51 @@
+{
+	"name": "@typedown/cli",
+	"version": "0.1.0",
+	"description": "Command-line interface for Typedown: validate TypeScript and JavaScript code fences in your Markdown docs.",
+	"type": "module",
+	"bin": {
+		"typedown": "./dist/index.mjs"
+	},
+	"main": "./dist/index.mjs",
+	"types": "./dist/index.d.mts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"types": "./dist/index.d.mts",
+			"default": "./dist/index.mjs"
+		}
+	},
+	"scripts": {
+		"build": "tsdown",
+		"prepublishOnly": "pnpm run build",
+		"test:unit": "vitest run --passWithNoTests",
+		"test:cov": "vitest run --coverage",
+		"test:types": "tsc",
+		"test:publint": "publint --strict"
+	},
+	"author": "AlemTuzlak",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/AlemTuzlak/typedown.git",
+		"directory": "packages/cli"
+	},
+	"bugs": {
+		"url": "https://github.com/AlemTuzlak/typedown/issues"
+	},
+	"files": ["dist"],
+	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"publishConfig": {
+		"provenance": true
+	},
+	"dependencies": {
+		"@typedown/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "22.14.1",
+		"@vitest/coverage-v8": "^3.1.1",
+		"tsdown": "^0.22.2",
+		"typescript": "^5.4.0",
+		"vitest": "^3.1.1"
+	}
+}
