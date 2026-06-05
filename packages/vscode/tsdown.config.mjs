@@ -8,8 +8,10 @@ export default defineConfig({
 	clean: true,
 	format: ["cjs"],
 	outDir: "out",
-	// The VS Code host provides the `vscode` module at runtime; everything
-	// else (including @typedown/core) is bundled so the extension is portable.
-	external: ["vscode"],
-	noExternal: [/^@typedown\//, "typescript", "jiti", "mdast-util-from-markdown", "tinyglobby"],
+	deps: {
+		// The VS Code host provides `vscode` at runtime.
+		neverBundle: ["vscode"],
+		// Everything else is bundled so the packaged extension is self-contained.
+		alwaysBundle: [/^@typedown\//, "typescript", "jiti", "mdast-util-from-markdown", "tinyglobby"],
+	},
 })
