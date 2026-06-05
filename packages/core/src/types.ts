@@ -49,10 +49,21 @@ export interface TypedownFenceMeta {
 	group?: string
 }
 
+/**
+ * A per-glob compiler-option override. Any field other than `include` is treated
+ * as a tsconfig-style `compilerOptions` entry (string enum forms) and merged onto
+ * the base options for files matching `include` (e.g. `jsxImportSource` per framework).
+ */
+export interface TypedownOverride {
+	include: string[]
+	[option: string]: unknown
+}
+
 export interface TypedownConfig {
 	include: string[]
 	exclude?: string[]
 	tsconfig?: string
+	overrides?: TypedownOverride[]
 	packageMode?: "workspace" | "packed"
 	defaultValidate?: "type" | "runtime" | "none"
 	defaultFixture?: string
@@ -77,6 +88,7 @@ export interface ResolvedTypedownConfig {
 	include: string[]
 	exclude: string[]
 	tsconfig?: string
+	overrides: TypedownOverride[]
 	packageMode: "workspace" | "packed"
 	defaultValidate: "type" | "runtime" | "none"
 	defaultFixture?: string
@@ -147,7 +159,16 @@ export interface TypedownFenceMetaFix {
 	append: string
 }
 
-export type TypedownFix = TypedownFenceLanguageFix | TypedownFenceMetaFix
+/** An auto-fix that adds a per-glob compiler-option override to the Typedown config. */
+export interface TypedownConfigOverrideFix {
+	kind: "config-override"
+	/** The include glob for the override (e.g. "**\/*solid*"). */
+	include: string
+	/** tsconfig compilerOptions to set for matching files (e.g. { jsxImportSource: "solid-js" }). */
+	compilerOptions: Record<string, string>
+}
+
+export type TypedownFix = TypedownFenceLanguageFix | TypedownFenceMetaFix | TypedownConfigOverrideFix
 
 export interface TypedownDiagnostic {
 	severity: "error" | "warning" | "info"

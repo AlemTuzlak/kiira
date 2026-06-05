@@ -95,6 +95,27 @@ maps every package name to its source, and adds each package's `node_modules` as
 fallback. So in a monorepo, docs that import `@your-scope/*` **and** third-party libs resolve
 out of the box — no hand-written `tsconfig` `paths` required.
 
+## Per-glob overrides
+
+When a docs set spans multiple frameworks, a single `jsx`/`jsxImportSource` can't serve all of
+them. Use `overrides` to set compiler options for matching files:
+
+```ts
+export default defineConfig({
+  include: ["docs/**/*.md"],
+  overrides: [
+    { include: ["**/*solid*"], jsxImportSource: "solid-js" },
+    { include: ["**/*preact*"], jsxImportSource: "preact" },
+  ],
+})
+```
+
+Each override's non-`include` fields are merged onto the base compiler options for matching
+files (Typedown runs a separate TypeScript program per distinct option set). Typedown also
+**detects** the framework from the file path: if a file's JSX fails for lack of the right
+runtime types (TS7026), it suggests a `jsxImportSource` override and `typedown check --fix`
+writes it into a JSON config for you.
+
 ## Language-tag checking
 
 Typedown warns when a `ts` fence actually contains JSX (it should be `tsx`), checks it as `tsx`

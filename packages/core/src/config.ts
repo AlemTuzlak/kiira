@@ -41,6 +41,7 @@ export function resolveConfig(config: Partial<TypedownConfig> = {}): ResolvedTyp
 		include: config.include ?? ["**/*.md"],
 		exclude: config.exclude ?? [],
 		tsconfig: config.tsconfig,
+		overrides: config.overrides ?? [],
 		packageMode: config.packageMode ?? "workspace",
 		defaultValidate: config.defaultValidate ?? "type",
 		defaultFixture: config.defaultFixture,

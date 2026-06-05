@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { dirname, isAbsolute, join, resolve } from "node:path"
+import picomatch from "picomatch"
 import ts from "typescript"
 import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
@@ -206,12 +207,69 @@ export async function checkVirtualFiles({
 		}
 	}
 
-	const host = createOverlayHost(options, virtualFiles)
-	const program = ts.createProgram({
-		rootNames: virtualFiles.map((v) => v.fileName),
-		options,
-		host,
+	// Partition by matching `overrides` (per-glob compiler options) and run a
+	// separate program per distinct option set, so e.g. Solid docs can use
+	// `jsxImportSource: "solid-js"` while React docs use React's JSX.
+	const partitions = partitionByOverrides(cwd, virtualFiles, options, resolved.overrides)
+
+	const diagnostics: TypedownDiagnostic[] = []
+	for (const partition of partitions) {
+		diagnostics.push(...collectProgramDiagnostics(partition.virtualFiles, partition.options))
+	}
+	return diagnostics
+}
+
+interface OverridePartition {
+	options: ts.CompilerOptions
+	virtualFiles: VirtualFile[]
+}
+
+/** Group virtual files by the set of `overrides` matching each one's Markdown file. */
+function partitionByOverrides(
+	cwd: string,
+	virtualFiles: VirtualFile[],
+	baseOptions: ts.CompilerOptions,
+	overrides: ReturnType<typeof resolveConfig>["overrides"]
+): OverridePartition[] {
+	if (overrides.length === 0) {
+		return [{ options: { ...baseOptions }, virtualFiles }]
+	}
+
+	const matchers = overrides.map((o) => picomatch(o.include))
+	const converted = overrides.map((o) => {
+		const { include: _include, ...compilerOptions } = o
+		const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, cwd)
+		if (errors.length > 0) {
+			const messages = errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, "\n")).join("; ")
+			throw new Error(`Invalid compilerOptions in override ${JSON.stringify(o.include)}: ${messages}`)
+		}
+		return options
 	})
+
+	const partitions = new Map<string, OverridePartition>()
+	for (const vf of virtualFiles) {
+		const file = vf.snippet.markdownFile
+		const matched = matchers.map((m) => m(file))
+		const key = matched.map((b) => (b ? "1" : "0")).join("")
+		let partition = partitions.get(key)
+		if (!partition) {
+			let options = baseOptions
+			matched.forEach((isMatch, i) => {
+				if (isMatch) {
+					options = { ...options, ...converted[i] }
+				}
+			})
+			partition = { options, virtualFiles: [] }
+			partitions.set(key, partition)
+		}
+		partition.virtualFiles.push(vf)
+	}
+	return [...partitions.values()]
+}
+
+function collectProgramDiagnostics(virtualFiles: VirtualFile[], options: ts.CompilerOptions): TypedownDiagnostic[] {
+	const host = createOverlayHost(options, virtualFiles)
+	const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
 
 	const diagnostics: TypedownDiagnostic[] = []
 	for (const vf of virtualFiles) {
@@ -219,15 +277,66 @@ export async function checkVirtualFiles({
 		if (!sourceFile) {
 			continue
 		}
-		const tsDiagnostics = [
+		for (const diagnostic of [
 			...program.getSyntacticDiagnostics(sourceFile),
 			...program.getSemanticDiagnostics(sourceFile),
-		]
-		for (const diagnostic of tsDiagnostics) {
+		]) {
 			diagnostics.push(mapTsDiagnostic(diagnostic, vf))
 		}
 	}
 	return diagnostics
+}
+
+// JSX frameworks whose snippets need a non-default `jsxImportSource`, matched by
+// a keyword appearing in the file path. (`react` is the TS default, so omitted.)
+const FRAMEWORK_JSX: Array<[keyword: string, jsxImportSource: string]> = [
+	["preact", "preact"],
+	["solid", "solid-js"],
+	["vue", "vue"],
+]
+
+/** TS code for "JSX element has no JSX.IntrinsicElements" — the wrong-JSX-runtime signature. */
+const JSX_NO_INTRINSICS = 7026
+
+/**
+ * For files emitting TS7026 (JSX checked without the right runtime types), infer
+ * the framework from the file path and suggest a `jsxImportSource` override at the
+ * broadest matching glob, with a fix that writes it into the config.
+ */
+function suggestFrameworkJsx(
+	files: string[],
+	snippets: TypedownCheckResult["snippets"],
+	diagnostics: TypedownDiagnostic[],
+	resolved: ReturnType<typeof resolveConfig>
+): TypedownDiagnostic[] {
+	const alreadyOverridden = resolved.overrides.filter((o) => "jsxImportSource" in o).map((o) => picomatch(o.include))
+	const suggestions: TypedownDiagnostic[] = []
+
+	// Emit a suggestion per affected file; the config-override fix is de-duplicated
+	// (by include + options) when `--fix` applies it, so a shared glob is written once.
+	for (const file of files) {
+		const jsxError = diagnostics.find((d) => d.markdownFile === file && d.code === JSX_NO_INTRINSICS)
+		if (!jsxError || alreadyOverridden.some((m) => m(file))) {
+			continue
+		}
+		const framework = FRAMEWORK_JSX.find(([keyword]) => file.toLowerCase().includes(keyword))
+		if (!framework) {
+			continue
+		}
+		const [keyword, jsxImportSource] = framework
+		const include = `**/*${keyword}*`
+		const anchor = snippets.find((s) => s.markdownFile === file)?.markdownRange.start ?? jsxError.markdownRange.start
+		suggestions.push({
+			severity: "warning",
+			code: "jsx-framework",
+			source: "typedown",
+			message: `JSX here looks like ${keyword}. Add a \`jsxImportSource: "${jsxImportSource}"\` override for \`${include}\` (run \`typedown check --fix\` to apply).`,
+			markdownFile: file,
+			markdownRange: { start: anchor, end: anchor },
+			fix: { kind: "config-override", include, compilerOptions: { jsxImportSource } },
+		})
+	}
+	return suggestions
 }
 
 interface SuggestGroupingInput {
@@ -321,6 +430,10 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	// Suggest grouping: for a fully-ungrouped doc whose snippets reference names
 	// from each other, check whether grouping resolves it; if so, suggest `group=`.
 	diagnostics.push(...(await suggestGrouping({ cwd, files, snippets, diagnostics, config: userConfig, resolved })))
+
+	// Suggest a per-framework jsxImportSource override for files whose JSX fails
+	// for lack of the right JSX runtime types (TS7026).
+	diagnostics.push(...suggestFrameworkJsx(files, snippets, diagnostics, resolved))
 
 	const errors = diagnostics.filter((d) => d.severity === "error").length
 	const warnings = diagnostics.filter((d) => d.severity === "warning").length

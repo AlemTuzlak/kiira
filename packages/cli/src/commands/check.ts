@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
-import { type TypedownConfig, checkMarkdownFiles, loadConfig, loadConfigFile } from "@typedown/core"
+import { type TypedownConfig, checkMarkdownFiles, findConfigFile, loadConfig, loadConfigFile } from "@typedown/core"
 import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
-import { applyFixes } from "../fix"
+import { applyConfigOverrides, applyFixes } from "../fix"
 import { formatReport } from "../reporters"
 
 interface RunCheckOptions {
@@ -61,12 +61,37 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	// `--fix`: rewrite mistagged fences in the source, then re-check so the report
 	// reflects the corrected files.
 	if (options.fix) {
-		const summary = await applyFixes(cwd, result.diagnostics)
-		if (summary.fixesApplied > 0) {
-			options.log(
-				`Fixed ${summary.fixesApplied} fence${summary.fixesApplied === 1 ? "" : "s"} in ${summary.filesChanged} file${summary.filesChanged === 1 ? "" : "s"}.\n`
-			)
+		const configPath = options.config
+			? isAbsolute(options.config)
+				? options.config
+				: resolve(cwd, options.config)
+			: findConfigFile(cwd)
+
+		const fences = await applyFixes(cwd, result.diagnostics)
+		const overrides = await applyConfigOverrides(configPath, result.diagnostics)
+
+		if (fences.fixesApplied > 0 || overrides.applied.length > 0) {
+			const parts: string[] = []
+			if (fences.fixesApplied > 0) {
+				parts.push(`${fences.fixesApplied} fence${fences.fixesApplied === 1 ? "" : "s"}`)
+			}
+			if (overrides.applied.length > 0) {
+				parts.push(`${overrides.applied.length} config override${overrides.applied.length === 1 ? "" : "s"}`)
+			}
+			options.log(`Fixed ${parts.join(" and ")}.\n`)
+			// Reflect applied overrides in the in-memory config for the re-check.
+			config.overrides = [...(config.overrides ?? []), ...overrides.applied]
 			result = await checkMarkdownFiles({ cwd, config })
+		}
+
+		if (overrides.manual.length > 0) {
+			options.log("Add these overrides to your Typedown config (config is not JSON, so apply manually):")
+			for (const fix of overrides.manual) {
+				const opts = Object.entries(fix.compilerOptions)
+					.map(([k, v]) => `"${k}": "${v}"`)
+					.join(", ")
+				options.log(`  { "include": ["${fix.include}"], ${opts} }`)
+			}
 		}
 	}
 

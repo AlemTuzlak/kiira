@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { TypedownDiagnostic } from "@typedown/core"
 import { afterEach, beforeEach } from "vitest"
-import { applyFixes } from "./fix"
+import { applyConfigOverrides, applyFixes } from "./fix"
 
 let dir: string
 
@@ -79,5 +79,55 @@ describe("applyFixes", () => {
 			},
 		])
 		expect(summary).toEqual({ filesChanged: 0, fixesApplied: 0 })
+	})
+})
+
+describe("applyConfigOverrides", () => {
+	function overrideDiag(): TypedownDiagnostic {
+		return {
+			severity: "warning",
+			code: "jsx-framework",
+			source: "typedown",
+			message: "solid",
+			markdownFile: "docs/ai-solid.md",
+			markdownRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+			fix: { kind: "config-override", include: "**/*solid*", compilerOptions: { jsxImportSource: "solid-js" } },
+		}
+	}
+
+	it("merges an override into a JSON config", async () => {
+		const configPath = join(dir, "typedown.config.json")
+		writeFileSync(configPath, JSON.stringify({ include: ["docs/**/*.md"] }, null, 2))
+
+		const result = await applyConfigOverrides(configPath, [overrideDiag()])
+
+		expect(result.applied).toEqual([{ include: ["**/*solid*"], jsxImportSource: "solid-js" }])
+		const written = JSON.parse(readFileSync(configPath, "utf8"))
+		expect(written.overrides).toEqual([{ include: ["**/*solid*"], jsxImportSource: "solid-js" }])
+	})
+
+	it("is idempotent — does not duplicate an existing override", async () => {
+		const configPath = join(dir, "typedown.config.json")
+		writeFileSync(
+			configPath,
+			JSON.stringify({
+				include: ["docs/**/*.md"],
+				overrides: [{ include: ["**/*solid*"], jsxImportSource: "solid-js" }],
+			})
+		)
+		const result = await applyConfigOverrides(configPath, [overrideDiag()])
+		expect(result.applied).toEqual([])
+	})
+
+	it("returns fixes as manual when the config is not JSON", async () => {
+		const result = await applyConfigOverrides(join(dir, "typedown.config.ts"), [overrideDiag()])
+		expect(result.applied).toEqual([])
+		expect(result.manual).toHaveLength(1)
+	})
+
+	it("throws rather than clobbering a non-array overrides field", async () => {
+		const configPath = join(dir, "typedown.config.json")
+		writeFileSync(configPath, JSON.stringify({ include: ["docs/**/*.md"], overrides: {} }))
+		await expect(applyConfigOverrides(configPath, [overrideDiag()])).rejects.toThrow(/overrides.*array/i)
 	})
 })

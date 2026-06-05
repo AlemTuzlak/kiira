@@ -19,6 +19,7 @@ describe("resolveConfig", () => {
 			include: ["**/*.md"],
 			exclude: [],
 			tsconfig: undefined,
+			overrides: [],
 			packageMode: "workspace",
 			defaultValidate: "type",
 			defaultFixture: undefined,
