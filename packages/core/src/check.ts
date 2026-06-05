@@ -386,16 +386,42 @@ function isWithinSnippet(diagnostic: TypedownDiagnostic, snippet: TypedownCheckR
 	return line >= start && line <= end
 }
 
+/** Names a snippet reports as "cannot find" when checked standalone, parsed from its errors. */
+function unresolvedNames(
+	snippet: TypedownCheckResult["snippets"][number],
+	docErrors: TypedownDiagnostic[]
+): Set<string> {
+	const names = new Set<string>()
+	for (const d of docErrors) {
+		if (d.markdownFile !== snippet.markdownFile || !isWithinSnippet(d, snippet)) {
+			continue
+		}
+		if (typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code)) {
+			const name = /Cannot find name '([^']+)'/.exec(d.message)?.[1]
+			if (name) {
+				names.add(name)
+			}
+		}
+	}
+	return names
+}
+
 /**
- * Plan minimal snippet groups via static analysis: union each snippet with the
- * nearest earlier snippet that declares a name it references but doesn't bind.
- * Independent examples (no shared declarations) stay in separate clusters, so two
- * unrelated `const x = …` blocks never merge into one redeclaring group. Returns
- * only multi-member clusters, each as sorted indices into `snippets`.
+ * Plan minimal snippet groups. For each snippet, link it to the nearest earlier
+ * snippet that declares a name the snippet *actually fails to resolve standalone*
+ * (its "cannot find name" errors) — so already-valid snippets are never dragged in
+ * as consumers, only used as providers. A redeclare guard refuses to merge two
+ * components that declare a common top-level name, so two independent `const x = …`
+ * examples never collapse into one redeclaring group even when they share a
+ * reference. Returns only multi-member clusters, each as sorted indices.
  */
-function planMinimalGroups(snippets: TypedownCheckResult["snippets"]): number[][] {
+function planMinimalGroups(snippets: TypedownCheckResult["snippets"], docErrors: TypedownDiagnostic[]): number[][] {
 	const symbols = snippets.map((s) => analyzeSnippet(s.code, s.lang))
+	const missing = snippets.map((s) => unresolvedNames(s, docErrors))
+
 	const parent = snippets.map((_, i) => i)
+	// Per-root union of the component's declared top-level names, for the guard.
+	const declaresOf = symbols.map((sym) => new Set(sym.declares))
 	const find = (x: number): number => {
 		let root = x
 		while (parent[root] !== root) {
@@ -404,15 +430,30 @@ function planMinimalGroups(snippets: TypedownCheckResult["snippets"]): number[][
 		parent[x] = root
 		return root
 	}
-	const union = (a: number, b: number): void => {
-		parent[find(a)] = find(b)
+	const tryUnion = (a: number, b: number): void => {
+		const ra = find(a)
+		const rb = find(b)
+		if (ra === rb) {
+			return
+		}
+		// Redeclare guard: merging two snippets that both declare the same name
+		// would only produce a TS2451, so keep independent examples apart.
+		for (const name of declaresOf[ra]) {
+			if (declaresOf[rb].has(name)) {
+				return
+			}
+		}
+		parent[ra] = rb
+		for (const name of declaresOf[ra]) {
+			declaresOf[rb].add(name)
+		}
 	}
 
 	for (let i = 0; i < snippets.length; i += 1) {
-		for (const ref of symbols[i].references) {
+		for (const name of missing[i]) {
 			for (let j = i - 1; j >= 0; j -= 1) {
-				if (symbols[j].declares.has(ref)) {
-					union(i, j)
+				if (symbols[j].declares.has(name)) {
+					tryUnion(i, j)
 					break
 				}
 			}
@@ -452,23 +493,33 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 			continue
 		}
 
-		const plans = planMinimalGroups(checkable)
-		let emitted = 0
-		for (const plan of plans) {
+		// Probe every candidate cluster first; keep only those that verify, so the
+		// `-N` slug suffix reflects the number of *surviving* groups (a doc with one
+		// real group gets a clean `group=<doc>`, not `group=<doc>-1`).
+		const survivors: TypedownCheckResult["snippets"][] = []
+		for (const plan of planMinimalGroups(checkable, docErrors)) {
 			const members = plan.map((i) => checkable[i])
-			const baseline = new Set(docErrors.filter((d) => members.some((m) => isWithinSnippet(d, m))).map(errorKey))
+			const memberErrors = docErrors.filter((d) => members.some((m) => isWithinSnippet(d, m)))
+			const baseline = new Set(memberErrors.map(errorKey))
+			const baselineCannotFind = memberErrors.filter(
+				(d) => typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code)
+			).length
 
-			// Verify the cluster: type-check it together and require strict improvement
-			// (removes at least one error, introduces none).
+			// Verify the cluster: type-check it together and require it to strictly
+			// reduce the "cannot find name" errors while introducing no new error of
+			// any kind (a new TS2451 redeclare would mean we merged too much).
 			const probe = members.map((s) => ({ ...s, meta: { ...s.meta, group: "__typedown_probe__" } }))
 			const { virtualFiles } = await createVirtualFiles({ cwd, snippets: probe, config })
 			const grouped = (await checkVirtualFiles({ cwd, virtualFiles, config })).filter((d) => d.severity === "error")
-			if (grouped.some((d) => !baseline.has(errorKey(d))) || grouped.length >= baseline.size) {
+			const groupedCannotFind = grouped.filter((d) => typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code)).length
+			if (grouped.some((d) => !baseline.has(errorKey(d))) || groupedCannotFind >= baselineCannotFind) {
 				continue
 			}
+			survivors.push(members)
+		}
 
-			emitted += 1
-			const slug = plans.length > 1 ? `${groupSlug(file)}-${emitted}` : groupSlug(file)
+		survivors.forEach((members, index) => {
+			const slug = survivors.length > 1 ? `${groupSlug(file)}-${index + 1}` : groupSlug(file)
 			for (const member of members) {
 				suggestions.push({
 					severity: "warning",
@@ -480,7 +531,7 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 					fix: { kind: "fence-meta", line: member.markdownRange.start.line, append: `group=${slug}` },
 				})
 			}
-		}
+		})
 	}
 
 	return suggestions

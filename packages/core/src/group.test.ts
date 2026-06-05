@@ -57,6 +57,23 @@ describe("group= checking", () => {
 		expect(lines).toEqual([2, 8])
 	})
 
+	it("excludes a redeclaring example that only shares a free reference with the definer", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["redeclare-ref.md"],
+			config: { include: ["**/*.md"] },
+		})
+		// The definer (fence line 2) and its continuation (line 9) group. The third
+		// fence (line 16) references `Widget` from the definer but redeclares `client`,
+		// so merging it would cause TS2451 — it must be left out, and the legitimate
+		// group must still be suggested (the bug was the whole cluster being dropped).
+		const lines = result.diagnostics
+			.filter((d) => d.code === "group")
+			.map((d) => d.markdownRange.start.line)
+			.sort((a, b) => a - b)
+		expect(lines).toEqual([2, 9])
+	})
+
 	it("plans separate groups for independent continuation clusters", async () => {
 		const result = await checkMarkdownFiles({
 			cwd: fixtures,
