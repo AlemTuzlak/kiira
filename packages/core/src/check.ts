@@ -216,7 +216,13 @@ export async function checkVirtualFiles({
 	for (const partition of partitions) {
 		diagnostics.push(...collectProgramDiagnostics(partition.virtualFiles, partition.options))
 	}
-	return diagnostics
+
+	// Unresolved relative imports usually point at an imaginary sibling-snippet
+	// file or the reader's own project, so drop them unless explicitly enforced.
+	if (resolved.checkRelativeImports) {
+		return diagnostics
+	}
+	return diagnostics.filter((d) => !isUnresolvedRelativeImport(d))
 }
 
 interface OverridePartition {
@@ -297,6 +303,22 @@ const FRAMEWORK_JSX: Array<[keyword: string, jsxImportSource: string]> = [
 
 /** TS code for "JSX element has no JSX.IntrinsicElements" — the wrong-JSX-runtime signature. */
 const JSX_NO_INTRINSICS = 7026
+
+/** TS code for "Cannot find module 'X'". */
+const MODULE_NOT_FOUND = 2307
+
+/**
+ * True for a "cannot find module './x'" diagnostic whose specifier is relative —
+ * a doc snippet importing from an imaginary sibling file or the reader's project,
+ * not a real (checkable) package import.
+ */
+function isUnresolvedRelativeImport(diagnostic: TypedownDiagnostic): boolean {
+	if (diagnostic.code !== MODULE_NOT_FOUND) {
+		return false
+	}
+	const specifier = /Cannot find module '([^']+)'/.exec(diagnostic.message)?.[1]
+	return specifier ? specifier.startsWith(".") : false
+}
 
 /**
  * For files emitting TS7026 (JSX checked without the right runtime types), infer

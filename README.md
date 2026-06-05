@@ -146,6 +146,11 @@ Unused locals/parameters/imports (TS6133) are **ignored by default** — doc sni
 routinely declare things they don't use. Set `checkUnusedSymbols: true` in your config to
 enforce them.
 
+Unresolved **relative** imports (`./x`, `../x`) are also **ignored by default** — snippets
+often "import" from an imaginary sibling file standing in for an earlier snippet or the
+reader's project. Bare package imports (`@scope/pkg`, `react`) are always checked. Set
+`checkRelativeImports: true` to enforce relative imports too.
+
 ## Editor
 
 The [`typedown-vscode`](packages/vscode) extension shows squiggles inside Markdown code

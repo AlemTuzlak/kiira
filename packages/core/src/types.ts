@@ -72,6 +72,13 @@ export interface TypedownConfig {
 	 * doc snippets routinely declare things they don't use. Set true to enforce.
 	 */
 	checkUnusedSymbols?: boolean
+	/**
+	 * Report unresolved *relative* imports (`./x`, `../x`) as errors. Off by default —
+	 * snippets often "import" from imaginary sibling files that stand in for an
+	 * earlier snippet or the reader's own project. Bare package imports
+	 * (`@scope/pkg`, `react`) are always checked. Set true to enforce.
+	 */
+	checkRelativeImports?: boolean
 	fixtures?: Record<string, TypedownFixture>
 	languages?: TypedownLanguage[]
 	markdown?: {
@@ -93,6 +100,7 @@ export interface ResolvedTypedownConfig {
 	defaultValidate: "type" | "runtime" | "none"
 	defaultFixture?: string
 	checkUnusedSymbols: boolean
+	checkRelativeImports: boolean
 	fixtures: Record<string, TypedownFixture>
 	languages: TypedownLanguage[]
 	markdown: {

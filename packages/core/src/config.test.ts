@@ -24,6 +24,7 @@ describe("resolveConfig", () => {
 			defaultValidate: "type",
 			defaultFixture: undefined,
 			checkUnusedSymbols: false,
+			checkRelativeImports: false,
 			fixtures: {},
 			languages: ["ts", "tsx", "js", "jsx"],
 			markdown: {
