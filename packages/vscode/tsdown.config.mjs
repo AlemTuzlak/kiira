@@ -9,9 +9,12 @@ export default defineConfig({
 	format: ["cjs"],
 	outDir: "out",
 	deps: {
-		// The VS Code host provides `vscode` at runtime.
-		neverBundle: ["vscode"],
+		// `vscode` is provided by the host. `typescript` must stay external (a real
+		// on-disk module): it locates its bundled `lib.*.d.ts` via the path of its own
+		// executing file, so inlining it into the bundle breaks default-lib resolution
+		// and every global (`JSON`, `Date`, DOM types, …) is reported as undefined.
+		neverBundle: ["vscode", "typescript"],
 		// Everything else is bundled so the packaged extension is self-contained.
-		alwaysBundle: [/^@typedown\//, "typescript", "jiti", "mdast-util-from-markdown", "tinyglobby"],
+		alwaysBundle: [/^@typedown\//, "jiti", "mdast-util-from-markdown", "tinyglobby"],
 	},
 })

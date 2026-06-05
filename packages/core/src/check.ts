@@ -29,6 +29,10 @@ const DEFAULT_COMPILER_OPTIONS: ts.CompilerOptions = {
 	module: ts.ModuleKind.ESNext,
 	moduleResolution: ts.ModuleResolutionKind.Bundler,
 	jsx: ts.JsxEmit.ReactJSX,
+	// Doc snippets routinely use both ES and web globals (`console`, `fetch`, `Date`,
+	// `JSON`). Without a project tsconfig to specify `lib`, include DOM so these
+	// resolve instead of being reported as undefined names.
+	lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
 	strict: true,
 	esModuleInterop: true,
 	forceConsistentCasingInFileNames: true,

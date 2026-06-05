@@ -71,7 +71,9 @@ export class TypedownCodeActionProvider implements vscode.CodeActionProvider {
 
 	async provideCodeActions(
 		document: vscode.TextDocument,
-		range: vscode.Range | vscode.Selection
+		range: vscode.Range | vscode.Selection,
+		_context: vscode.CodeActionContext,
+		token: vscode.CancellationToken
 	): Promise<vscode.CodeAction[]> {
 		const uri = document.uri.toString()
 		const diagnostics = this.deps.getDiagnostics(uri) ?? []
@@ -102,10 +104,10 @@ export class TypedownCodeActionProvider implements vscode.CodeActionProvider {
 				inRange.filter((d) => d.source === "typescript" && typeof d.code === "number").map((d) => d.code as number)
 			),
 		]
-		if (tsCodes.length > 0) {
+		if (tsCodes.length > 0 && !token.isCancellationRequested) {
 			const ctx = await this.deps.resolveContext(document)
 			const virtualFiles = this.deps.getVirtualFiles(uri)
-			if (ctx && virtualFiles && virtualFiles.length > 0) {
+			if (ctx && virtualFiles && virtualFiles.length > 0 && !token.isCancellationRequested) {
 				const fixes = await getCodeFixes({
 					cwd: ctx.cwd,
 					virtualFiles,
