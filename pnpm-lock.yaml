@@ -35,12 +35,12 @@ importers:
 
   examples/basic:
     devDependencies:
-      '@typedown/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@typedown/core':
+      '@alemtuzlak/typedown':
         specifier: workspace:*
         version: link:../../packages/core
+      '@alemtuzlak/typedown-cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@types/node':
         specifier: 22.14.1
         version: 22.14.1
@@ -50,12 +50,12 @@ importers:
 
   examples/monorepo:
     devDependencies:
-      '@typedown/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@typedown/core':
+      '@alemtuzlak/typedown':
         specifier: workspace:*
         version: link:../../packages/core
+      '@alemtuzlak/typedown-cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@types/node':
         specifier: 22.14.1
         version: 22.14.1
@@ -65,12 +65,12 @@ importers:
 
   examples/react:
     devDependencies:
-      '@typedown/cli':
-        specifier: workspace:*
-        version: link:../../packages/cli
-      '@typedown/core':
+      '@alemtuzlak/typedown':
         specifier: workspace:*
         version: link:../../packages/core
+      '@alemtuzlak/typedown-cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
       '@types/react':
         specifier: ^18.3.0
         version: 18.3.30
@@ -83,7 +83,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@typedown/core':
+      '@alemtuzlak/typedown':
         specifier: workspace:*
         version: link:../core
       chalk:
@@ -150,7 +150,7 @@ importers:
 
   packages/vscode:
     dependencies:
-      '@typedown/core':
+      '@alemtuzlak/typedown':
         specifier: workspace:*
         version: link:../core
     devDependencies:

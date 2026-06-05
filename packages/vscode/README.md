@@ -8,7 +8,7 @@ your Markdown and type-checks them against your **real project** — the same
 code in your docs gets a red squiggle the moment you write it, mapped back to the
 exact line inside the fence.
 
-> Powered by [`@typedown/core`](https://github.com/AlemTuzlak/typedown). For CI and
+> Powered by [`typedown`](https://github.com/AlemTuzlak/typedown). For CI and
 > command-line use, see the [`typedown` CLI](https://github.com/AlemTuzlak/typedown).
 
 ## Features

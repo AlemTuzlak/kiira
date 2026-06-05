@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"label": "build-typedown-extension",
-			"detail": "Build @typedown/core then the VS Code extension bundle",
+			"detail": "Build typedown then the VS Code extension bundle",
 			"type": "shell",
 			"command": "pnpm exec nx run typedown-vscode:build",
 			"group": "build",

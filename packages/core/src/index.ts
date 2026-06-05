@@ -1,4 +1,4 @@
-// @typedown/core public API.
+// @alemtuzlak/typedown public API.
 
 export const TYPEDOWN_CORE_VERSION = "0.1.0"
 

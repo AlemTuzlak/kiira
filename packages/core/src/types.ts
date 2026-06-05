@@ -1,5 +1,5 @@
 /**
- * Public type definitions for `@typedown/core`.
+ * Public type definitions for `@alemtuzlak/typedown`.
  *
  * Positions throughout the public API are **zero-based** for both `line` and
  * `character`, matching `ts.getLineAndCharacterOfPosition` and the VS Code

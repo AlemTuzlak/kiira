@@ -1,4 +1,4 @@
-import type { TypedownDiagnostic } from "@typedown/core"
+import type { TypedownDiagnostic } from "@alemtuzlak/typedown"
 
 /**
  * Filter the diagnostics that should be shown for a document. Generated

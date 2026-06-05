@@ -5,7 +5,7 @@ import {
 	type TypedownFix,
 	type VirtualFile,
 	getCodeFixes,
-} from "@typedown/core"
+} from "@alemtuzlak/typedown"
 import * as vscode from "vscode"
 import { fenceLanguageTokenRange } from "./fence-edits"
 

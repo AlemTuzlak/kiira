@@ -80,7 +80,7 @@ export async function loadConfigFile(filepath: string): Promise<TypedownConfig> 
 		return JSON.parse(raw) as TypedownConfig
 	}
 
-	// Resolve bare imports (e.g. `@typedown/core`) relative to the config's directory.
+	// Resolve bare imports (e.g. `@alemtuzlak/typedown`) relative to the config's directory.
 	const jiti = createJiti(pathToFileURL(join(dirname(filepath), "__typedown_config__.js")).href)
 	return jiti.import<TypedownConfig>(filepath, { default: true })
 }

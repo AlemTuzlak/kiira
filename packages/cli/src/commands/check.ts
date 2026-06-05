@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
-import { type TypedownConfig, checkMarkdownFiles, findConfigFile, loadConfig, loadConfigFile } from "@typedown/core"
+import {
+	type TypedownConfig,
+	checkMarkdownFiles,
+	findConfigFile,
+	loadConfig,
+	loadConfigFile,
+} from "@alemtuzlak/typedown"
 import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"

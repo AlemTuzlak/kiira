@@ -8,5 +8,5 @@ export default defineConfig({
 	clean: true,
 	format: ["esm"],
 	outDir: "dist",
-	// @typedown/core is a runtime dependency, externalized automatically.
+	// typedown is a runtime dependency, externalized automatically.
 })

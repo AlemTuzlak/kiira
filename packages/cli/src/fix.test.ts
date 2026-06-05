@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { TypedownDiagnostic } from "@typedown/core"
+import type { TypedownDiagnostic } from "@alemtuzlak/typedown"
 import { afterEach, beforeEach } from "vitest"
 import { applyConfigOverrides, applyFixes } from "./fix"
 

@@ -1,4 +1,4 @@
-import type { TypedownCheckResult } from "@typedown/core"
+import type { TypedownCheckResult } from "@alemtuzlak/typedown"
 import { formatGithub, formatJson, formatPretty } from "./reporters"
 
 function result(): TypedownCheckResult {

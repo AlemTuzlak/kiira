@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
-const CONFIG_TEMPLATE = `import { defineConfig } from "@typedown/core"
+const CONFIG_TEMPLATE = `import { defineConfig } from "@alemtuzlak/typedown"
 
 export default defineConfig({
 \tinclude: ["docs/**/*.md", "README.md"],

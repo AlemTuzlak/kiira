@@ -7,8 +7,8 @@
 		"check:docs": "typedown check"
 	},
 	"devDependencies": {
-		"@typedown/cli": "workspace:*",
-		"@typedown/core": "workspace:*",
+		"@alemtuzlak/typedown": "workspace:*",
+		"@alemtuzlak/typedown-cli": "workspace:*",
 		"@types/node": "22.14.1",
 		"typescript": "^5.4.0"
 	}

@@ -4,7 +4,7 @@ A GitHub composite action that runs [Typedown](https://github.com/AlemTuzlak/typ
 type-check the TypeScript and JavaScript code fences in your Markdown docs as part of CI.
 
 The action assumes Typedown is already installed in your project (e.g. via
-`pnpm add -D @typedown/cli`) and that dependencies have been installed in a previous step.
+`pnpm add -D @alemtuzlak/typedown-cli`) and that dependencies have been installed in a previous step.
 
 ## Usage
 

@@ -8,7 +8,7 @@ import {
 	loadConfig,
 	loadConfigFile,
 	setTypescriptLibDir,
-} from "@typedown/core"
+} from "@alemtuzlak/typedown"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
 import { TypedownCodeActionProvider } from "./code-actions"

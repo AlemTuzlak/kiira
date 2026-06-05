@@ -7,7 +7,7 @@ import {
 	createVirtualFiles,
 	extractSnippetsFromContent,
 	resolveConfig,
-} from "@typedown/core"
+} from "@alemtuzlak/typedown"
 
 export interface CheckDocumentInput {
 	/** Workspace root used for config, tsconfig, and module resolution. */

@@ -4,8 +4,8 @@ Typedown ships three artifacts from this monorepo:
 
 | Package | Registry | Published by |
 | --- | --- | --- |
-| `@typedown/core` | npm | `.github/workflows/publish.yaml` (Changesets) |
-| `@typedown/cli` | npm | `.github/workflows/publish.yaml` (Changesets) |
+| `@alemtuzlak/typedown` | npm | `.github/workflows/publish.yaml` (Changesets) |
+| `@alemtuzlak/typedown-cli` | npm | `.github/workflows/publish.yaml` (Changesets) |
 | `typedown-vscode` (CodeForge.typedown-vscode) | VS Code Marketplace + Open VSX | `.github/workflows/publish-vscode.yaml` |
 
 ## The flow (Changesets)
@@ -15,7 +15,7 @@ Typedown ships three artifacts from this monorepo:
    **"Version Packages"** PR that applies the changesets — bumping versions and
    updating changelogs for all three packages.
 3. Merging that **Version Packages** PR:
-   - publishes `@typedown/core` and `@typedown/cli` to npm (with provenance), and
+   - publishes `@alemtuzlak/typedown` and `@alemtuzlak/typedown-cli` to npm (with provenance), and
    - bumps `typedown-vscode`'s version, which triggers the **Publish VS Code
      Extension** workflow to build, package, and publish the `.vsix` to the
      Marketplace and Open VSX, then tag + cut a GitHub Release.
@@ -25,10 +25,10 @@ publishes it to npm — only the Marketplace workflow ships it.
 
 ## One-time setup (required before the first publish)
 
-### npm trusted publishing (for `@typedown/*`)
+### npm trusted publishing (for `@alemtuzlak/typedown` and `@alemtuzlak/typedown-cli`)
 
-The `@typedown` scope must exist and be owned by the publishing account. For each
-of `@typedown/core` and `@typedown/cli`, configure a **trusted publisher** on
+The `@alemtuzlak` scope must be owned by the publishing account on npm. For each of
+`@alemtuzlak/typedown` and `@alemtuzlak/typedown-cli`, configure a **trusted publisher** on
 npmjs.com → package **Settings → Trusted Publisher → GitHub Actions**:
 
 - Repository: `AlemTuzlak/typedown`

@@ -1,4 +1,4 @@
-import type { TypedownDiagnostic } from "@typedown/core"
+import type { TypedownDiagnostic } from "@alemtuzlak/typedown"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 
 function diag(overrides: Partial<TypedownDiagnostic> = {}): TypedownDiagnostic {

@@ -1,4 +1,4 @@
-import { defineConfig } from "@typedown/core"
+import { defineConfig } from "@alemtuzlak/typedown"
 
 export default defineConfig({
 	include: ["docs/**/*.md", "README.md"],

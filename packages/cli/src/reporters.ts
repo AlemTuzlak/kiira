@@ -1,4 +1,4 @@
-import type { TypedownCheckResult, TypedownDiagnostic } from "@typedown/core"
+import type { TypedownCheckResult, TypedownDiagnostic } from "@alemtuzlak/typedown"
 import { Chalk, type ChalkInstance } from "chalk"
 import type { ReporterName } from "./args"
 

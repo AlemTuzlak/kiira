@@ -1,6 +1,6 @@
 ---
-"@typedown/core": minor
-"@typedown/cli": minor
+"@alemtuzlak/typedown": minor
+"@alemtuzlak/typedown-cli": minor
 "typedown-vscode": minor
 ---
 

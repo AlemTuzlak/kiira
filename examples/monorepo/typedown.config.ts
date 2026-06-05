@@ -1,4 +1,4 @@
-import { defineConfig } from "@typedown/core"
+import { defineConfig } from "@alemtuzlak/typedown"
 
 export default defineConfig({
 	// One config validating docs across every package in the monorepo.

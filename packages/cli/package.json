@@ -1,5 +1,5 @@
 {
-	"name": "@typedown/cli",
+	"name": "@alemtuzlak/typedown-cli",
 	"version": "0.1.0",
 	"description": "Command-line interface for Typedown: validate TypeScript and JavaScript code fences in your Markdown docs.",
 	"type": "module",
@@ -39,7 +39,7 @@
 		"provenance": true
 	},
 	"dependencies": {
-		"@typedown/core": "workspace:*",
+		"@alemtuzlak/typedown": "workspace:*",
 		"chalk": "^5.4.1"
 	},
 	"devDependencies": {

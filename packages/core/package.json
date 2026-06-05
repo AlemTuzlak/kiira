@@ -1,5 +1,5 @@
 {
-	"name": "@typedown/core",
+	"name": "@alemtuzlak/typedown",
 	"version": "0.1.0",
 	"description": "Core engine for Typedown: extract code fences from Markdown, type-check them, and map diagnostics back to source.",
 	"main": "./dist/index.cjs",
