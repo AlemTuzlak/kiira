@@ -376,7 +376,11 @@ interface SuggestGroupingInput {
 	resolved: ReturnType<typeof resolveConfig>
 }
 
-const errorKey = (d: TypedownDiagnostic): string => `${d.code}@${d.markdownRange.start.line}`
+// Identity of an error for baseline membership: code + full position + message,
+// so two distinct errors that merely share a line and TS code (e.g. two unresolved
+// names on one line) are not conflated when deciding if grouping introduced a new one.
+const errorKey = (d: TypedownDiagnostic): string =>
+	`${d.code}@${d.markdownRange.start.line}:${d.markdownRange.start.character}:${d.message}`
 
 /** Whether a diagnostic's line falls within a snippet's code span. */
 function isWithinSnippet(diagnostic: TypedownDiagnostic, snippet: TypedownCheckResult["snippets"][number]): boolean {
@@ -451,6 +455,11 @@ function planMinimalGroups(snippets: TypedownCheckResult["snippets"], docErrors:
 
 	for (let i = 0; i < snippets.length; i += 1) {
 		for (const name of missing[i]) {
+			// Link only to the *nearest* earlier declarer — the most likely intended
+			// provider. We stop at it even if the redeclare guard then refuses the
+			// merge: a snippet whose nearest provider conflicts is an independent
+			// example (it redeclares a shared name), not a continuation, so reaching
+			// further back to a distant definer would only over-group.
 			for (let j = i - 1; j >= 0; j -= 1) {
 				if (symbols[j].declares.has(name)) {
 					tryUnion(i, j)

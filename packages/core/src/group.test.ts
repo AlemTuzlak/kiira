@@ -74,6 +74,20 @@ describe("group= checking", () => {
 		expect(lines).toEqual([2, 9])
 	})
 
+	it("leaves a snippet ungrouped when its nearest provider would redeclare a shared name", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["nearest-conflicts.md"],
+			config: { include: ["**/*.md"] },
+		})
+		// The third fence (line 18) references `Item` but its nearest declarer (line
+		// 11) also declares `shared`, which it redeclares — so it is an independent
+		// example, not a continuation, and must be left ungrouped rather than chained
+		// back to the distant definer at line 2 (which would over-group).
+		const groups = result.diagnostics.filter((d) => d.code === "group")
+		expect(groups).toHaveLength(0)
+	})
+
 	it("plans separate groups for independent continuation clusters", async () => {
 		const result = await checkMarkdownFiles({
 			cwd: fixtures,
