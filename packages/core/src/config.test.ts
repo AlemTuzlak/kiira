@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { defineConfig, findConfigFile, loadConfig, resolveConfig } from "./config"
+import { defineConfig, findConfigFile, loadConfig, loadConfigFile, resolveConfig } from "./config"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = resolve(here, "../tests/fixtures")
@@ -69,5 +69,12 @@ describe("loadConfig", () => {
 	it("returns a default config when none is found", async () => {
 		const config = await loadConfig(resolve(fixtures, "config-none"))
 		expect(config.include).toEqual(["**/*.md"])
+	})
+})
+
+describe("loadConfigFile", () => {
+	it("loads a config from an explicit path", async () => {
+		const config = await loadConfigFile(resolve(fixtures, "config-json/typedown.config.json"))
+		expect(config.include).toEqual(["readme/**/*.md"])
 	})
 })

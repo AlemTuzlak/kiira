@@ -9,6 +9,7 @@ export {
 	defineConfig,
 	findConfigFile,
 	loadConfig,
+	loadConfigFile,
 	resolveConfig,
 } from "./config"
 export { discoverMarkdownFiles, type DiscoverInput } from "./discover"

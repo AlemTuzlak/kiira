@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { createJiti } from "jiti"
 import type { ResolvedTypedownConfig, TypedownConfig, TypedownLanguage } from "./types"
@@ -52,22 +52,28 @@ export function findConfigFile(cwd: string): string | null {
 }
 
 /**
- * Load the Typedown config from `cwd`. Supports `.ts`/`.mts`/`.mjs`/`.js`/`.cjs`
- * (via jiti) and `.json`. Returns a minimal default config when none is found.
+ * Load a Typedown config from an explicit file path. Supports
+ * `.ts`/`.mts`/`.mjs`/`.js`/`.cjs` (via jiti) and `.json`.
+ */
+export async function loadConfigFile(filepath: string): Promise<TypedownConfig> {
+	if (filepath.endsWith(".json")) {
+		const raw = await readFile(filepath, "utf8")
+		return JSON.parse(raw) as TypedownConfig
+	}
+
+	// Resolve bare imports (e.g. `@typedown/core`) relative to the config's directory.
+	const jiti = createJiti(pathToFileURL(join(dirname(filepath), "__typedown_config__.js")).href)
+	return jiti.import<TypedownConfig>(filepath, { default: true })
+}
+
+/**
+ * Load the Typedown config from `cwd` by auto-discovering a config file.
+ * Returns a minimal default config when none is found.
  */
 export async function loadConfig(cwd: string): Promise<TypedownConfig> {
 	const filepath = findConfigFile(cwd)
 	if (!filepath) {
 		return { include: ["**/*.md"] }
 	}
-
-	if (filepath.endsWith(".json")) {
-		const raw = await readFile(filepath, "utf8")
-		return JSON.parse(raw) as TypedownConfig
-	}
-
-	// Resolve bare imports (e.g. `@typedown/core`) from the user's project root.
-	const jiti = createJiti(pathToFileURL(join(cwd, "__typedown_config__.js")).href)
-	const loaded = await jiti.import<TypedownConfig>(filepath, { default: true })
-	return loaded
+	return loadConfigFile(filepath)
 }
