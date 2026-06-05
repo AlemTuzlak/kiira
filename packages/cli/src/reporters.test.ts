@@ -22,6 +22,33 @@ function result(): TypedownCheckResult {
 	}
 }
 
+function fixableResult(): TypedownCheckResult {
+	const r = result()
+	r.diagnostics.push({
+		severity: "warning",
+		code: "language-tag",
+		source: "typedown",
+		message: "This `ts` fence contains JSX.",
+		markdownFile: "docs/quickstart.md",
+		markdownRange: { start: { line: 40, character: 0 }, end: { line: 40, character: 0 } },
+		fix: { kind: "fence-language", line: 40, language: "tsx" },
+	})
+	return r
+}
+
+describe("fixable stat", () => {
+	it("includes a fixable count in the JSON stats", () => {
+		expect(JSON.parse(formatJson(result())).stats.fixable).toBe(0)
+		expect(JSON.parse(formatJson(fixableResult())).stats.fixable).toBe(1)
+	})
+
+	it("shows a fixable line in pretty output when fixes are available", () => {
+		expect(formatPretty(result(), { cwd: "/repo" })).not.toContain("fixable")
+		const out = formatPretty(fixableResult(), { cwd: "/repo" })
+		expect(out).toContain("1 issue fixable with `typedown check --fix`.")
+	})
+})
+
 describe("formatJson", () => {
 	it("emits machine-readable diagnostics with 1-based positions", () => {
 		const parsed = JSON.parse(formatJson(result()))

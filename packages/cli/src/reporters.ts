@@ -40,6 +40,11 @@ function pluralize(count: number, noun: string): string {
 
 // --- JSON -----------------------------------------------------------------
 
+/** Number of diagnostics that `typedown check --fix` can resolve automatically. */
+function fixableCount(result: TypedownCheckResult): number {
+	return result.diagnostics.filter((d) => d.fix).length
+}
+
 /** Machine-readable report. Positions are 1-based for both line and character. */
 export function formatJson(result: TypedownCheckResult): string {
 	const diagnostics = result.diagnostics.map((d) => ({
@@ -54,7 +59,7 @@ export function formatJson(result: TypedownCheckResult): string {
 		},
 		generated: d.generated ?? false,
 	}))
-	return JSON.stringify({ stats: result.stats, diagnostics }, null, 2)
+	return JSON.stringify({ stats: { ...result.stats, fixable: fixableCount(result) }, diagnostics }, null, 2)
 }
 
 // --- GitHub ---------------------------------------------------------------
@@ -171,6 +176,10 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 			`Checked ${pluralize(stats.checked, "snippet")}. Passed ${passedSnippets}. Failed ${failedSnippets}. Ignored ${stats.ignored}.`
 		)
 	)
+	const fixable = fixableCount(result)
+	if (fixable > 0) {
+		summary.push(c.cyan(`${pluralize(fixable, "issue")} fixable with \`typedown check --fix\`.`))
+	}
 
 	const body = sections.join(ctx.verbose ? "\n\n" : "\n")
 	const parts = body.length > 0 ? [body, "", summary.join("\n")] : [summary.join("\n")]
