@@ -1,0 +1,45 @@
+{
+	"$schema": "./node_modules/nx/schemas/nx-schema.json",
+	"defaultBase": "main",
+	"useInferencePlugins": false,
+	"parallel": 5,
+	"namedInputs": {
+		"sharedGlobals": ["{workspaceRoot}/package.json", "{workspaceRoot}/tsconfig.json", "{workspaceRoot}/biome.json"],
+		"default": ["sharedGlobals", "{projectRoot}/**/*", "!{projectRoot}/**/*.md"],
+		"production": ["default", "!{projectRoot}/tests/**/*"]
+	},
+	"targetDefaults": {
+		"check": {
+			"cache": false
+		},
+		"test:unit": {
+			"cache": true,
+			"dependsOn": ["^build"],
+			"inputs": ["default", "^production"]
+		},
+		"test:types": {
+			"cache": true,
+			"dependsOn": ["^build"],
+			"inputs": ["default", "^production"]
+		},
+		"test:publint": {
+			"cache": true,
+			"dependsOn": ["build"],
+			"inputs": ["production"]
+		},
+		"build": {
+			"cache": true,
+			"dependsOn": ["^build"],
+			"inputs": ["production", "^production"],
+			"outputs": ["{projectRoot}/build", "{projectRoot}/dist"]
+		},
+		"test:unused": {
+			"cache": true,
+			"inputs": ["{workspaceRoot}/**/*"]
+		},
+		"test:deps": {
+			"cache": true,
+			"inputs": ["{workspaceRoot}/**/package.json"]
+		}
+	}
+}

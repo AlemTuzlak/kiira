@@ -1,0 +1,6 @@
+{
+	"$schema": "https://unpkg.com/knip@5/schema.json",
+	"ignoreBinaries": ["pkg-pr-new"],
+	"ignoreDependencies": ["@changesets/cli", "lefthook"],
+	"ignoreWorkspaces": ["test-apps/**"]
+}

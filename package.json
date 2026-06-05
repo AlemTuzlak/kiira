@@ -1,0 +1,59 @@
+{
+	"name": "open-source-stack-template",
+	"version": "1.0.0",
+	"description": "Minimal open-source stack to help you ship an open-source package in TS",
+	"scripts": {
+		"build": "nx affected --targets=build --exclude=test-apps/**",
+		"build:all": "nx run-many --targets=build --exclude=test-apps/**",
+		"clean": "git clean -fdX .",
+		"clean:build": "git clean -fdx -e node_modules .",
+		"dev": "pnpm run build:all && nx watch --all -i -- pnpm run build:all",
+		"check": "biome check .",
+		"check:fix": "biome check --fix .",
+		"test": "pnpm run test:ci",
+		"test:ci": "nx run-many --targets=check,test:deps,test:unused,test:unit,test:types,test:publint,build",
+		"test:types": "nx affected --target=test:types --exclude=test-apps/**",
+		"test:unit": "nx affected --target=test:unit --exclude=test-apps/**",
+		"test:cov": "nx affected --target=test:cov --exclude=test-apps/**",
+		"test:publint": "nx affected --target=test:publint --exclude=test-apps/**",
+		"test:unused": "knip",
+		"test:deps": "sherif",
+		"changeset": "changeset",
+		"release": "changeset publish",
+		"local-release": "changeset version && changeset publish",
+		"version": "changeset version",
+		"watch": ""
+	},
+	"author": "forge-42",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/forge-42/open-source-stack.git"
+	},
+	"bugs": {
+		"url": "https://github.com/forge-42/open-source-stack/issues"
+	},
+	"homepage": "https://github.com/forge-42/open-source-stack#readme",
+	"devDependencies": {
+		"@biomejs/biome": "^1.9.4",
+		"@changesets/cli": "^2.29.0",
+		"@types/node": "22.14.1",
+		"knip": "^5.64.2",
+		"lefthook": "^1.11.10",
+		"nx": "^21.6.4",
+		"publint": "^0.3.14",
+		"sherif": "^1.6.1"
+	},
+	"packageManager": "pnpm@10.8.0",
+	"engines": {
+		"pnpm": ">=10.8.0",
+		"node": ">=20.0.0"
+	},
+	"nx": {
+		"includedScripts": ["test:unused", "test:deps", "check"]
+	},
+	"overrides": {
+		"open-source-stack": "workspace:*"
+	},
+	"private": true
+}
