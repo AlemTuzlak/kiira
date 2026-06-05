@@ -7,6 +7,7 @@ import {
 	checkMarkdownFiles,
 	loadConfig,
 	loadConfigFile,
+	setTypescriptLibDir,
 } from "@typedown/core"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
@@ -210,6 +211,11 @@ async function openVirtualFileCommand(provider: VirtualContentProvider): Promise
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+	// TypeScript is bundled into this extension, which breaks its built-in lookup of
+	// the standard `lib.*.d.ts` files; point it at the copies shipped in `out/lib` so
+	// globals (`JSON`, `Date`, DOM types) resolve instead of being flagged.
+	setTypescriptLibDir(join(__dirname, "lib"))
+
 	collection = vscode.languages.createDiagnosticCollection("typedown")
 	output = vscode.window.createOutputChannel("Typedown")
 	const provider = new VirtualContentProvider()

@@ -5,43 +5,62 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Required for npm trusted publishing (OIDC) + provenance attestations.
+  id-token: write
+
 jobs:
   release:
     name: Release
+    # Only run in the source repo, never on forks.
+    if: github.repository_owner == 'AlemTuzlak'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
-      id-token: write
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version-file: "package.json"
+          registry-url: "https://registry.npmjs.org"
+
+      # npm trusted publishing (tokenless OIDC) requires a recent npm.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-#      - name: 🔐 Setup npm auth
-#        run: |
-#          echo "registry=https://registry.npmjs.org" >> ~/.npmrc
-#          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> ~/.npmrc
+      - name: Build
+        run: pnpm run build:all
 
+      # Creates/refreshes a "Version Packages" PR when changesets are present;
+      # when that PR is merged (no changesets left) it publishes the public
+      # packages to npm with provenance via OIDC trusted publishing. Configure
+      # the trusted publisher for @typedown/core and @typedown/cli on npmjs.com
+      # (Settings → Trusted Publisher → this repo's Release workflow). See
+      # RELEASING.md. Private packages (the VS Code extension) are version-bumped
+      # only; it is published to the Marketplace by publish-vscode.yaml.
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         with:
-          title: "🚀 Release PR"
-          commit: "chore: release"
           version: pnpm run version
           publish: pnpm run release
+          commit: "ci: version packages"
+          title: "ci: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

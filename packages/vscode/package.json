@@ -3,7 +3,7 @@
 	"displayName": "Typedown",
 	"version": "0.1.0",
 	"description": "Live type-checking for TypeScript and JavaScript code fences inside Markdown files.",
-	"publisher": "AlemTuzlak",
+	"publisher": "CodeForge",
 	"private": true,
 	"type": "commonjs",
 	"engines": {
@@ -11,6 +11,16 @@
 	},
 	"categories": ["Linters", "Programming Languages"],
 	"keywords": ["markdown", "typescript", "docs", "typedown", "validation"],
+	"galleryBanner": {
+		"color": "#0d1117",
+		"theme": "dark"
+	},
+	"pricing": "Free",
+	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"bugs": {
+		"url": "https://github.com/AlemTuzlak/typedown/issues"
+	},
+	"qna": "marketplace",
 	"main": "./out/extension.cjs",
 	"activationEvents": ["onLanguage:markdown"],
 	"contributes": {
@@ -69,8 +79,9 @@
 		}
 	},
 	"scripts": {
-		"build": "tsdown",
+		"build": "tsdown && node scripts/copy-ts-lib.mjs",
 		"vscode:prepublish": "pnpm run build",
+		"package": "vsce package --no-dependencies",
 		"test:unit": "vitest run --passWithNoTests",
 		"test:types": "tsc"
 	},
@@ -82,13 +93,15 @@
 		"directory": "packages/vscode"
 	},
 	"dependencies": {
-		"@typedown/core": "workspace:*",
-		"typescript": "^5.4.0"
+		"@typedown/core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/node": "22.14.1",
 		"@types/vscode": "^1.85.0",
+		"@vscode/vsce": "^3.6.0",
+		"ovsx": "^0.10.2",
 		"tsdown": "^0.22.2",
+		"typescript": "^5.4.0",
 		"vitest": "^3.1.1"
 	}
 }

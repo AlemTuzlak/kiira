@@ -14,6 +14,31 @@ import { buildWorkspaceResolution } from "./workspace"
 /** TS codes meaning "cannot find name X" — the signature of a continuation snippet. */
 const CANNOT_FIND_NAME = new Set([2304, 2552])
 
+// Directory holding TypeScript's `lib.*.d.ts` files. When TypeScript is bundled
+// into a host (the VS Code extension), `ts.sys.getExecutingFilePath()` no longer
+// points next to the real lib files, so the default-lib location is wrong and every
+// global (`JSON`, `Date`, DOM types) is reported as undefined. A host that bundles
+// TypeScript ships the lib files and calls `setTypescriptLibDir` to point here.
+let typescriptLibDir: string | undefined
+
+/** Override where TypeScript loads its default `lib.*.d.ts` from (for bundled hosts). */
+export function setTypescriptLibDir(dir: string | undefined): void {
+	typescriptLibDir = dir
+}
+
+/** Apply the configured lib-directory override to a compiler/language-service host. */
+export function applyLibDirOverride(host: {
+	getDefaultLibLocation?: () => string
+	getDefaultLibFileName: (options: ts.CompilerOptions) => string
+}): void {
+	if (!typescriptLibDir) {
+		return
+	}
+	const dir = typescriptLibDir
+	host.getDefaultLibLocation = () => dir
+	host.getDefaultLibFileName = (options) => join(dir, ts.getDefaultLibFileName(options))
+}
+
 function groupSlug(markdownFile: string): string {
 	const base = (markdownFile.split(/[\\/]/).pop() ?? markdownFile).replace(/\.[^.]+$/, "")
 	return (
@@ -127,6 +152,7 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 		return vf ? vf.content : originalReadFile(fileName)
 	}
 
+	applyLibDirOverride(host)
 	return host
 }
 

@@ -1,0 +1,138 @@
+name: Release / Publish VS Code Extension
+
+# On push to main, self-gate by checking the Marketplace for the version in
+# packages/vscode/package.json (managed by Changesets). If that version is already
+# published it's a no-op; otherwise build a universal .vsix, publish to the VS Code
+# Marketplace and Open VSX, then tag + cut a GitHub Release. The extension is pure
+# JS (TypeScript and its lib typings are bundled into the .vsix), so a single
+# platform-agnostic package covers every target.
+#
+# Required secrets (publish is skipped gracefully until they exist, so main stays
+# green): VSCE_PAT — Azure DevOps PAT with Marketplace publish rights for the
+# `CodeForge` publisher; OVSX_PAT — Open VSX token for the `CodeForge` namespace.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build + package only (no publish)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: publish-vscode-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish extension
+    if: github.repository_owner == 'AlemTuzlak'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read extension version
+        id: pkg
+        run: |
+          cd packages/vscode
+          VERSION=$(node -p "require('./package.json').version")
+          NAME=$(node -p "require('./package.json').name")
+          PUBLISHER=$(node -p "require('./package.json').publisher")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "publisher=${PUBLISHER}" >> "$GITHUB_OUTPUT"
+          echo "ext_id=${PUBLISHER}.${NAME}" >> "$GITHUB_OUTPUT"
+          echo "Resolved ${PUBLISHER}.${NAME}@${VERSION}"
+
+      - name: Check if already on Marketplace
+        id: check
+        run: |
+          EXT_ID="${{ steps.pkg.outputs.ext_id }}"
+          WANT="${{ steps.pkg.outputs.version }}"
+          set +e
+          OUT=$(npx --yes @vscode/vsce@^3 show "$EXT_ID" --json 2>/dev/null)
+          RC=$?
+          set -e
+          if [ $RC -ne 0 ] || [ -z "$OUT" ]; then
+            echo "vsce show failed/empty — treating as first-ever publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if echo "$OUT" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);process.exit((j.versions||[]).some(v=>v.version===process.argv[1])?0:1)}catch(_){process.exit(1)}})" "$WANT"; then
+            echo "Version $WANT already on Marketplace — nothing to do."
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version $WANT not on Marketplace — will publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install pnpm
+        if: steps.check.outputs.published == 'false'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: steps.check.outputs.published == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "package.json"
+
+      - name: Install dependencies
+        if: steps.check.outputs.published == 'false'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build extension (core + bundle + lib typings)
+        if: steps.check.outputs.published == 'false'
+        run: pnpm exec nx run typedown-vscode:build
+
+      - name: Package VSIX
+        if: steps.check.outputs.published == 'false'
+        run: |
+          cd packages/vscode
+          npx --yes @vscode/vsce@^3 package --no-dependencies -o ../../typedown.vsix
+
+      - name: Publish to VS Code Marketplace
+        if: steps.check.outputs.published == 'false' && inputs.dry_run != true
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "${VSCE_PAT:-}" ]; then
+            echo "::warning::VSCE_PAT not configured — skipping Marketplace publish. Add the secret to enable it."
+            exit 0
+          fi
+          npx --yes @vscode/vsce@^3 publish --no-dependencies --packagePath typedown.vsix -p "$VSCE_PAT"
+
+      - name: Publish to Open VSX
+        if: steps.check.outputs.published == 'false' && inputs.dry_run != true
+        continue-on-error: true
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "${OVSX_PAT:-}" ]; then
+            echo "::warning::OVSX_PAT not configured — skipping Open VSX publish."
+            exit 0
+          fi
+          npx --yes ovsx publish typedown.vsix -p "$OVSX_PAT"
+
+      - name: Tag + GitHub Release
+        if: steps.check.outputs.published == 'false' && inputs.dry_run != true && env.HAS_VSCE == 'true'
+        env:
+          HAS_VSCE: ${{ secrets.VSCE_PAT != '' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="vscode-v${{ steps.pkg.outputs.version }}"
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "VS Code Extension $TAG" --generate-notes --verify-tag
+          fi

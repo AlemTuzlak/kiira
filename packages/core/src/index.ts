@@ -46,6 +46,7 @@ export {
 	collectSuggestions,
 	optionsForFile,
 	resolveTsconfigPath,
+	setTypescriptLibDir,
 } from "./check"
 export {
 	type CodeFixAction,

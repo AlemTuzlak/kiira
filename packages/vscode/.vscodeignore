@@ -1,0 +1,12 @@
+# Everything the published extension needs lives in `out/` (bundle + out/lib
+# TypeScript typings). Exclude sources, tests, maps, and build config. Do NOT use a
+# broad `**/*.ts` rule — it would drop the `lib.*.d.ts` files we ship in out/lib.
+.vscode/**
+src/**
+scripts/**
+**/*.map
+tsconfig.json
+tsdown.config.mjs
+vitest.config.ts
+.gitignore
+.npmignore

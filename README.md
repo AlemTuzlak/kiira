@@ -8,6 +8,10 @@ Typedown extracts TypeScript and JavaScript code fences from your Markdown docs,
 them against your real project API, and reports any errors right back on the Markdown line —
 in your editor, on the command line, and in CI.
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/CodeForge.typedown-vscode?label=VS%20Code%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=CodeForge.typedown-vscode)
+[![npm](https://img.shields.io/npm/v/@typedown/cli?label=%40typedown%2Fcli&logo=npm)](https://www.npmjs.com/package/@typedown/cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 </div>
 
 ---
@@ -140,7 +144,79 @@ typedown check --verbose           # full messages + code frames (default is com
 typedown init                      # scaffold typedown.config.ts + tsconfig.docs.json
 ```
 
+### Flags
+
+| Flag | Description |
+| --- | --- |
+| `--entry <path>` | Directory, file, or glob to check. Repeatable. Overrides `include`. |
+| `--ignore <path>` | Directory, file, or glob to exclude. Repeatable (e.g. `--ignore docs/api`). |
+| `--config <path>` | Path to a Typedown config file. |
+| `--reporter <name>` | Output format: `pretty` (default), `json`, or `github` (Actions annotations). |
+| `--fix` | Apply auto-fixes: rewrite mistagged fences (`ts`→`tsx`), add `group=` tags, write framework `jsxImportSource` overrides. |
+| `--verbose` | Full error messages and code frames (default output is compact). |
+| `--raw` | Plain text — disable colored output. |
+| `--static` | Disable the loading spinner. |
+| `-h, --help` | Show help. |
+| `-v, --version` | Show the version. |
+
 Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
+
+### Configuration
+
+`typedown.config.ts` (or `.js`/`.json`); all fields are optional except `include`:
+
+```ts
+import { defineConfig } from "@typedown/core"
+
+export default defineConfig({
+  include: ["docs/**/*.md", "README.md"],
+  exclude: ["**/node_modules/**"],
+  tsconfig: "tsconfig.docs.json",   // defaults to tsconfig.docs.json, then tsconfig.json
+  packageMode: "workspace",          // "workspace" (default) | "packed"
+  defaultValidate: "type",           // "type" (default) | "runtime" | "none"
+  checkUnusedSymbols: false,          // report TS6133 unused locals/params/imports
+  checkRelativeImports: false,        // report unresolved ./ and ../ imports
+  overrides: [
+    { include: ["**/*solid*"], jsxImportSource: "solid-js" },
+  ],
+  fixtures: {
+    react: { type: "wrap", before: "import React from 'react'", after: "" },
+  },
+  defaultFixture: undefined,
+  languages: ["ts", "tsx", "js", "jsx"],
+})
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `include` | — | Markdown globs to check (required). |
+| `exclude` | `[]` | Globs to skip. |
+| `tsconfig` | auto | tsconfig to source compiler options from. |
+| `packageMode` | `workspace` | Resolve monorepo packages (`workspace`) or rely on installed packages (`packed`). |
+| `defaultValidate` | `type` | Default validation mode for fences without a `validate=` tag. |
+| `checkUnusedSymbols` | `false` | Report unused locals/params/imports (TS6133). |
+| `checkRelativeImports` | `false` | Report unresolved relative imports. |
+| `overrides` | `[]` | Per-glob `compilerOptions` (e.g. `jsxImportSource`). |
+| `fixtures` | `{}` | Named code to prepend/wrap around snippets. |
+| `defaultFixture` | — | Fixture applied to fences without a `fixture=` tag. |
+| `languages` | all | Fence languages to check. |
+
+### Fence metadata
+
+Add tokens after the language on the fence info string:
+
+````md
+```tsx fixture=react validate=type name=basic-chat group=quickstart
+````
+
+| Token | Description |
+| --- | --- |
+| `ignore` | Skip this fence entirely. |
+| `validate=type\|runtime\|none` | Override the validation mode for this fence. |
+| `fixture=<name>` | Wrap the snippet with a named fixture from config. |
+| `name=<id>` | A stable label for the snippet (shown in tooling). |
+| `group=<id>` | Type-check fences sharing an id together, in document order. |
+| `package=workspace\|packed` | Override the package resolution mode for this fence. |
 
 Unused locals/parameters/imports (TS6133) are **ignored by default** — doc snippets
 routinely declare things they don't use. Set `checkUnusedSymbols: true` in your config to
@@ -151,11 +227,43 @@ often "import" from an imaginary sibling file standing in for an earlier snippet
 reader's project. Bare package imports (`@scope/pkg`, `react`) are always checked. Set
 `checkRelativeImports: true` to enforce relative imports too.
 
-## Editor
+## Editor (VS Code)
 
-The [`typedown-vscode`](packages/vscode) extension shows squiggles inside Markdown code
-fences as you type, with commands to check the current file or the whole workspace and to
-open the generated virtual file for any snippet.
+Install **Typedown** from the
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CodeForge.typedown-vscode)
+(or `ext install CodeForge.typedown-vscode`). It also publishes to
+[Open VSX](https://open-vsx.org/extension/CodeForge/typedown-vscode).
+
+It type-checks your Markdown code fences against your real project, live:
+
+- **Live diagnostics** — type errors appear as you type (debounced) and on save,
+  mapped to the exact line inside the fence.
+- **Quick fixes** (`Ctrl+.` / `Cmd+.`):
+  - TypeScript's own fixes inside fences — **auto-import a missing symbol**, fix a
+    misspelled name, add a missing `await`, implement an interface, …
+  - Typedown's fixes — change a mistagged `` ```ts `` fence to `` ```tsx `` for JSX,
+    or tag continuation snippets with `group=…`.
+- **Inspect** the generated virtual file for any snippet.
+
+### Commands
+
+| Command | Description |
+| --- | --- |
+| `Typedown: Check Current File` | Re-check the active Markdown document. |
+| `Typedown: Check Workspace` | Check every Markdown file in the workspace. |
+| `Typedown: Open Virtual File For Snippet` | Inspect the generated code for a fence. |
+| `Typedown: Restart Typedown Server` | Clear and re-check all open documents. |
+
+### Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `typedown.enable` | `true` | Enable Typedown diagnostics in Markdown files. |
+| `typedown.configPath` | `typedown.config.ts` | Path to the Typedown config, relative to the workspace root. |
+| `typedown.debounceMs` | `300` | Delay before re-checking after a change. |
+| `typedown.checkOnChange` | `true` | Re-check as the document changes (debounced). |
+| `typedown.checkOnSave` | `true` | Re-check when the document is saved. |
+| `typedown.showGeneratedDiagnostics` | `false` | Show diagnostics from generated fixture code (debugging). |
 
 ## CI
 
