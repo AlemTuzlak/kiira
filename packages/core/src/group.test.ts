@@ -42,15 +42,32 @@ describe("group= checking", () => {
 		expect(groupSuggestions[1]?.fix?.kind).toBe("fence-meta")
 	})
 
-	it("does not suggest grouping when it would introduce a redeclaration (independent example)", async () => {
+	it("groups only the genuine continuation, excluding an independent redeclaring block", async () => {
 		const result = await checkMarkdownFiles({
 			cwd: fixtures,
 			files: ["conflict.md"],
 			config: { include: ["**/*.md"] },
 		})
-		// Grouping resolves the continuation but redeclares `base`, so it must not be
-		// suggested — net-fewer-errors is not enough.
-		expect(result.diagnostics.some((d) => d.code === "group")).toBe(false)
+		// The definer (line 2) and its continuation (line 8) are grouped; the
+		// independent `const base = 99` block (line 15) is left out, so no redeclare.
+		const lines = result.diagnostics
+			.filter((d) => d.code === "group")
+			.map((d) => d.markdownRange.start.line)
+			.sort((a, b) => a - b)
+		expect(lines).toEqual([2, 8])
+	})
+
+	it("plans separate groups for independent continuation clusters", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["two-clusters.md"],
+			config: { include: ["**/*.md"] },
+		})
+		const groups = result.diagnostics.filter((d) => d.code === "group")
+		const slugs = new Set(groups.map((d) => (d.fix?.kind === "fence-meta" ? d.fix.append : "")))
+		// Two independent clusters -> two distinct group ids, four tagged fences.
+		expect(groups).toHaveLength(4)
+		expect(slugs.size).toBe(2)
 	})
 
 	it("does not suggest grouping when snippets are already standalone", async () => {

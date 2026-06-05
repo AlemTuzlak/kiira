@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { dirname, isAbsolute, join, resolve } from "node:path"
 import picomatch from "picomatch"
 import ts from "typescript"
+import { analyzeSnippet } from "./analyze"
 import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { extractSnippetsFromContent } from "./extract"
@@ -375,55 +376,110 @@ interface SuggestGroupingInput {
 	resolved: ReturnType<typeof resolveConfig>
 }
 
+const errorKey = (d: TypedownDiagnostic): string => `${d.code}@${d.markdownRange.start.line}`
+
+/** Whether a diagnostic's line falls within a snippet's code span. */
+function isWithinSnippet(diagnostic: TypedownDiagnostic, snippet: TypedownCheckResult["snippets"][number]): boolean {
+	const start = snippet.codeStart.line
+	const end = start + snippet.code.split("\n").length - 1
+	const line = diagnostic.markdownRange.start.line
+	return line >= start && line <= end
+}
+
 /**
- * For each fully-ungrouped document whose isolated check reported "cannot find
- * name" errors, probe whether checking its snippets *together* resolves them. If
- * grouping strictly reduces the error count (and introduces no new errors such as
- * redeclarations), suggest a `group=<slug>` annotation on each fence, with a fix.
+ * Plan minimal snippet groups via static analysis: union each snippet with the
+ * nearest earlier snippet that declares a name it references but doesn't bind.
+ * Independent examples (no shared declarations) stay in separate clusters, so two
+ * unrelated `const x = …` blocks never merge into one redeclaring group. Returns
+ * only multi-member clusters, each as sorted indices into `snippets`.
+ */
+function planMinimalGroups(snippets: TypedownCheckResult["snippets"]): number[][] {
+	const symbols = snippets.map((s) => analyzeSnippet(s.code, s.lang))
+	const parent = snippets.map((_, i) => i)
+	const find = (x: number): number => {
+		let root = x
+		while (parent[root] !== root) {
+			root = parent[root]
+		}
+		parent[x] = root
+		return root
+	}
+	const union = (a: number, b: number): void => {
+		parent[find(a)] = find(b)
+	}
+
+	for (let i = 0; i < snippets.length; i += 1) {
+		for (const ref of symbols[i].references) {
+			for (let j = i - 1; j >= 0; j -= 1) {
+				if (symbols[j].declares.has(ref)) {
+					union(i, j)
+					break
+				}
+			}
+		}
+	}
+
+	const byRoot = new Map<number, number[]>()
+	for (let i = 0; i < snippets.length; i += 1) {
+		const root = find(i)
+		const members = byRoot.get(root) ?? []
+		members.push(i)
+		byRoot.set(root, members)
+	}
+	return [...byRoot.values()].filter((g) => g.length >= 2).map((g) => g.sort((a, b) => a - b))
+}
+
+/**
+ * For each fully-ungrouped document with "cannot find name" errors, plan minimal
+ * dependency clusters and suggest a `group=` tag for each — but only after a
+ * type-check probe confirms the cluster removes errors and introduces none. This
+ * groups genuine continuations while leaving independent examples alone.
  */
 async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDiagnostic[]> {
 	const { cwd, files, snippets, diagnostics, config, resolved } = input
 	const suggestions: TypedownDiagnostic[] = []
 
 	for (const file of files) {
-		const checkable = snippets.filter((s) => s.markdownFile === file && isCheckable(s, resolved))
+		const checkable = snippets
+			.filter((s) => s.markdownFile === file && isCheckable(s, resolved))
+			.sort((a, b) => a.markdownRange.start.line - b.markdownRange.start.line)
 		// Only attempt on docs the author hasn't already grouped.
 		if (checkable.length < 2 || checkable.some((s) => s.meta.group)) {
 			continue
 		}
 		const docErrors = diagnostics.filter((d) => d.markdownFile === file && d.severity === "error")
-		const hasCannotFind = docErrors.some((d) => typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code))
-		if (!hasCannotFind) {
+		if (!docErrors.some((d) => typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code))) {
 			continue
 		}
 
-		// Probe: check the doc's snippets as a single group.
-		const probe = checkable.map((s) => ({ ...s, meta: { ...s.meta, group: "__typedown_probe__" } }))
-		const { virtualFiles } = await createVirtualFiles({ cwd, snippets: probe, config })
-		const groupedErrors = (await checkVirtualFiles({ cwd, virtualFiles, config })).filter((d) => d.severity === "error")
+		const plans = planMinimalGroups(checkable)
+		let emitted = 0
+		for (const plan of plans) {
+			const members = plan.map((i) => checkable[i])
+			const baseline = new Set(docErrors.filter((d) => members.some((m) => isWithinSnippet(d, m))).map(errorKey))
 
-		// Only suggest if grouping *strictly improves* things: it must remove at
-		// least one error and introduce none. This rejects docs where grouping
-		// merges independent examples and creates redeclarations (TS2451) — net
-		// fewer errors is not enough.
-		const errorKey = (d: TypedownDiagnostic): string => `${d.code}@${d.markdownRange.start.line}`
-		const isolatedKeys = new Set(docErrors.map(errorKey))
-		const introducesNewError = groupedErrors.some((d) => !isolatedKeys.has(errorKey(d)))
-		if (introducesNewError || groupedErrors.length >= docErrors.length) {
-			continue
-		}
+			// Verify the cluster: type-check it together and require strict improvement
+			// (removes at least one error, introduces none).
+			const probe = members.map((s) => ({ ...s, meta: { ...s.meta, group: "__typedown_probe__" } }))
+			const { virtualFiles } = await createVirtualFiles({ cwd, snippets: probe, config })
+			const grouped = (await checkVirtualFiles({ cwd, virtualFiles, config })).filter((d) => d.severity === "error")
+			if (grouped.some((d) => !baseline.has(errorKey(d))) || grouped.length >= baseline.size) {
+				continue
+			}
 
-		const slug = groupSlug(file)
-		for (const snippet of checkable) {
-			suggestions.push({
-				severity: "warning",
-				code: "group",
-				source: "typedown",
-				message: `These snippets reference shared declarations. Tag them \`group=${slug}\` to type-check them together (run \`typedown check --fix\` to apply).`,
-				markdownFile: file,
-				markdownRange: { start: snippet.markdownRange.start, end: snippet.markdownRange.start },
-				fix: { kind: "fence-meta", line: snippet.markdownRange.start.line, append: `group=${slug}` },
-			})
+			emitted += 1
+			const slug = plans.length > 1 ? `${groupSlug(file)}-${emitted}` : groupSlug(file)
+			for (const member of members) {
+				suggestions.push({
+					severity: "warning",
+					code: "group",
+					source: "typedown",
+					message: `This snippet continues an earlier one. Tag them \`group=${slug}\` to type-check them together (run \`typedown check --fix\` to apply).`,
+					markdownFile: file,
+					markdownRange: { start: member.markdownRange.start, end: member.markdownRange.start },
+					fix: { kind: "fence-meta", line: member.markdownRange.start.line, append: `group=${slug}` },
+				})
+			}
 		}
 	}
 
