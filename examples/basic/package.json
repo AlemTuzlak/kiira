@@ -1,0 +1,15 @@
+{
+	"name": "@typedown-example/basic",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check:docs": "typedown check"
+	},
+	"devDependencies": {
+		"@typedown/cli": "workspace:*",
+		"@typedown/core": "workspace:*",
+		"@types/node": "22.14.1",
+		"typescript": "^5.4.0"
+	}
+}

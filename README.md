@@ -68,6 +68,43 @@ export function Chat() {
 Supported metadata: `ignore`, `validate=type|runtime|none`, `fixture=<name>`, `name=<id>`,
 `package=workspace|packed`.
 
+## CLI
+
+```bash
+typedown check                     # validate everything in your include globs
+typedown check "docs/**/*.md"      # validate specific files/globs
+typedown check --reporter json     # machine-readable output
+typedown check --reporter github   # GitHub Actions annotations
+typedown init                      # scaffold typedown.config.ts + tsconfig.docs.json
+```
+
+Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
+
+## Editor
+
+The [`typedown-vscode`](packages/vscode) extension shows squiggles inside Markdown code
+fences as you type, with commands to check the current file or the whole workspace and to
+open the generated virtual file for any snippet.
+
+## CI
+
+Use the [composite action](packages/github-action):
+
+```yaml
+- uses: AlemTuzlak/typedown/packages/github-action@v1
+  with:
+    command: pnpm typedown check
+    reporter: github
+```
+
+## Examples
+
+| Example                                | Shows                                              |
+| -------------------------------------- | -------------------------------------------------- |
+| [`examples/basic`](examples/basic)     | Plain TypeScript snippets against the `node` types. |
+| [`examples/react`](examples/react)     | `tsx` snippets with `react` and wrap fixtures.      |
+| [`examples/monorepo`](examples/monorepo) | One config validating docs across many packages.  |
+
 ## Development
 
 This is a pnpm + Nx monorepo.

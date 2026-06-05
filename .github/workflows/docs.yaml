@@ -1,0 +1,43 @@
+name: 📝 Docs
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  typedown:
+    name: 🔎 Validate example docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "package.json"
+
+      - name: 📥 Download deps
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔨 Build the CLI
+        run: pnpm exec nx run @typedown/cli:build
+
+      - name: 🔎 Type-check example docs
+        run: |
+          status=0
+          for example in basic react monorepo; do
+            echo "::group::typedown check (examples/${example})"
+            pnpm --filter "@typedown-example/${example}" exec typedown check --reporter github || status=1
+            echo "::endgroup::"
+          done
+          exit $status
