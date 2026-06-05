@@ -24,7 +24,20 @@ describe("resolveConfig", () => {
 			defaultFixture: undefined,
 			fixtures: {},
 			languages: ["ts", "tsx", "js", "jsx"],
-			markdown: { codeFenceLanguages: ["ts", "tsx", "js", "jsx"] },
+			markdown: {
+				codeFenceLanguages: [
+					"ts",
+					"typescript",
+					"tsx",
+					"typescriptreact",
+					"js",
+					"javascript",
+					"mjs",
+					"cjs",
+					"jsx",
+					"javascriptreact",
+				],
+			},
 		})
 	})
 
@@ -37,8 +50,8 @@ describe("resolveConfig", () => {
 		expect(resolved.include).toEqual(["docs/**/*.md"])
 		expect(resolved.languages).toEqual(["ts"])
 		expect(resolved.defaultValidate).toBe("none")
-		// codeFenceLanguages defaults to the configured languages.
-		expect(resolved.markdown.codeFenceLanguages).toEqual(["ts"])
+		// codeFenceLanguages defaults to the configured languages plus their aliases.
+		expect(resolved.markdown.codeFenceLanguages).toEqual(["ts", "typescript"])
 	})
 })
 

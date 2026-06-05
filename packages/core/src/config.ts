@@ -7,6 +7,18 @@ import type { ResolvedTypedownConfig, TypedownConfig, TypedownLanguage } from ".
 
 export const DEFAULT_LANGUAGES: TypedownLanguage[] = ["ts", "tsx", "js", "jsx"]
 
+/**
+ * Fence language identifiers recognized for each TypedownLanguage. The first
+ * entry is the canonical id. Used both to seed `codeFenceLanguages` defaults and
+ * (inverted) to normalize a fence's language during extraction.
+ */
+export const FENCE_ALIASES: Record<TypedownLanguage, string[]> = {
+	ts: ["ts", "typescript"],
+	tsx: ["tsx", "typescriptreact"],
+	js: ["js", "javascript", "mjs", "cjs"],
+	jsx: ["jsx", "javascriptreact"],
+}
+
 /** Config files Typedown looks for, in priority order. */
 export const CONFIG_FILENAMES = [
 	"typedown.config.ts",
@@ -35,7 +47,11 @@ export function resolveConfig(config: Partial<TypedownConfig> = {}): ResolvedTyp
 		fixtures: config.fixtures ?? {},
 		languages,
 		markdown: {
-			codeFenceLanguages: config.markdown?.codeFenceLanguages ?? [...languages],
+			// Default to each configured language plus its known aliases, so
+			// ```typescript / ```javascript fences work out of the box.
+			codeFenceLanguages: config.markdown?.codeFenceLanguages ?? [
+				...new Set(languages.flatMap((l) => FENCE_ALIASES[l] ?? [l])),
+			],
 		},
 	}
 }

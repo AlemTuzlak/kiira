@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { Code, Nodes, Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
-import { resolveConfig } from "./config"
+import { FENCE_ALIASES, resolveConfig } from "./config"
 import { parseFenceMeta } from "./meta"
 import type {
 	ExtractedSnippet,
@@ -30,22 +30,16 @@ export interface SnippetExtraction {
 	diagnostics: TypedownDiagnostic[]
 }
 
-/** Map recognized fence language identifiers (incl. common aliases) to a TypedownLanguage. */
-const LANG_ALIASES: Record<string, TypedownLanguage> = {
-	ts: "ts",
-	typescript: "ts",
-	tsx: "tsx",
-	typescriptreact: "tsx",
-	js: "js",
-	javascript: "js",
-	mjs: "js",
-	cjs: "js",
-	jsx: "jsx",
-	javascriptreact: "jsx",
+// Invert FENCE_ALIASES once: any recognized identifier -> its TypedownLanguage.
+const ALIAS_TO_LANG = new Map<string, TypedownLanguage>()
+for (const [lang, aliases] of Object.entries(FENCE_ALIASES) as [TypedownLanguage, string[]][]) {
+	for (const alias of aliases) {
+		ALIAS_TO_LANG.set(alias, lang)
+	}
 }
 
 function normalizeLang(raw: string): TypedownLanguage | undefined {
-	return LANG_ALIASES[raw.toLowerCase()]
+	return ALIAS_TO_LANG.get(raw.toLowerCase())
 }
 
 function collectCodeNodes(node: Nodes, out: Code[]): void {
@@ -74,8 +68,8 @@ export function extractSnippetsFromContent({
 	collectCodeNodes(tree, codeNodes)
 
 	// `codeFenceLanguages` controls which fence identifiers are recognized
-	// (it defaults to `languages`); the identifier is then normalized to a
-	// TypedownLanguage so aliases like ```typescript work.
+	// (it defaults to each configured language plus its aliases); the identifier
+	// is then normalized to a TypedownLanguage so ```typescript maps to ts.
 	const recognized = new Set<string>(config.markdown.codeFenceLanguages.map((l) => l.toLowerCase()))
 	const snippets: ExtractedSnippet[] = []
 	const diagnostics: TypedownDiagnostic[] = []

@@ -49,9 +49,12 @@ runs:
         if [ -n "${TD_REPORTER}" ]; then
           args+=(--reporter "${TD_REPORTER}")
         fi
+        # Split the command on whitespace into an array so shell metacharacters
+        # in the input are treated as literal argv, never re-interpreted.
+        read -ra cmd <<< "${TD_COMMAND}"
         if [ -n "${TD_FILES}" ]; then
           read -ra extra <<< "${TD_FILES}"
-          ${TD_COMMAND} "${extra[@]}" "${args[@]}"
+          "${cmd[@]}" "${extra[@]}" "${args[@]}"
         else
-          ${TD_COMMAND} "${args[@]}"
+          "${cmd[@]}" "${args[@]}"
         fi
