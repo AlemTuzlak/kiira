@@ -42,6 +42,17 @@ describe("group= checking", () => {
 		expect(groupSuggestions[1]?.fix?.kind).toBe("fence-meta")
 	})
 
+	it("does not suggest grouping when it would introduce a redeclaration (independent example)", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["conflict.md"],
+			config: { include: ["**/*.md"] },
+		})
+		// Grouping resolves the continuation but redeclares `base`, so it must not be
+		// suggested — net-fewer-errors is not enough.
+		expect(result.diagnostics.some((d) => d.code === "group")).toBe(false)
+	})
+
 	it("does not suggest grouping when snippets are already standalone", async () => {
 		// doc.md's grouped fences resolve; its only error is the intentional orphan,
 		// which grouping would NOT fix — so no group suggestion should appear.

@@ -401,8 +401,16 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 		const probe = checkable.map((s) => ({ ...s, meta: { ...s.meta, group: "__typedown_probe__" } }))
 		const { virtualFiles } = await createVirtualFiles({ cwd, snippets: probe, config })
 		const groupedErrors = (await checkVirtualFiles({ cwd, virtualFiles, config })).filter((d) => d.severity === "error")
-		if (groupedErrors.length >= docErrors.length) {
-			continue // grouping didn't strictly help (or added new errors like redeclaration)
+
+		// Only suggest if grouping *strictly improves* things: it must remove at
+		// least one error and introduce none. This rejects docs where grouping
+		// merges independent examples and creates redeclarations (TS2451) — net
+		// fewer errors is not enough.
+		const errorKey = (d: TypedownDiagnostic): string => `${d.code}@${d.markdownRange.start.line}`
+		const isolatedKeys = new Set(docErrors.map(errorKey))
+		const introducesNewError = groupedErrors.some((d) => !isolatedKeys.has(errorKey(d)))
+		if (introducesNewError || groupedErrors.length >= docErrors.length) {
+			continue
 		}
 
 		const slug = groupSlug(file)
