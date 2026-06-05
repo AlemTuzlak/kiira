@@ -1,4 +1,6 @@
-import { dirname, resolve } from "node:path"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { checkMarkdownFiles } from "./check"
 import type { TypedownDiagnostic } from "./types"
@@ -45,6 +47,21 @@ describe("buildWorkspaceResolution", () => {
 
 	it("returns undefined when cwd is not a workspace", async () => {
 		expect(await buildWorkspaceResolution(here)).toBeUndefined()
+	})
+
+	it("collects @types directories from workspace packages as typeRoots", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "typedown-ws-"))
+		try {
+			writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
+			const pkg = join(dir, "packages", "lib")
+			mkdirSync(join(pkg, "node_modules", "@types", "react"), { recursive: true })
+			writeFileSync(join(pkg, "package.json"), JSON.stringify({ name: "@demo/lib" }))
+
+			const resolution = await buildWorkspaceResolution(dir)
+			expect(resolution?.typeRoots.some((r) => r.endsWith("packages/lib/node_modules/@types"))).toBe(true)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 })
 

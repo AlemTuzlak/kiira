@@ -12,6 +12,8 @@ export interface WorkspacePackage {
 export interface WorkspaceResolution {
 	baseUrl: string
 	paths: Record<string, string[]>
+	/** `@types` directories across the workspace, so e.g. @types/react resolves for a package's docs. */
+	typeRoots: string[]
 }
 
 function toPosix(path: string): string {
@@ -189,12 +191,21 @@ export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceRe
 
 	const paths: Record<string, string[]> = {}
 	const nodeModulesFallbacks: string[] = []
+	const typeRoots: string[] = []
+
+	const addTypeRoot = (dir: string): void => {
+		const typesDir = join(dir, "node_modules", "@types")
+		if (existsSync(typesDir)) {
+			typeRoots.push(toPosix(typesDir))
+		}
+	}
 
 	// Absolute path values so resolution is correct regardless of any `baseUrl`
 	// the project's tsconfig may set (paths values are otherwise baseUrl-relative).
 	if (existsSync(join(cwd, "node_modules"))) {
 		nodeModulesFallbacks.push(`${toPosix(join(cwd, "node_modules"))}/*`)
 	}
+	addTypeRoot(cwd)
 
 	for (const pkg of packages) {
 		const manifest = JSON.parse(await readFile(join(pkg.dir, "package.json"), "utf8")) as Record<string, unknown>
@@ -219,11 +230,12 @@ export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceRe
 		if (existsSync(join(pkg.dir, "node_modules"))) {
 			nodeModulesFallbacks.push(`${toPosix(join(pkg.dir, "node_modules"))}/*`)
 		}
+		addTypeRoot(pkg.dir)
 	}
 
 	if (nodeModulesFallbacks.length > 0) {
 		paths["*"] = nodeModulesFallbacks
 	}
 
-	return { baseUrl: cwd, paths }
+	return { baseUrl: cwd, paths, typeRoots: [...new Set(typeRoots)] }
 }

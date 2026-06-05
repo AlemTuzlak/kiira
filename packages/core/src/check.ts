@@ -204,6 +204,11 @@ export async function checkVirtualFiles({
 		if (ws) {
 			options.baseUrl = options.baseUrl ?? ws.baseUrl
 			options.paths = { ...ws.paths, ...(options.paths ?? {}) }
+			// Make @types packages installed in any workspace package discoverable
+			// (e.g. @types/react living in packages/ai-react/node_modules/@types).
+			if (ws.typeRoots.length > 0) {
+				options.typeRoots = [...new Set([...(options.typeRoots ?? []), ...ws.typeRoots])]
+			}
 		}
 	}
 
