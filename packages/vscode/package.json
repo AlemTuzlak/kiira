@@ -52,7 +52,7 @@
 				},
 				"typedown.checkOnSave": {
 					"type": "boolean",
-					"default": false,
+					"default": true,
 					"description": "Re-check the document when it is saved."
 				},
 				"typedown.checkOnChange": {

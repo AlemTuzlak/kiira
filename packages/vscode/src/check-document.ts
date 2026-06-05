@@ -3,6 +3,7 @@ import {
 	type TypedownDiagnostic,
 	type VirtualFile,
 	checkVirtualFiles,
+	collectSuggestions,
 	createVirtualFiles,
 	extractSnippetsFromContent,
 	resolveConfig,
@@ -49,8 +50,20 @@ export async function checkDocument(input: CheckDocumentInput): Promise<CheckDoc
 		config: input.config,
 	})
 
+	const baseDiagnostics = [...extraction.diagnostics, ...fixtureDiagnostics, ...tsDiagnostics]
+
+	// Surface the same group=/jsxImportSource suggestions (and their fixes) the CLI
+	// produces, so they show as squiggles with quick fixes in the editor too.
+	const suggestions = await collectSuggestions({
+		cwd: input.cwd,
+		files: [input.markdownFile],
+		snippets: extraction.snippets,
+		diagnostics: baseDiagnostics,
+		config: input.config,
+	})
+
 	return {
-		diagnostics: [...extraction.diagnostics, ...fixtureDiagnostics, ...tsDiagnostics],
+		diagnostics: [...baseDiagnostics, ...suggestions],
 		virtualFiles,
 	}
 }

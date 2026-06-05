@@ -10,6 +10,7 @@ import {
 } from "@typedown/core"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
+import { TypedownCodeActionProvider } from "./code-actions"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 
 const VIRTUAL_SCHEME = "typedown"
@@ -18,6 +19,7 @@ let collection: vscode.DiagnosticCollection
 let output: vscode.OutputChannel
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const virtualFilesByDocument = new Map<string, VirtualFile[]>()
+const diagnosticsByDocument = new Map<string, TypedownDiagnostic[]>()
 
 interface TypedownSettings {
 	enable: boolean
@@ -34,7 +36,7 @@ function readSettings(): TypedownSettings {
 		enable: c.get<boolean>("enable", true),
 		configPath: c.get<string>("configPath", "typedown.config.ts"),
 		debounceMs: c.get<number>("debounceMs", 300),
-		checkOnSave: c.get<boolean>("checkOnSave", false),
+		checkOnSave: c.get<boolean>("checkOnSave", true),
 		checkOnChange: c.get<boolean>("checkOnChange", true),
 		showGeneratedDiagnostics: c.get<boolean>("showGeneratedDiagnostics", false),
 	}
@@ -105,6 +107,9 @@ async function checkAndPublish(document: vscode.TextDocument): Promise<void> {
 		})
 		virtualFilesByDocument.set(document.uri.toString(), virtualFiles)
 		const selected = selectDiagnostics(diagnostics, { showGenerated: settings.showGeneratedDiagnostics })
+		// Keep the rich diagnostics (with their `fix` payloads) so the code-action
+		// provider can offer quick fixes for what's currently shown.
+		diagnosticsByDocument.set(document.uri.toString(), selected)
 		collection.set(document.uri, selected.map(toVscodeDiagnostic))
 	} catch (error) {
 		output.appendLine(`Error checking ${ctx.markdownFile}: ${(error as Error).message}`)
@@ -228,6 +233,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.workspace.onDidCloseTextDocument((document) => {
 			collection.delete(document.uri)
 			virtualFilesByDocument.delete(document.uri.toString())
+			diagnosticsByDocument.delete(document.uri.toString())
 		}),
 		vscode.commands.registerCommand("typedown.checkCurrentFile", () => {
 			const document = vscode.window.activeTextEditor?.document
@@ -240,10 +246,27 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand("typedown.restartServer", () => {
 			collection.clear()
 			virtualFilesByDocument.clear()
+			diagnosticsByDocument.clear()
 			for (const document of vscode.workspace.textDocuments) {
 				void checkAndPublish(document)
 			}
-		})
+		}),
+		vscode.languages.registerCodeActionsProvider(
+			{ language: "markdown" },
+			new TypedownCodeActionProvider({
+				resolveContext: async (document) => {
+					const ctx = workspaceContext(document)
+					if (!ctx) {
+						return undefined
+					}
+					const config = await loadWorkspaceConfig(ctx.cwd, readSettings().configPath)
+					return { cwd: ctx.cwd, markdownFile: ctx.markdownFile, config }
+				},
+				getVirtualFiles: (uri) => virtualFilesByDocument.get(uri),
+				getDiagnostics: (uri) => diagnosticsByDocument.get(uri),
+			}),
+			{ providedCodeActionKinds: TypedownCodeActionProvider.providedKinds }
+		)
 	)
 
 	for (const document of vscode.workspace.textDocuments) {

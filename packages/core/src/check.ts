@@ -177,17 +177,16 @@ export interface CheckVirtualFilesInput {
 	config: Partial<TypedownConfig>
 }
 
-/** Type-check the given virtual files and return diagnostics mapped to Markdown. */
-export async function checkVirtualFiles({
-	cwd,
-	virtualFiles,
-	config,
-}: CheckVirtualFilesInput): Promise<TypedownDiagnostic[]> {
-	if (virtualFiles.length === 0) {
-		return []
-	}
-
-	const resolved = resolveConfig(config)
+/**
+ * Build the base compiler options Typedown checks with: the project tsconfig (or
+ * defaults), the unused-symbol toggle, and — in workspace mode — the monorepo's
+ * package `paths`/`typeRoots` so its packages resolve from the repo root. Shared by
+ * checking and code-fixes so both see an identical project.
+ */
+export async function buildBaseOptions(
+	cwd: string,
+	resolved: ReturnType<typeof resolveConfig>
+): Promise<ts.CompilerOptions> {
 	const tsconfigPath = resolveTsconfigPath(cwd, resolved.tsconfig)
 	const options = loadCompilerOptions(tsconfigPath)
 
@@ -212,6 +211,21 @@ export async function checkVirtualFiles({
 			}
 		}
 	}
+	return options
+}
+
+/** Type-check the given virtual files and return diagnostics mapped to Markdown. */
+export async function checkVirtualFiles({
+	cwd,
+	virtualFiles,
+	config,
+}: CheckVirtualFilesInput): Promise<TypedownDiagnostic[]> {
+	if (virtualFiles.length === 0) {
+		return []
+	}
+
+	const resolved = resolveConfig(config)
+	const options = await buildBaseOptions(cwd, resolved)
 
 	// Partition by matching `overrides` (per-glob compiler options) and run a
 	// separate program per distinct option set, so e.g. Solid docs can use
@@ -236,6 +250,36 @@ interface OverridePartition {
 	virtualFiles: VirtualFile[]
 }
 
+/** Convert a single override's JSON compilerOptions to a `ts.CompilerOptions`, throwing on invalid input. */
+function convertOverrideOptions(
+	cwd: string,
+	override: ReturnType<typeof resolveConfig>["overrides"][number]
+): ts.CompilerOptions {
+	const { include: _include, ...compilerOptions } = override
+	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, cwd)
+	if (errors.length > 0) {
+		const messages = errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, "\n")).join("; ")
+		throw new Error(`Invalid compilerOptions in override ${JSON.stringify(override.include)}: ${messages}`)
+	}
+	return options
+}
+
+/** Apply every override whose glob matches `markdownFile` (in order) on top of the base options. */
+export function optionsForFile(
+	cwd: string,
+	baseOptions: ts.CompilerOptions,
+	overrides: ReturnType<typeof resolveConfig>["overrides"],
+	markdownFile: string
+): ts.CompilerOptions {
+	let options = { ...baseOptions }
+	for (const override of overrides) {
+		if (picomatch(override.include)(markdownFile)) {
+			options = { ...options, ...convertOverrideOptions(cwd, override) }
+		}
+	}
+	return options
+}
+
 /** Group virtual files by the set of `overrides` matching each one's Markdown file. */
 function partitionByOverrides(
 	cwd: string,
@@ -248,15 +292,7 @@ function partitionByOverrides(
 	}
 
 	const matchers = overrides.map((o) => picomatch(o.include))
-	const converted = overrides.map((o) => {
-		const { include: _include, ...compilerOptions } = o
-		const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, cwd)
-		if (errors.length > 0) {
-			const messages = errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, "\n")).join("; ")
-			throw new Error(`Invalid compilerOptions in override ${JSON.stringify(o.include)}: ${messages}`)
-		}
-		return options
-	})
+	const converted = overrides.map((o) => convertOverrideOptions(cwd, o))
 
 	const partitions = new Map<string, OverridePartition>()
 	for (const vf of virtualFiles) {
@@ -546,6 +582,28 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 	return suggestions
 }
 
+export interface CollectSuggestionsInput {
+	cwd: string
+	files: string[]
+	snippets: TypedownCheckResult["snippets"]
+	/** Diagnostics already produced for these files (extraction + fixture + TS). */
+	diagnostics: TypedownDiagnostic[]
+	config: Partial<TypedownConfig>
+}
+
+/**
+ * Compute Typedown's suggestion diagnostics (group= and jsxImportSource) for an
+ * already-checked set of files. Shared by the CLI's whole-project check and the
+ * editor's single-document check so both surface the same actionable fixes.
+ */
+export async function collectSuggestions(input: CollectSuggestionsInput): Promise<TypedownDiagnostic[]> {
+	const { cwd, files, snippets, diagnostics, config } = input
+	const resolved = resolveConfig(config)
+	const grouping = await suggestGrouping({ cwd, files, snippets, diagnostics, config, resolved })
+	const jsx = suggestFrameworkJsx(files, snippets, diagnostics, resolved)
+	return [...grouping, ...jsx]
+}
+
 export interface CheckMarkdownFilesInput {
 	cwd: string
 	files?: string[]
@@ -578,13 +636,10 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	diagnostics.push(...fixtureDiagnostics)
 	diagnostics.push(...(await checkVirtualFiles({ cwd, virtualFiles, config: userConfig })))
 
-	// Suggest grouping: for a fully-ungrouped doc whose snippets reference names
-	// from each other, check whether grouping resolves it; if so, suggest `group=`.
-	diagnostics.push(...(await suggestGrouping({ cwd, files, snippets, diagnostics, config: userConfig, resolved })))
-
-	// Suggest a per-framework jsxImportSource override for files whose JSX fails
-	// for lack of the right JSX runtime types (TS7026).
-	diagnostics.push(...suggestFrameworkJsx(files, snippets, diagnostics, resolved))
+	// Suggest grouping (group=) for ungrouped continuation snippets and a
+	// per-framework jsxImportSource override for JSX that fails for lack of the
+	// right runtime types (TS7026). Shared with the editor's single-doc path.
+	diagnostics.push(...(await collectSuggestions({ cwd, files, snippets, diagnostics, config: userConfig })))
 
 	const errors = diagnostics.filter((d) => d.severity === "error").length
 	const warnings = diagnostics.filter((d) => d.severity === "warning").length

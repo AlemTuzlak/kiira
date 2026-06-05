@@ -37,12 +37,22 @@ export {
 	virtualFileName,
 } from "./virtual"
 export {
+	buildBaseOptions,
 	type CheckMarkdownFilesInput,
 	type CheckVirtualFilesInput,
 	checkMarkdownFiles,
 	checkVirtualFiles,
+	type CollectSuggestionsInput,
+	collectSuggestions,
+	optionsForFile,
 	resolveTsconfigPath,
 } from "./check"
+export {
+	type CodeFixAction,
+	type CodeFixEdit,
+	getCodeFixes,
+	type GetCodeFixesInput,
+} from "./codefix"
 export {
 	buildWorkspaceResolution,
 	discoverWorkspacePackages,

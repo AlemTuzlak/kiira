@@ -1,0 +1,13 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Run Typedown Extension",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/vscode"],
+			"outFiles": ["${workspaceFolder}/packages/vscode/out/**/*.cjs"],
+			"preLaunchTask": "build-typedown-extension"
+		}
+	]
+}
