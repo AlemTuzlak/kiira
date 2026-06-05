@@ -1,4 +1,6 @@
-import { dirname, resolve } from "node:path"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { runCheck } from "./check"
 
@@ -51,5 +53,20 @@ describe("runCheck", () => {
 		const io = capture()
 		await runCheck({ cwd: fixtures, files: ["bad.md"], reporter: "github", ...io })
 		expect(io.logs.join("\n")).toContain("::error file=bad.md,")
+	})
+
+	it("rewrites a mistagged ts fence to tsx with --fix", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "typedown-cli-fix-"))
+		try {
+			const md = ["# Comp", "", "```ts", "export const C = () => <div>{1}</div>", "```", ""].join("\n")
+			writeFileSync(join(dir, "comp.md"), md)
+			const io = capture()
+			await runCheck({ cwd: dir, files: ["comp.md"], reporter: "json", fix: true, ...io })
+
+			expect(readFileSync(join(dir, "comp.md"), "utf8").split("\n")[2]).toBe("```tsx")
+			expect(io.logs.join("\n")).toContain("Fixed 1 fence language tag")
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 })

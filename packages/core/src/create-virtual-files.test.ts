@@ -42,6 +42,29 @@ describe("createVirtualFiles", () => {
 		expect(tsx?.fileName.replace(/\\/g, "/").endsWith(".typedown/virtual/intro__snippet_001.tsx")).toBe(true)
 	})
 
+	it("warns and checks as tsx when a ts fence contains JSX", async () => {
+		const snippet = {
+			id: "comp.md#0",
+			markdownFile: "comp.md",
+			lang: "ts" as const,
+			code: "export const C = () => <div>{1}</div>",
+			meta: {},
+			markdownRange: { start: { line: 4, character: 0 }, end: { line: 6, character: 3 } },
+			codeStart: { line: 5, character: 0 },
+		}
+		const { virtualFiles, diagnostics } = await createVirtualFiles({
+			cwd: fixtures,
+			snippets: [snippet],
+			config: { include: ["**/*.md"] },
+		})
+		const warning = diagnostics.find((d) => d.code === "language-tag")
+		expect(warning?.severity).toBe("warning")
+		expect(warning?.fix).toEqual({ kind: "fence-language", line: 4, language: "tsx" })
+		// The virtual file is checked as tsx, not ts.
+		expect(virtualFiles[0]?.lang).toBe("tsx")
+		expect(virtualFiles[0]?.fileName.endsWith(".tsx")).toBe(true)
+	})
+
 	it("reports a diagnostic for an unknown fixture instead of throwing", async () => {
 		const { virtualFiles, diagnostics } = await createVirtualFiles({
 			cwd: fixtures,

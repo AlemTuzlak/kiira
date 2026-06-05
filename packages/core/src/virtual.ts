@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { resolveConfig } from "./config"
+import { detectLanguageTag } from "./detect"
 import type {
 	ExtractedSnippet,
 	ResolvedTypedownConfig,
@@ -8,6 +9,7 @@ import type {
 	TypedownConfig,
 	TypedownDiagnostic,
 	TypedownFixture,
+	TypedownLanguage,
 	VirtualFile,
 } from "./types"
 
@@ -26,11 +28,14 @@ function snippetIndex(snippet: ExtractedSnippet): number {
 	return Number.isNaN(parsed) ? 0 : parsed
 }
 
-/** Build the stable virtual filename for a snippet (e.g. `docs__intro__snippet_000.tsx`). */
-export function virtualFileName(snippet: ExtractedSnippet): string {
+/**
+ * Build the stable virtual filename for a snippet (e.g. `docs__intro__snippet_000.tsx`).
+ * `lang` overrides the extension when the snippet is checked as a corrected language.
+ */
+export function virtualFileName(snippet: ExtractedSnippet, lang: TypedownLanguage = snippet.lang): string {
 	const base = flattenPath(snippet.markdownFile)
 	const index = String(snippetIndex(snippet)).padStart(3, "0")
-	return `${base}__snippet_${index}.${snippet.lang}`
+	return `${base}__snippet_${index}.${lang}`
 }
 
 /**
@@ -194,17 +199,37 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 			}
 		}
 
+		// Detect a wrong language tag (a `ts` fence that actually contains JSX).
+		// Warn, attach an auto-fix, and check the snippet as the corrected language
+		// so it produces real type errors instead of a JSX syntax-error cascade.
+		const suggestion = detectLanguageTag(snippet.code, snippet.lang)
+		const checkLang: TypedownLanguage = suggestion?.suggested ?? snippet.lang
+		if (suggestion) {
+			diagnostics.push({
+				severity: "warning",
+				code: "language-tag",
+				source: "typedown",
+				message: `This \`${snippet.lang}\` code fence contains JSX. Change the language tag to \`${suggestion.suggested}\` (run \`typedown check --fix\` to apply).`,
+				markdownFile: snippet.markdownFile,
+				markdownRange: {
+					start: snippet.markdownRange.start,
+					end: snippet.markdownRange.start,
+				},
+				fix: { kind: "fence-language", line: snippet.markdownRange.start.line, language: suggestion.suggested },
+			})
+		}
+
 		const { before, after } = await resolveFixtureBeforeAfter(fixture, input.cwd)
 		// Force every snippet into module scope so top-level declarations are
 		// isolated per snippet (no cross-snippet "cannot redeclare" false errors).
 		const afterWithModuleMarker = [after, MODULE_MARKER].filter((s) => s.length > 0).join("\n")
 		const { content, mappings } = buildVirtualFile({ snippet, before, after: afterWithModuleMarker })
-		const name = uniqueName(virtualFileName(snippet), usedNames)
+		const name = uniqueName(virtualFileName(snippet, checkLang), usedNames)
 
 		virtualFiles.push({
 			id: snippet.id,
 			fileName: join(input.cwd, ".typedown", "virtual", name),
-			lang: snippet.lang,
+			lang: checkLang,
 			content,
 			snippet,
 			mappings,

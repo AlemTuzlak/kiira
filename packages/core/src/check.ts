@@ -7,6 +7,7 @@ import { discoverMarkdownFiles } from "./discover"
 import { extractSnippetsFromContent } from "./extract"
 import type { TypedownCheckResult, TypedownConfig, TypedownDiagnostic, TypedownLanguage, VirtualFile } from "./types"
 import { createVirtualFiles, mapVirtualLine } from "./virtual"
+import { buildWorkspaceResolution } from "./workspace"
 
 const DEFAULT_COMPILER_OPTIONS: ts.CompilerOptions = {
 	target: ts.ScriptTarget.ES2022,
@@ -174,6 +175,18 @@ export async function checkVirtualFiles({
 	const resolved = resolveConfig(config)
 	const tsconfigPath = resolveTsconfigPath(cwd, resolved.tsconfig)
 	const options = loadCompilerOptions(tsconfigPath)
+
+	// In workspace mode (the default), make the monorepo's packages and their
+	// dependencies resolvable from the repo root, where a pnpm isolated
+	// node_modules would otherwise hide them. User-defined paths win on conflict.
+	if (resolved.packageMode === "workspace") {
+		const ws = await buildWorkspaceResolution(cwd)
+		if (ws) {
+			options.baseUrl = options.baseUrl ?? ws.baseUrl
+			options.paths = { ...ws.paths, ...(options.paths ?? {}) }
+		}
+	}
+
 	const host = createOverlayHost(options, virtualFiles)
 	const program = ts.createProgram({
 		rootNames: virtualFiles.map((v) => v.fileName),

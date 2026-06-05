@@ -1,11 +1,17 @@
 import { parseArgs } from "./args"
 
 describe("parseArgs", () => {
-	it("defaults to the check command with the pretty reporter", () => {
+	it("defaults to the check command with the pretty reporter and no fix", () => {
 		const parsed = parseArgs([])
 		expect(parsed.command).toBe("check")
 		expect(parsed.reporter).toBe("pretty")
 		expect(parsed.files).toEqual([])
+		expect(parsed.fix).toBe(false)
+	})
+
+	it("parses the --fix flag", () => {
+		expect(parseArgs(["check", "--fix"]).fix).toBe(true)
+		expect(parseArgs(["--fix"]).fix).toBe(true)
 	})
 
 	it("parses an explicit command and positional file args", () => {

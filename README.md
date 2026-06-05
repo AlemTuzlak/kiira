@@ -68,6 +68,23 @@ export function Chat() {
 Supported metadata: `ignore`, `validate=type|runtime|none`, `fixture=<name>`, `name=<id>`,
 `package=workspace|packed`.
 
+## Monorepos
+
+In `packageMode: "workspace"` (the default) Typedown discovers your pnpm/npm/yarn workspace,
+maps every package name to its source, and adds each package's `node_modules` as a resolution
+fallback. So in a monorepo, docs that import `@your-scope/*` **and** third-party libs resolve
+out of the box — no hand-written `tsconfig` `paths` required.
+
+## Language-tag checking
+
+Typedown warns when a `ts` fence actually contains JSX (it should be `tsx`), checks it as `tsx`
+anyway so you get real type errors instead of a syntax-error cascade, and can rewrite the tag
+for you:
+
+```bash
+typedown check --fix    # rewrites mistagged fences (ts/typescript -> tsx)
+```
+
 ## CLI
 
 ```bash
@@ -75,6 +92,7 @@ typedown check                     # validate everything in your include globs
 typedown check "docs/**/*.md"      # validate specific files/globs
 typedown check --reporter json     # machine-readable output
 typedown check --reporter github   # GitHub Actions annotations
+typedown check --fix               # rewrite mistagged code fences (ts -> tsx)
 typedown init                      # scaffold typedown.config.ts + tsconfig.docs.json
 ```
 

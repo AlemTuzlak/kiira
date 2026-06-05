@@ -7,6 +7,7 @@ interface ParsedArgs {
 	files: string[]
 	config?: string
 	reporter: ReporterName
+	fix: boolean
 }
 
 const REPORTERS: ReporterName[] = ["pretty", "json", "github"]
@@ -21,18 +22,23 @@ export function parseArgs(argv: string[]): ParsedArgs {
 	let command: Command | undefined
 	let config: string | undefined
 	let reporter: ReporterName = "pretty"
+	let fix = false
 	const files: string[] = []
 
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i] ?? ""
 
 		if (arg === "--help" || arg === "-h") {
-			return { command: "help", files, reporter }
+			return { command: "help", files, reporter, fix }
 		}
 		if (arg === "--version" || arg === "-v") {
-			return { command: "version", files, reporter }
+			return { command: "version", files, reporter, fix }
 		}
 
+		if (arg === "--fix") {
+			fix = true
+			continue
+		}
 		if (arg === "--config" || arg.startsWith("--config=")) {
 			config = arg.includes("=") ? arg.slice("--config=".length) : argv[++i]
 			continue
@@ -57,5 +63,5 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		}
 	}
 
-	return { command: command ?? "check", files, config, reporter }
+	return { command: command ?? "check", files, config, reporter, fix }
 }

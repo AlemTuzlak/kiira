@@ -12,6 +12,7 @@ export {
 	loadConfigFile,
 	resolveConfig,
 } from "./config"
+export { detectLanguageTag, type LanguageTagSuggestion } from "./detect"
 export { discoverMarkdownFiles, type DiscoverInput } from "./discover"
 export { type FenceMetaIssue, parseFenceMeta, type ParsedFenceMeta } from "./meta"
 export {
@@ -41,3 +42,10 @@ export {
 	checkVirtualFiles,
 	resolveTsconfigPath,
 } from "./check"
+export {
+	buildWorkspaceResolution,
+	discoverWorkspacePackages,
+	parsePnpmWorkspacePackages,
+	type WorkspacePackage,
+	type WorkspaceResolution,
+} from "./workspace"

@@ -121,6 +121,15 @@ export interface VirtualFile {
 	mappings: SourceMapping[]
 }
 
+/** An auto-fix that rewrites a code fence's language identifier in the Markdown source. */
+export interface TypedownFenceLanguageFix {
+	kind: "fence-language"
+	/** Zero-based line of the opening fence to rewrite. */
+	line: number
+	/** The language identifier to write (e.g. "tsx"). */
+	language: TypedownLanguage
+}
+
 export interface TypedownDiagnostic {
 	severity: "error" | "warning" | "info"
 	code?: string | number
@@ -132,6 +141,8 @@ export interface TypedownDiagnostic {
 	virtualRange?: SourceRange
 	/** True when the diagnostic originates from generated fixture code, not the snippet itself. */
 	generated?: boolean
+	/** An optional automatic fix applied by `typedown check --fix`. */
+	fix?: TypedownFenceLanguageFix
 }
 
 export interface TypedownCheckStats {
