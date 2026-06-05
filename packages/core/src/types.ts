@@ -130,6 +130,8 @@ export interface TypedownDiagnostic {
 	markdownRange: SourceRange
 	virtualFile?: string
 	virtualRange?: SourceRange
+	/** True when the diagnostic originates from generated fixture code, not the snippet itself. */
+	generated?: boolean
 }
 
 export interface TypedownCheckStats {

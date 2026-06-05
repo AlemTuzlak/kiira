@@ -33,3 +33,10 @@ export {
 	mapVirtualLine,
 	virtualFileName,
 } from "./virtual"
+export {
+	type CheckMarkdownFilesInput,
+	type CheckVirtualFilesInput,
+	checkMarkdownFiles,
+	checkVirtualFiles,
+	resolveTsconfigPath,
+} from "./check"

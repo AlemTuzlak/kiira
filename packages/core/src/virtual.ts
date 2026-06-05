@@ -11,6 +11,9 @@ import type {
 	VirtualFile,
 } from "./types"
 
+/** Appended to every virtual file so each snippet is an isolated module. */
+const MODULE_MARKER = "export {}"
+
 /** Strip a leading file extension and convert path separators to `__`. */
 function flattenPath(file: string): string {
 	const withoutExt = file.replace(/\.[^./\\]+$/, "")
@@ -167,7 +170,10 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 		}
 
 		const { before, after } = await resolveFixtureBeforeAfter(fixture, input.cwd)
-		const { content, mappings } = buildVirtualFile({ snippet, before, after })
+		// Force every snippet into module scope so top-level declarations are
+		// isolated per snippet (no cross-snippet "cannot redeclare" false errors).
+		const afterWithModuleMarker = [after, MODULE_MARKER].filter((s) => s.length > 0).join("\n")
+		const { content, mappings } = buildVirtualFile({ snippet, before, after: afterWithModuleMarker })
 		const name = virtualFileName(snippet)
 
 		virtualFiles.push({
