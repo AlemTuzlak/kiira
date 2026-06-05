@@ -26,6 +26,8 @@ async function main(argv: string[]): Promise<number> {
 			return runCheck({
 				cwd: process.cwd(),
 				files: parsed.files,
+				entry: parsed.entry,
+				ignore: parsed.ignore,
 				config: parsed.config,
 				reporter: parsed.reporter,
 				fix: parsed.fix,

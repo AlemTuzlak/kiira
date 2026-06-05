@@ -189,6 +189,12 @@ export async function checkVirtualFiles({
 	const tsconfigPath = resolveTsconfigPath(cwd, resolved.tsconfig)
 	const options = loadCompilerOptions(tsconfigPath)
 
+	// Doc snippets routinely declare values they don't use; suppress unused-symbol
+	// diagnostics (TS6133 etc.) by default. When the user opts in, force the checks
+	// on regardless of the project tsconfig so the setting always takes effect.
+	options.noUnusedLocals = resolved.checkUnusedSymbols
+	options.noUnusedParameters = resolved.checkUnusedSymbols
+
 	// In workspace mode (the default), make the monorepo's packages and their
 	// dependencies resolvable from the repo root, where a pnpm isolated
 	// node_modules would otherwise hide them. User-defined paths win on conflict.

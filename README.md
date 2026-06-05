@@ -109,6 +109,8 @@ typedown check --fix    # rewrites mistagged fences (ts/typescript -> tsx)
 
 ```bash
 typedown check                     # validate everything in your include globs
+typedown check --entry docs        # check a directory (repeatable)
+typedown check --entry docs --ignore docs/api   # ...excluding a subdirectory
 typedown check "docs/**/*.md"      # validate specific files/globs
 typedown check --reporter json     # machine-readable output
 typedown check --reporter github   # GitHub Actions annotations
@@ -118,6 +120,10 @@ typedown init                      # scaffold typedown.config.ts + tsconfig.docs
 ```
 
 Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
+
+Unused locals/parameters/imports (TS6133) are **ignored by default** — doc snippets
+routinely declare things they don't use. Set `checkUnusedSymbols: true` in your config to
+enforce them.
 
 ## Editor
 

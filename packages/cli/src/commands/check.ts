@@ -2,12 +2,15 @@ import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
 import { type TypedownConfig, checkMarkdownFiles, loadConfig, loadConfigFile } from "@typedown/core"
 import type { ReporterName } from "../args"
+import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyFixes } from "../fix"
 import { formatReport } from "../reporters"
 
 interface RunCheckOptions {
 	cwd: string
 	files: string[]
+	entry?: string[]
+	ignore?: string[]
 	config?: string
 	reporter: ReporterName
 	fix?: boolean
@@ -46,8 +49,12 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 		? await loadConfigFile(isAbsolute(options.config) ? options.config : resolve(cwd, options.config))
 		: await loadConfig(cwd)
 
-	// Positional file args act as include globs, overriding the config's include.
-	const config: TypedownConfig = options.files.length > 0 ? { ...loaded, include: options.files } : loaded
+	// Positional args and `--entry` are the directories/files/globs to check; they
+	// override the config's `include`. `--ignore` adds to the config's `exclude`.
+	const entries = [...options.files, ...(options.entry ?? [])]
+	const include = entries.length > 0 ? toIncludeGlobs(cwd, entries) : loaded.include
+	const exclude = [...(loaded.exclude ?? []), ...toIgnoreGlobs(cwd, options.ignore ?? [])]
+	const config: TypedownConfig = { ...loaded, include, exclude }
 
 	let result = await checkMarkdownFiles({ cwd, config })
 

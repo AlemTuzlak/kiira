@@ -10,6 +10,10 @@ interface ParsedArgs {
 	fix: boolean
 	verbose: boolean
 	raw: boolean
+	/** `--entry` values: directories/files/globs to check (repeatable). */
+	entry: string[]
+	/** `--ignore` values: directories/files/globs to exclude (repeatable). */
+	ignore: string[]
 }
 
 const REPORTERS: ReporterName[] = ["pretty", "json", "github"]
@@ -28,15 +32,34 @@ export function parseArgs(argv: string[]): ParsedArgs {
 	let verbose = false
 	let raw = false
 	const files: string[] = []
+	const entry: string[] = []
+	const ignore: string[] = []
+
+	const base = (): Omit<ParsedArgs, "command"> => ({ files, config, reporter, fix, verbose, raw, entry, ignore })
 
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i] ?? ""
 
 		if (arg === "--help" || arg === "-h") {
-			return { command: "help", files, reporter, fix, verbose, raw }
+			return { command: "help", ...base() }
 		}
 		if (arg === "--version" || arg === "-v") {
-			return { command: "version", files, reporter, fix, verbose, raw }
+			return { command: "version", ...base() }
+		}
+
+		if (arg === "--entry" || arg.startsWith("--entry=")) {
+			const value = arg.includes("=") ? arg.slice("--entry=".length) : (argv[++i] ?? "")
+			if (value) {
+				entry.push(value)
+			}
+			continue
+		}
+		if (arg === "--ignore" || arg.startsWith("--ignore=")) {
+			const value = arg.includes("=") ? arg.slice("--ignore=".length) : (argv[++i] ?? "")
+			if (value) {
+				ignore.push(value)
+			}
+			continue
 		}
 
 		if (arg === "--fix") {
@@ -75,5 +98,5 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		}
 	}
 
-	return { command: command ?? "check", files, config, reporter, fix, verbose, raw }
+	return { command: command ?? "check", ...base() }
 }

@@ -22,6 +22,7 @@ describe("resolveConfig", () => {
 			packageMode: "workspace",
 			defaultValidate: "type",
 			defaultFixture: undefined,
+			checkUnusedSymbols: false,
 			fixtures: {},
 			languages: ["ts", "tsx", "js", "jsx"],
 			markdown: {

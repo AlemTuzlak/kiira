@@ -44,6 +44,7 @@ export function resolveConfig(config: Partial<TypedownConfig> = {}): ResolvedTyp
 		packageMode: config.packageMode ?? "workspace",
 		defaultValidate: config.defaultValidate ?? "type",
 		defaultFixture: config.defaultFixture,
+		checkUnusedSymbols: config.checkUnusedSymbols ?? false,
 		fixtures: config.fixtures ?? {},
 		languages,
 		markdown: {

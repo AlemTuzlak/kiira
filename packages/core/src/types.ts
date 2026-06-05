@@ -56,6 +56,11 @@ export interface TypedownConfig {
 	packageMode?: "workspace" | "packed"
 	defaultValidate?: "type" | "runtime" | "none"
 	defaultFixture?: string
+	/**
+	 * Report unused locals/parameters/imports (TS6133 etc.). Off by default —
+	 * doc snippets routinely declare things they don't use. Set true to enforce.
+	 */
+	checkUnusedSymbols?: boolean
 	fixtures?: Record<string, TypedownFixture>
 	languages?: TypedownLanguage[]
 	markdown?: {
@@ -75,6 +80,7 @@ export interface ResolvedTypedownConfig {
 	packageMode: "workspace" | "packed"
 	defaultValidate: "type" | "runtime" | "none"
 	defaultFixture?: string
+	checkUnusedSymbols: boolean
 	fixtures: Record<string, TypedownFixture>
 	languages: TypedownLanguage[]
 	markdown: {

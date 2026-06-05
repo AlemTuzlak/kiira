@@ -11,6 +11,8 @@ Commands:
   init             Scaffold typedown.config.ts and tsconfig.docs.json.
 
 Options:
+  --entry <path>       Directory, file, or glob to check (repeatable).
+  --ignore <path>      Directory, file, or glob to exclude (repeatable).
   --config <path>      Path to a Typedown config file.
   --reporter <name>    Output format: pretty (default), json, or github.
   --fix                Rewrite mistagged code fences (e.g. ts -> tsx for JSX).
@@ -21,7 +23,8 @@ Options:
 
 Examples:
   typedown check
-  typedown check "docs/**/*.md" README.md
+  typedown check --entry docs --entry README.md
+  typedown check --entry docs --ignore docs/api
   typedown check --reporter github
   typedown check --config typedown.config.ts --reporter json
 `

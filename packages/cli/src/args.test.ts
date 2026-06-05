@@ -20,6 +20,12 @@ describe("parseArgs", () => {
 		expect(parseArgs([]).raw).toBe(false)
 	})
 
+	it("collects repeatable --entry and --ignore values", () => {
+		const parsed = parseArgs(["check", "--entry", "docs", "--entry=README.md", "--ignore", "docs/api"])
+		expect(parsed.entry).toEqual(["docs", "README.md"])
+		expect(parsed.ignore).toEqual(["docs/api"])
+	})
+
 	it("parses an explicit command and positional file args", () => {
 		const parsed = parseArgs(["check", "docs/a.md", "README.md"])
 		expect(parsed.command).toBe("check")
