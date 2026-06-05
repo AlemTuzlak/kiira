@@ -18,6 +18,7 @@ Options:
   --fix                Rewrite mistagged code fences (e.g. ts -> tsx for JSX).
   --verbose            Show full error messages and code frames.
   --raw                Disable colored output (plain text).
+  --static             Disable the loading spinner.
   -h, --help           Show this help.
   -v, --version        Show the version.
 

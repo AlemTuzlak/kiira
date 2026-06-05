@@ -14,6 +14,8 @@ interface ParsedArgs {
 	entry: string[]
 	/** `--ignore` values: directories/files/globs to exclude (repeatable). */
 	ignore: string[]
+	/** `--static`: disable the loading spinner. */
+	static: boolean
 }
 
 const REPORTERS: ReporterName[] = ["pretty", "json", "github"]
@@ -31,11 +33,22 @@ export function parseArgs(argv: string[]): ParsedArgs {
 	let fix = false
 	let verbose = false
 	let raw = false
+	let staticOutput = false
 	const files: string[] = []
 	const entry: string[] = []
 	const ignore: string[] = []
 
-	const base = (): Omit<ParsedArgs, "command"> => ({ files, config, reporter, fix, verbose, raw, entry, ignore })
+	const base = (): Omit<ParsedArgs, "command"> => ({
+		files,
+		config,
+		reporter,
+		fix,
+		verbose,
+		raw,
+		entry,
+		ignore,
+		static: staticOutput,
+	})
 
 	for (let i = 0; i < argv.length; i += 1) {
 		const arg = argv[i] ?? ""
@@ -72,6 +85,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		}
 		if (arg === "--raw") {
 			raw = true
+			continue
+		}
+		if (arg === "--static") {
+			staticOutput = true
 			continue
 		}
 		if (arg === "--config" || arg.startsWith("--config=")) {

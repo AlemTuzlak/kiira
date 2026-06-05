@@ -14,10 +14,12 @@ describe("parseArgs", () => {
 		expect(parseArgs(["--fix"]).fix).toBe(true)
 	})
 
-	it("parses the --verbose and --raw flags", () => {
+	it("parses the --verbose, --raw, and --static flags", () => {
 		expect(parseArgs(["check", "--verbose"]).verbose).toBe(true)
 		expect(parseArgs(["check", "--raw"]).raw).toBe(true)
+		expect(parseArgs(["check", "--static"]).static).toBe(true)
 		expect(parseArgs([]).raw).toBe(false)
+		expect(parseArgs([]).static).toBe(false)
 	})
 
 	it("collects repeatable --entry and --ignore values", () => {

@@ -5,6 +5,7 @@ import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"
 import { formatReport } from "../reporters"
+import { startSpinner } from "../spinner"
 
 interface RunCheckOptions {
 	cwd: string
@@ -16,6 +17,7 @@ interface RunCheckOptions {
 	fix?: boolean
 	verbose?: boolean
 	raw?: boolean
+	static?: boolean
 	log: (message: string) => void
 	error: (message: string) => void
 }
@@ -56,43 +58,55 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	const exclude = [...(loaded.exclude ?? []), ...toIgnoreGlobs(cwd, options.ignore ?? [])]
 	const config: TypedownConfig = { ...loaded, include, exclude }
 
-	let result = await checkMarkdownFiles({ cwd, config })
+	// Run the (slow) checking under a spinner, deferring all output until it stops
+	// so the spinner line and the report never interleave.
+	const spinner = startSpinner("Checking Markdown…", { enabled: !options.static })
+	const pending: string[] = []
+	let result: Awaited<ReturnType<typeof checkMarkdownFiles>>
+	try {
+		result = await checkMarkdownFiles({ cwd, config })
 
-	// `--fix`: rewrite mistagged fences in the source, then re-check so the report
-	// reflects the corrected files.
-	if (options.fix) {
-		const configPath = options.config
-			? isAbsolute(options.config)
-				? options.config
-				: resolve(cwd, options.config)
-			: findConfigFile(cwd)
+		// `--fix`: rewrite mistagged fences / add config overrides, then re-check so
+		// the report reflects the corrected sources.
+		if (options.fix) {
+			const configPath = options.config
+				? isAbsolute(options.config)
+					? options.config
+					: resolve(cwd, options.config)
+				: findConfigFile(cwd)
 
-		const fences = await applyFixes(cwd, result.diagnostics)
-		const overrides = await applyConfigOverrides(configPath, result.diagnostics)
+			const fences = await applyFixes(cwd, result.diagnostics)
+			const overrides = await applyConfigOverrides(configPath, result.diagnostics)
 
-		if (fences.fixesApplied > 0 || overrides.applied.length > 0) {
-			const parts: string[] = []
-			if (fences.fixesApplied > 0) {
-				parts.push(`${fences.fixesApplied} fence${fences.fixesApplied === 1 ? "" : "s"}`)
+			if (fences.fixesApplied > 0 || overrides.applied.length > 0) {
+				const parts: string[] = []
+				if (fences.fixesApplied > 0) {
+					parts.push(`${fences.fixesApplied} fence${fences.fixesApplied === 1 ? "" : "s"}`)
+				}
+				if (overrides.applied.length > 0) {
+					parts.push(`${overrides.applied.length} config override${overrides.applied.length === 1 ? "" : "s"}`)
+				}
+				pending.push(`Fixed ${parts.join(" and ")}.\n`)
+				config.overrides = [...(config.overrides ?? []), ...overrides.applied]
+				result = await checkMarkdownFiles({ cwd, config })
 			}
-			if (overrides.applied.length > 0) {
-				parts.push(`${overrides.applied.length} config override${overrides.applied.length === 1 ? "" : "s"}`)
+
+			if (overrides.manual.length > 0) {
+				pending.push("Add these overrides to your Typedown config (config is not JSON, so apply manually):")
+				for (const fix of overrides.manual) {
+					const opts = Object.entries(fix.compilerOptions)
+						.map(([k, v]) => `"${k}": "${v}"`)
+						.join(", ")
+					pending.push(`  { "include": ["${fix.include}"], ${opts} }`)
+				}
 			}
-			options.log(`Fixed ${parts.join(" and ")}.\n`)
-			// Reflect applied overrides in the in-memory config for the re-check.
-			config.overrides = [...(config.overrides ?? []), ...overrides.applied]
-			result = await checkMarkdownFiles({ cwd, config })
 		}
+	} finally {
+		spinner.stop()
+	}
 
-		if (overrides.manual.length > 0) {
-			options.log("Add these overrides to your Typedown config (config is not JSON, so apply manually):")
-			for (const fix of overrides.manual) {
-				const opts = Object.entries(fix.compilerOptions)
-					.map(([k, v]) => `"${k}": "${v}"`)
-					.join(", ")
-				options.log(`  { "include": ["${fix.include}"], ${opts} }`)
-			}
-		}
+	for (const message of pending) {
+		options.log(message)
 	}
 
 	const output = formatReport(options.reporter, result, {

@@ -33,6 +33,7 @@ async function main(argv: string[]): Promise<number> {
 				fix: parsed.fix,
 				verbose: parsed.verbose,
 				raw: parsed.raw,
+				static: parsed.static,
 				log: (m) => console.log(m),
 				error: (m) => console.error(m),
 			})
