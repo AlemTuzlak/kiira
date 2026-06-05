@@ -1,14 +1,7 @@
 {
 	"$schema": "https://unpkg.com/knip@5/schema.json",
 	"ignoreBinaries": ["pkg-pr-new"],
-	"ignoreDependencies": [
-		"@changesets/cli",
-		"lefthook",
-		"jiti",
-		"@types/mdast",
-		"mdast-util-from-markdown",
-		"tinyglobby",
-		"@typedown/core"
-	],
-	"ignoreWorkspaces": ["examples/**", "packages/vscode", "packages/github-action"]
+	"ignoreDependencies": ["@changesets/cli", "lefthook", "@typedown/core"],
+	"ignoreWorkspaces": ["examples/**", "packages/vscode", "packages/github-action"],
+	"ignore": ["**/tests/fixtures/**"]
 }
