@@ -49,7 +49,7 @@ describe("buildWorkspaceResolution", () => {
 		expect(await buildWorkspaceResolution(here)).toBeUndefined()
 	})
 
-	it("collects @types directories from workspace packages as typeRoots", async () => {
+	it("collects @types as typeRoots and maps runtime-only packages to their @types declarations", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "typedown-ws-"))
 		try {
 			writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
@@ -59,6 +59,8 @@ describe("buildWorkspaceResolution", () => {
 
 			const resolution = await buildWorkspaceResolution(dir)
 			expect(resolution?.typeRoots.some((r) => r.endsWith("packages/lib/node_modules/@types"))).toBe(true)
+			// `react` -> its @types declarations, so its runtime-only `.js` resolves to types.
+			expect(resolution?.paths.react?.[0]?.endsWith("packages/lib/node_modules/@types/react")).toBe(true)
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { dirname, join, sep } from "node:path"
 import { glob } from "tinyglobby"
@@ -197,6 +197,36 @@ export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceRe
 		const typesDir = join(dir, "node_modules", "@types")
 		if (existsSync(typesDir)) {
 			typeRoots.push(toPosix(typesDir))
+			addTypesPackagePaths(typesDir)
+		}
+	}
+
+	// Map a runtime-only package (e.g. `react`) to its `@types/<pkg>` declarations,
+	// so TS finds types instead of erroring on the untyped `.js` (TS7016). The
+	// runtime is irrelevant — docs are only type-checked, never executed.
+	const addTypesPackagePaths = (typesDir: string): void => {
+		let entries: string[]
+		try {
+			entries = readdirSync(typesDir, { withFileTypes: true })
+				// `@types/*` entries are pnpm symlinks, so accept symlinks as well as dirs.
+				.filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith("."))
+				.map((e) => e.name)
+		} catch {
+			return
+		}
+		for (const entry of entries) {
+			// `@types/node` provides globals (via typeRoots), not an importable `node` module.
+			if (entry === "node") {
+				continue
+			}
+			// Scoped types use `scope__name` (e.g. `babel__core` -> `@babel/core`).
+			const moduleName = entry.includes("__") ? `@${entry.replace("__", "/")}` : entry
+			if (paths[moduleName]) {
+				continue // a workspace package or earlier @types dir already claims it
+			}
+			const dir = `${toPosix(typesDir)}/${entry}`
+			paths[moduleName] = [dir]
+			paths[`${moduleName}/*`] = [`${dir}/*`]
 		}
 	}
 
