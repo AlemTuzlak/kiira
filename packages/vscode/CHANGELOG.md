@@ -1,5 +1,20 @@
 # kiira-vscode
 
+## 0.3.0
+
+### Minor Changes
+
+- a285163: Documentation: new animated landing page (hero, a "watch Kiira catch a bug" demo
+  showing wrong code → Kiira → highlighted errors, and a "core → Kiira → CLI / VS
+  Code / GitHub Action" usage flow) with a header logo + Docs / VS Code / GitHub
+  links. No public API changes.
+
+### Patch Changes
+
+- e29cec8: Use the light Kiira logo as the VS Code Marketplace icon.
+- Updated dependencies [a285163]
+  - kiira-core@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

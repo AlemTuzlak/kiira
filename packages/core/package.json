@@ -1,6 +1,6 @@
 {
 	"name": "kiira-core",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Core engine for Kiira: extract code fences from Markdown, type-check them, and map diagnostics back to source.",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.mjs",
