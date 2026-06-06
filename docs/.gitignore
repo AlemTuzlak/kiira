@@ -87,3 +87,15 @@ blob-report
 
 # Output base directory of the documentation
 generated-docs/
+
+# React Bits Pro components — license-gated (license forbids committing the
+# source to a public repo). Fetched at build via `pnpm run pull:reactbits`
+# using REACTBITS_LICENSE_KEY. components.json holds the registry config.
+/app/components/silk-waves.tsx
+/app/components/blinking-squares.tsx
+/app/components/falling-rays.tsx
+/app/components/rising-lines.tsx
+/app/components/center-flow.tsx
+/app/components/parallax-pills.tsx
+/app/components/comparison-slider.tsx
+/app/components/magic-transform.tsx
