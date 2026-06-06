@@ -41,7 +41,7 @@ describe("parseArgs", () => {
 	})
 
 	it("parses --config and --reporter with space or equals", () => {
-		expect(parseArgs(["check", "--config", "typedown.config.ts"]).config).toBe("typedown.config.ts")
+		expect(parseArgs(["check", "--config", "kiira.config.ts"]).config).toBe("kiira.config.ts")
 		expect(parseArgs(["check", "--config=custom.json"]).config).toBe("custom.json")
 		expect(parseArgs(["check", "--reporter", "json"]).reporter).toBe("json")
 		expect(parseArgs(["check", "--reporter=github"]).reporter).toBe("github")

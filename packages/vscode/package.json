@@ -1,24 +1,25 @@
 {
-	"name": "typedown-vscode",
-	"displayName": "Typedown",
+	"name": "kiira-vscode",
+	"displayName": "Kiira",
 	"version": "0.1.0",
 	"description": "Live type-checking for TypeScript and JavaScript code fences inside Markdown files.",
 	"publisher": "CodeForge",
+	"icon": "icon.png",
 	"private": true,
 	"type": "commonjs",
 	"engines": {
 		"vscode": "^1.85.0"
 	},
 	"categories": ["Linters", "Programming Languages"],
-	"keywords": ["markdown", "typescript", "docs", "typedown", "validation"],
+	"keywords": ["markdown", "typescript", "docs", "kiira", "validation"],
 	"galleryBanner": {
 		"color": "#0d1117",
 		"theme": "dark"
 	},
 	"pricing": "Free",
-	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"bugs": {
-		"url": "https://github.com/AlemTuzlak/typedown/issues"
+		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
 	"qna": "marketplace",
 	"main": "./out/extension.cjs",
@@ -26,51 +27,51 @@
 	"contributes": {
 		"commands": [
 			{
-				"command": "typedown.checkCurrentFile",
-				"title": "Typedown: Check Current File"
+				"command": "kiira.checkCurrentFile",
+				"title": "Kiira: Check Current File"
 			},
 			{
-				"command": "typedown.checkWorkspace",
-				"title": "Typedown: Check Workspace"
+				"command": "kiira.checkWorkspace",
+				"title": "Kiira: Check Workspace"
 			},
 			{
-				"command": "typedown.openVirtualFile",
-				"title": "Typedown: Open Virtual File For Snippet"
+				"command": "kiira.openVirtualFile",
+				"title": "Kiira: Open Virtual File For Snippet"
 			},
 			{
-				"command": "typedown.restartServer",
-				"title": "Typedown: Restart Typedown Server"
+				"command": "kiira.restartServer",
+				"title": "Kiira: Restart Kiira Server"
 			}
 		],
 		"configuration": {
-			"title": "Typedown",
+			"title": "Kiira",
 			"properties": {
-				"typedown.enable": {
+				"kiira.enable": {
 					"type": "boolean",
 					"default": true,
-					"description": "Enable Typedown diagnostics in Markdown files."
+					"description": "Enable Kiira diagnostics in Markdown files."
 				},
-				"typedown.configPath": {
+				"kiira.configPath": {
 					"type": "string",
-					"default": "typedown.config.ts",
-					"description": "Path to the Typedown config file, relative to the workspace root."
+					"default": "kiira.config.ts",
+					"description": "Path to the Kiira config file, relative to the workspace root."
 				},
-				"typedown.debounceMs": {
+				"kiira.debounceMs": {
 					"type": "number",
 					"default": 300,
 					"description": "Delay in milliseconds before re-checking a document after a change."
 				},
-				"typedown.checkOnSave": {
+				"kiira.checkOnSave": {
 					"type": "boolean",
 					"default": true,
 					"description": "Re-check the document when it is saved."
 				},
-				"typedown.checkOnChange": {
+				"kiira.checkOnChange": {
 					"type": "boolean",
 					"default": true,
 					"description": "Re-check the document as it changes (debounced)."
 				},
-				"typedown.showGeneratedDiagnostics": {
+				"kiira.showGeneratedDiagnostics": {
 					"type": "boolean",
 					"default": false,
 					"description": "Show diagnostics that originate from generated fixture code (for debugging)."
@@ -89,11 +90,11 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/AlemTuzlak/typedown.git",
+		"url": "git+https://github.com/AlemTuzlak/kiira.git",
 		"directory": "packages/vscode"
 	},
 	"dependencies": {
-		"@alemtuzlak/typedown": "workspace:*"
+		"@alemtuzlak/kiira-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/node": "22.14.1",

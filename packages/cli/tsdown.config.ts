@@ -8,5 +8,5 @@ export default defineConfig({
 	clean: true,
 	format: ["esm"],
 	outDir: "dist",
-	// typedown is a runtime dependency, externalized automatically.
+	// kiira is a runtime dependency, externalized automatically.
 })

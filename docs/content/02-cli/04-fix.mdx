@@ -1,0 +1,69 @@
+---
+title: "Automatic fixes (--fix)"
+summary: "What kiira check --fix rewrites for you"
+description: "How the Kiira --fix flag rewrites mistagged code fences, adds group tags to continuation snippets, and writes framework jsxImportSource overrides into your config."
+---
+
+## Running fixes
+
+```bash
+kiira check --fix
+```
+
+`--fix` applies only **safe, mechanical** changes — it never edits the code inside your snippets. It rewrites fence metadata and config so your docs check correctly.
+
+## What it fixes
+
+### 1. Mistagged fences (`ts`/`typescript` → `tsx`)
+
+When a fence is tagged `ts` (or `typescript`) but actually contains JSX, it won't represent the example correctly and can produce misleading errors. `--fix` rewrites the language tag to `tsx`:
+
+````md
+<!-- before -->
+```ts
+const el = <div>hello</div>
+```
+
+<!-- after `kiira check --fix` -->
+```tsx
+const el = <div>hello</div>
+```
+````
+
+See [Language-tag checking](/projects/language-tag-checking) for how detection works and what Kiira does when you *don't* run `--fix`.
+
+### 2. Ungrouped continuation snippets (`group=`)
+
+When Kiira detects that a fence is a continuation of an earlier one (for example, it references a `const` declared in a previous fence), it can group them so they type-check together in document order. `--fix` adds matching `group=` tags to those fences:
+
+````md
+<!-- before -->
+```ts
+const user = getUser()
+```
+
+```ts
+console.log(user.name)
+```
+
+<!-- after `kiira check --fix` -->
+```ts group=example-1
+const user = getUser()
+```
+
+```ts group=example-1
+console.log(user.name)
+```
+````
+
+See [Grouping snippets](/fences/grouping-snippets) for the full model.
+
+### 3. Framework `jsxImportSource` overrides
+
+When a JSX snippet fails because TypeScript can't find the right JSX runtime (for example a Solid or Preact example checked with the default React runtime), `--fix` writes the appropriate `jsxImportSource` override into your config so matching files compile against the correct framework.
+
+See [Per-glob overrides](/projects/per-glob-overrides) for how overrides work and how the framework is detected.
+
+## What it never touches
+
+`--fix` does not rewrite the body of your code snippets, change your prose, or "fix" type errors by editing the example. Real type errors are yours to fix — `--fix` only corrects fence tags and config so Kiira checks each example the way it was meant to be checked.

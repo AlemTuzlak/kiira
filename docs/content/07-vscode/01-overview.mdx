@@ -1,0 +1,72 @@
+---
+title: "Kiira for VS Code"
+summary: "Live diagnostics, quick fixes, commands, and settings for the editor"
+description: "Install and use the Kiira VS Code extension — live diagnostics mapped to the exact fence line, TypeScript and Kiira quick fixes, the extension's commands, and its configurable settings."
+---
+
+## Install
+
+Install **Kiira** from the VS Code Marketplace:
+
+```text
+ext install CodeForge.kiira-vscode
+```
+
+- Marketplace: [marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode](https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode)
+- Open VSX (VSCodium, Cursor, Gitpod, …): [open-vsx.org/extension/CodeForge/kiira-vscode](https://open-vsx.org/extension/CodeForge/kiira-vscode)
+
+The extension reads the same `kiira.config.ts` as the CLI, so your editor and CI check the same way.
+
+## Features
+
+### Live diagnostics
+
+As you type — and on save — the extension type-checks the code fences in the open Markdown file and shows errors **mapped to the exact fence line**, not to a generated file. Squiggles land on the offending line inside the fence, just like errors in a `.ts` file.
+
+You control when it runs with the `kiira.checkOnChange` and `kiira.checkOnSave` settings (both on by default), and how aggressively with `kiira.debounceMs`.
+
+### Quick fixes
+
+Open the quick-fix menu on a diagnostic with **Ctrl+.** / **Cmd+.**. You get two kinds of fixes:
+
+- **TypeScript's own quick fixes** — because Kiira checks with the real compiler, you get the editor fixes you already know: auto-import a missing symbol, fix a spelling, add a missing `await`, implement an interface, and more.
+- **Kiira's fixes** — rewrite a mistagged `ts` fence to `tsx`, and add a `group=` tag to a continuation snippet.
+
+### Inspect the generated virtual file
+
+Kiira compiles each fence as a virtual TypeScript file. You can open that generated file to see exactly what the compiler sees (with fixtures and grouping applied), which is invaluable when debugging a confusing error. Use the **Kiira: Open Virtual File For Snippet** command, and enable `kiira.showGeneratedDiagnostics` if you also want diagnostics from the generated file surfaced.
+
+## Commands
+
+Available from the Command Palette (**Ctrl+Shift+P** / **Cmd+Shift+P**):
+
+| Command | Description |
+| --- | --- |
+| `Kiira: Check Current File` | Re-run Kiira on the active Markdown file. |
+| `Kiira: Check Workspace` | Run Kiira across the whole workspace. |
+| `Kiira: Open Virtual File For Snippet` | Open the generated virtual TS file for the fence under the cursor. |
+| `Kiira: Restart Kiira Server` | Restart the Kiira language server (e.g. after changing config). |
+
+## Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `kiira.enable` | `true` | Enable the Kiira extension. |
+| `kiira.configPath` | `kiira.config.ts` | Path to the Kiira config file. |
+| `kiira.debounceMs` | `300` | Debounce (ms) before re-checking after a change. |
+| `kiira.checkOnChange` | `true` | Re-check as you type. |
+| `kiira.checkOnSave` | `true` | Re-check on save. |
+| `kiira.showGeneratedDiagnostics` | `false` | Also surface diagnostics from the generated virtual file. |
+
+Example `settings.json`:
+
+```json
+{
+  "kiira.enable": true,
+  "kiira.configPath": "kiira.config.ts",
+  "kiira.debounceMs": 300,
+  "kiira.checkOnChange": true,
+  "kiira.checkOnSave": true,
+  "kiira.showGeneratedDiagnostics": false
+}
+```

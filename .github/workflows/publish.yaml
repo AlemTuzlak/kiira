@@ -49,7 +49,7 @@ jobs:
       # Creates/refreshes a "Version Packages" PR when changesets are present;
       # when that PR is merged (no changesets left) it publishes the public
       # packages to npm with provenance via OIDC trusted publishing. Configure
-      # the trusted publisher for typedown and @alemtuzlak/typedown-cli on npmjs.com
+      # the trusted publisher for kiira and @alemtuzlak/kiira on npmjs.com
       # (Settings → Trusted Publisher → this repo's Release workflow). See
       # RELEASING.md. Private packages (the VS Code extension) are version-bumped
       # only; it is published to the Marketplace by publish-vscode.yaml.

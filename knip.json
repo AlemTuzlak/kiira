@@ -3,5 +3,5 @@
 	"ignoreBinaries": ["pkg-pr-new", "gh"],
 	"ignoreDependencies": ["@changesets/cli", "lefthook"],
 	"ignoreWorkspaces": ["examples/**", "packages/vscode", "packages/github-action"],
-	"ignore": ["**/tests/fixtures/**"]
+	"ignore": ["**/tests/fixtures/**", "docs/**"]
 }

@@ -1,6 +1,6 @@
-// @alemtuzlak/typedown public API.
+// @alemtuzlak/kiira-core public API.
 
-export const TYPEDOWN_CORE_VERSION = "0.1.0"
+export const KIIRA_CORE_VERSION = "0.1.0"
 
 export * from "./types"
 export {

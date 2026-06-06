@@ -1,0 +1,39 @@
+---
+title: "Per-glob overrides"
+summary: "Different compiler options for docs that target different frameworks"
+description: "Use Kiira overrides to set compiler options like jsxImportSource per glob, so docs spanning multiple frameworks (React, Solid, Preact) each compile correctly. Kiira runs a separate TS program per option set and can detect the framework automatically."
+---
+
+## When you need overrides
+
+Some doc sites cover **multiple frameworks** — a React guide, a Solid guide, a Preact guide — all in one repository. Each needs different compiler options, most commonly a different `jsxImportSource` so JSX compiles against the right runtime. The `overrides` option lets you set compiler options per glob.
+
+```ts
+import { defineConfig } from "@alemtuzlak/kiira-core"
+
+export default defineConfig({
+  include: ["docs/**/*.mdx"],
+  overrides: [
+    {
+      include: ["docs/solid/**/*.mdx"],
+      compilerOptions: { jsxImportSource: "solid-js" },
+    },
+    {
+      include: ["docs/preact/**/*.mdx"],
+      compilerOptions: { jsxImportSource: "preact" },
+    },
+  ],
+})
+```
+
+Files under `docs/solid/` are checked with Solid's JSX runtime, files under `docs/preact/` with Preact's, and everything else with your base config.
+
+## How it works
+
+For every **distinct set of compiler options**, Kiira runs a **separate TypeScript program**. Files matched by an override join the program for that option set; unmatched files use the base program. This keeps each framework's snippets type-checking against the correct runtime without cross-contamination.
+
+## Automatic framework detection
+
+Kiira also **detects the framework from the file path** and from compilation failures. When a JSX snippet fails with TypeScript's `TS7026` (JSX element implicitly has type `any` because no interface `JSX.IntrinsicElements` exists) — the classic symptom of the wrong JSX runtime — Kiira **suggests an override**.
+
+Running [`kiira check --fix`](/cli/fix) then **writes that override into your config** for you, so subsequent runs compile those files against the right framework automatically.

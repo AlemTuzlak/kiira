@@ -1,28 +1,28 @@
 import { existsSync } from "node:fs"
 import { isAbsolute, join, relative, sep } from "node:path"
 import {
-	type TypedownConfig,
-	type TypedownDiagnostic,
+	type KiiraConfig,
+	type KiiraDiagnostic,
 	type VirtualFile,
 	checkMarkdownFiles,
 	loadConfig,
 	loadConfigFile,
 	setTypescriptLibDir,
-} from "@alemtuzlak/typedown"
+} from "@alemtuzlak/kiira-core"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
-import { TypedownCodeActionProvider } from "./code-actions"
+import { KiiraCodeActionProvider } from "./code-actions"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 
-const VIRTUAL_SCHEME = "typedown"
+const VIRTUAL_SCHEME = "kiira"
 
 let collection: vscode.DiagnosticCollection
 let output: vscode.OutputChannel
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const virtualFilesByDocument = new Map<string, VirtualFile[]>()
-const diagnosticsByDocument = new Map<string, TypedownDiagnostic[]>()
+const diagnosticsByDocument = new Map<string, KiiraDiagnostic[]>()
 
-interface TypedownSettings {
+interface KiiraSettings {
 	enable: boolean
 	configPath: string
 	debounceMs: number
@@ -31,11 +31,11 @@ interface TypedownSettings {
 	showGeneratedDiagnostics: boolean
 }
 
-function readSettings(): TypedownSettings {
-	const c = vscode.workspace.getConfiguration("typedown")
+function readSettings(): KiiraSettings {
+	const c = vscode.workspace.getConfiguration("kiira")
 	return {
 		enable: c.get<boolean>("enable", true),
-		configPath: c.get<string>("configPath", "typedown.config.ts"),
+		configPath: c.get<string>("configPath", "kiira.config.ts"),
 		debounceMs: c.get<number>("debounceMs", 300),
 		checkOnSave: c.get<boolean>("checkOnSave", true),
 		checkOnChange: c.get<boolean>("checkOnChange", true),
@@ -56,7 +56,7 @@ function workspaceContext(document: vscode.TextDocument): { cwd: string; markdow
 	return { cwd, markdownFile }
 }
 
-async function loadWorkspaceConfig(cwd: string, configPath: string): Promise<Partial<TypedownConfig>> {
+async function loadWorkspaceConfig(cwd: string, configPath: string): Promise<Partial<KiiraConfig>> {
 	try {
 		const explicit = isAbsolute(configPath) ? configPath : join(cwd, configPath)
 		if (existsSync(explicit)) {
@@ -69,7 +69,7 @@ async function loadWorkspaceConfig(cwd: string, configPath: string): Promise<Par
 	}
 }
 
-function toVscodeDiagnostic(diagnostic: TypedownDiagnostic): vscode.Diagnostic {
+function toVscodeDiagnostic(diagnostic: KiiraDiagnostic): vscode.Diagnostic {
 	const { start, end } = diagnostic.markdownRange
 	const range = new vscode.Range(start.line, start.character, end.line, end.character)
 	const severity =
@@ -79,7 +79,7 @@ function toVscodeDiagnostic(diagnostic: TypedownDiagnostic): vscode.Diagnostic {
 				? vscode.DiagnosticSeverity.Warning
 				: vscode.DiagnosticSeverity.Information
 	const result = new vscode.Diagnostic(range, diagnostic.message, severity)
-	result.source = "typedown"
+	result.source = "kiira"
 	const code = diagnosticCodeLabel(diagnostic.code)
 	if (code) {
 		result.code = code
@@ -140,7 +140,7 @@ async function checkWorkspaceCommand(): Promise<void> {
 			const cwd = folder.uri.fsPath
 			const config = await loadWorkspaceConfig(cwd, settings.configPath)
 			const result = await checkMarkdownFiles({ cwd, config })
-			const byFile = new Map<string, TypedownDiagnostic[]>()
+			const byFile = new Map<string, KiiraDiagnostic[]>()
 			for (const d of selectDiagnostics(result.diagnostics, { showGenerated: settings.showGeneratedDiagnostics })) {
 				const list = byFile.get(d.markdownFile) ?? []
 				list.push(d)
@@ -152,7 +152,7 @@ async function checkWorkspaceCommand(): Promise<void> {
 		}
 	} catch (error) {
 		output.appendLine(`Workspace check failed: ${(error as Error).message}`)
-		void vscode.window.showErrorMessage(`Typedown: workspace check failed — ${(error as Error).message}`)
+		void vscode.window.showErrorMessage(`Kiira: workspace check failed — ${(error as Error).message}`)
 	}
 }
 
@@ -168,7 +168,7 @@ class VirtualContentProvider implements vscode.TextDocumentContentProvider {
 	}
 
 	provideTextDocumentContent(uri: vscode.Uri): string {
-		return this.contents.get(uri.toString()) ?? "// Typedown: no content for this virtual file."
+		return this.contents.get(uri.toString()) ?? "// Kiira: no content for this virtual file."
 	}
 }
 
@@ -179,7 +179,7 @@ async function openVirtualFileCommand(provider: VirtualContentProvider): Promise
 	}
 	const virtualFiles = virtualFilesByDocument.get(document.uri.toString())
 	if (!virtualFiles || virtualFiles.length === 0) {
-		void vscode.window.showInformationMessage("Typedown: no virtual files for this document yet — check it first.")
+		void vscode.window.showInformationMessage("Kiira: no virtual files for this document yet — check it first.")
 		return
 	}
 
@@ -216,8 +216,8 @@ export function activate(context: vscode.ExtensionContext): void {
 	// globals (`JSON`, `Date`, DOM types) resolve instead of being flagged.
 	setTypescriptLibDir(join(__dirname, "lib"))
 
-	collection = vscode.languages.createDiagnosticCollection("typedown")
-	output = vscode.window.createOutputChannel("Typedown")
+	collection = vscode.languages.createDiagnosticCollection("kiira")
+	output = vscode.window.createOutputChannel("Kiira")
 	const provider = new VirtualContentProvider()
 
 	context.subscriptions.push(
@@ -241,15 +241,15 @@ export function activate(context: vscode.ExtensionContext): void {
 			virtualFilesByDocument.delete(document.uri.toString())
 			diagnosticsByDocument.delete(document.uri.toString())
 		}),
-		vscode.commands.registerCommand("typedown.checkCurrentFile", () => {
+		vscode.commands.registerCommand("kiira.checkCurrentFile", () => {
 			const document = vscode.window.activeTextEditor?.document
 			if (document) {
 				void checkAndPublish(document)
 			}
 		}),
-		vscode.commands.registerCommand("typedown.checkWorkspace", () => void checkWorkspaceCommand()),
-		vscode.commands.registerCommand("typedown.openVirtualFile", () => void openVirtualFileCommand(provider)),
-		vscode.commands.registerCommand("typedown.restartServer", () => {
+		vscode.commands.registerCommand("kiira.checkWorkspace", () => void checkWorkspaceCommand()),
+		vscode.commands.registerCommand("kiira.openVirtualFile", () => void openVirtualFileCommand(provider)),
+		vscode.commands.registerCommand("kiira.restartServer", () => {
 			collection.clear()
 			virtualFilesByDocument.clear()
 			diagnosticsByDocument.clear()
@@ -259,7 +259,7 @@ export function activate(context: vscode.ExtensionContext): void {
 		}),
 		vscode.languages.registerCodeActionsProvider(
 			{ language: "markdown" },
-			new TypedownCodeActionProvider({
+			new KiiraCodeActionProvider({
 				resolveContext: async (document) => {
 					const ctx = workspaceContext(document)
 					if (!ctx) {
@@ -271,7 +271,7 @@ export function activate(context: vscode.ExtensionContext): void {
 				getVirtualFiles: (uri) => virtualFilesByDocument.get(uri),
 				getDiagnostics: (uri) => diagnosticsByDocument.get(uri),
 			}),
-			{ providedCodeActionKinds: TypedownCodeActionProvider.providedKinds }
+			{ providedCodeActionKinds: KiiraCodeActionProvider.providedKinds }
 		)
 	)
 

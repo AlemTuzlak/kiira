@@ -1,0 +1,42 @@
+---
+title: "Kiira"
+summary: "Type-check the code in your Markdown"
+description: "Kiira type-checks the TypeScript and JavaScript code fences inside your Markdown docs against your real project API, reporting errors on the exact Markdown line — in your editor, on the CLI, and in CI."
+---
+
+## What is Kiira?
+
+**Kiira type-checks the TypeScript/JavaScript code fences inside your Markdown docs against your real project API.** It extracts every code fence from your `.md` / `.mdx` files, compiles each one with the actual TypeScript compiler using your project's types, and reports any errors back on the exact Markdown line they occur — in your editor, on the command line, and in CI.
+
+If a snippet in your README imports something that no longer exists, calls an option that was renamed, or passes the wrong prop to a component, Kiira fails the check and points at the line in the Markdown file. Your documentation stays correct because it is verified against the same types your code is.
+
+## Why does this matter?
+
+Documentation rots. Examples written months ago silently drift out of date as APIs change, and there is usually nothing checking them. The problem is far worse now that **a lot of documentation is written by AI agents** — and agents love to confidently hallucinate APIs that never existed.
+
+Kiira catches the failures that slip past human review:
+
+- **Invalid imports** — importing a package or module that isn't installed or doesn't exist.
+- **Missing exports** — importing a named export that the package doesn't actually export.
+- **Wrong subpaths** — importing from `your-lib/utils` when the real entry point is `your-lib/helpers`.
+- **Wrong option / prop names** — passing `onChange` when the API expects `onValueChange`, or a config key that was renamed.
+- **Invalid TypeScript / JavaScript** — code that simply doesn't type-check or parse.
+- **Non-copy-pasteable examples** — snippets that look right but would never compile if a reader pasted them into their editor.
+
+Because Kiira uses your real types, "it compiles in the docs" means "it will compile for your users."
+
+## What's in the box
+
+Kiira ships as a small set of focused tools that share one check engine:
+
+- **`@alemtuzlak/kiira-core`** — the core library. Exposes `defineConfig`, the shared types, and the check engine that extracts, compiles, and reports on your fences. The other packages are built on top of it.
+- **`@alemtuzlak/kiira`** — the CLI. Provides the `kiira` command with `kiira check` (validate your docs) and `kiira init` (scaffold a config). Run it locally or in any CI runner.
+- **Kiira for VS Code** — the editor extension (marketplace id `CodeForge.kiira-vscode`). Live diagnostics as you type and on save, mapped to the exact fence line, plus quick fixes.
+- **Kiira GitHub Action** — `AlemTuzlak/kiira/packages/github-action@v1`. Drop it into a workflow to get Markdown-line annotations on every pull request.
+
+## Where to go next
+
+- New to Kiira? Start with the [Getting Started](/getting-started) guide for a 60-second quickstart.
+- Want the full command surface? See the **CLI** section.
+- Tuning behavior? Read the **Configuration** section and the **Fence metadata** reference.
+- Setting up automation? Jump to the **CI** section and the **VS Code extension** page.

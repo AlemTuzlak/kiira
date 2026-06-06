@@ -6,7 +6,7 @@ export interface DiscoverInput {
 	exclude?: string[]
 }
 
-const ALWAYS_IGNORE = ["**/node_modules/**", "**/dist/**", "**/.typedown/**"]
+const ALWAYS_IGNORE = ["**/node_modules/**", "**/dist/**", "**/.kiira/**"]
 
 function toPosix(path: string): string {
 	return path.split("\\").join("/")

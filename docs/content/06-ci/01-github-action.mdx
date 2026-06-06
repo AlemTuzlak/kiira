@@ -1,0 +1,94 @@
+---
+title: "GitHub Action"
+summary: "Annotate failing docs on pull requests with the Kiira GitHub Action"
+description: "Use the official Kiira GitHub Action to run kiira check in CI and surface failures as inline annotations on the exact Markdown line. Documents the command, config, reporter, files, and working-directory inputs."
+---
+
+## Usage
+
+Add the Kiira action to a workflow. With the `github` reporter (the action's default), failures appear as inline annotations on the exact Markdown line in the pull request:
+
+```yaml
+- uses: AlemTuzlak/kiira/packages/github-action@v1
+  with:
+    command: pnpm kiira check
+    reporter: github
+```
+
+A complete workflow:
+
+```yaml
+name: Docs
+on: [push, pull_request]
+
+jobs:
+  kiira:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: AlemTuzlak/kiira/packages/github-action@v1
+        with:
+          command: pnpm kiira check
+          reporter: github
+```
+
+## Inputs
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `command` | `kiira check` | The Kiira command to run. |
+| `config` | — | Path to a Kiira config file. |
+| `reporter` | `github` | Output format: `pretty`, `github`, `json`, or `sarif`. |
+| `files` | — | Space-separated globs to check. |
+| `working-directory` | `.` | Directory to run Kiira in. |
+
+### `command`
+
+The command the action runs. Defaults to `kiira check`. Use `pnpm kiira check` (or your package manager's equivalent) when Kiira is a dev dependency:
+
+```yaml
+with:
+  command: pnpm kiira check
+```
+
+### `config`
+
+Path to a specific config file, equivalent to the CLI `--config` flag:
+
+```yaml
+with:
+  config: configs/kiira.config.ts
+```
+
+### `reporter`
+
+Output format. Defaults to `github` so failures become inline PR annotations. Also accepts `pretty`, `json`, and `sarif`:
+
+```yaml
+with:
+  reporter: github
+```
+
+### `files`
+
+Space-separated globs to check, equivalent to passing `--entry` on the CLI:
+
+```yaml
+with:
+  files: "docs/**/*.mdx README.md"
+```
+
+### `working-directory`
+
+The directory to run Kiira in. Defaults to `.`. Point it at a docs subfolder in a monorepo:
+
+```yaml
+with:
+  working-directory: docs
+```

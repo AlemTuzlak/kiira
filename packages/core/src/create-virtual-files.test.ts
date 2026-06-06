@@ -1,13 +1,13 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { extractMarkdownSnippets } from "./extract"
-import type { TypedownConfig } from "./types"
+import type { KiiraConfig } from "./types"
 import { createVirtualFiles } from "./virtual"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = resolve(here, "../tests/fixtures/markdown")
 
-const configWithReact: Partial<TypedownConfig> = {
+const configWithReact: Partial<KiiraConfig> = {
 	include: ["**/*.md"],
 	fixtures: {
 		react: { type: "prepend", content: 'import * as React from "react"' },
@@ -39,7 +39,7 @@ describe("createVirtualFiles", () => {
 		const tsx = virtualFiles.find((v) => v.lang === "tsx")
 		expect(tsx?.content.startsWith('import * as React from "react"\n')).toBe(true)
 		expect(tsx?.mappings[0]?.markdownLine).toBeNull()
-		expect(tsx?.fileName.replace(/\\/g, "/").endsWith(".typedown/virtual/intro__snippet_001.tsx")).toBe(true)
+		expect(tsx?.fileName.replace(/\\/g, "/").endsWith(".kiira/virtual/intro__snippet_001.tsx")).toBe(true)
 	})
 
 	it("warns and checks as tsx when a ts fence contains JSX", async () => {

@@ -7,7 +7,7 @@ import { analyzeSnippet } from "./analyze"
 import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { extractSnippetsFromContent } from "./extract"
-import type { TypedownCheckResult, TypedownConfig, TypedownDiagnostic, TypedownLanguage, VirtualFile } from "./types"
+import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, KiiraLanguage, VirtualFile } from "./types"
 import { createVirtualFiles, isCheckable, mapVirtualLine } from "./virtual"
 import { buildWorkspaceResolution } from "./workspace"
 
@@ -96,7 +96,7 @@ function loadCompilerOptions(tsconfigPath: string | undefined): ts.CompilerOptio
 	return { ...parsed.options, noEmit: true, skipLibCheck: parsed.options.skipLibCheck ?? true }
 }
 
-function scriptKindFor(lang: TypedownLanguage): ts.ScriptKind {
+function scriptKindFor(lang: KiiraLanguage): ts.ScriptKind {
 	switch (lang) {
 		case "tsx":
 			return ts.ScriptKind.TSX
@@ -109,7 +109,7 @@ function scriptKindFor(lang: TypedownLanguage): ts.ScriptKind {
 	}
 }
 
-function categoryToSeverity(category: ts.DiagnosticCategory): TypedownDiagnostic["severity"] {
+function categoryToSeverity(category: ts.DiagnosticCategory): KiiraDiagnostic["severity"] {
 	switch (category) {
 		case ts.DiagnosticCategory.Error:
 			return "error"
@@ -156,9 +156,9 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 	return host
 }
 
-function mapTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): TypedownDiagnostic {
+function mapTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): KiiraDiagnostic {
 	const { snippet } = vf
-	const base: TypedownDiagnostic = {
+	const base: KiiraDiagnostic = {
 		severity: categoryToSeverity(diagnostic.category),
 		code: typeof diagnostic.code === "number" ? diagnostic.code : undefined,
 		message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
@@ -204,11 +204,11 @@ function mapTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): TypedownDi
 export interface CheckVirtualFilesInput {
 	cwd: string
 	virtualFiles: VirtualFile[]
-	config: Partial<TypedownConfig>
+	config: Partial<KiiraConfig>
 }
 
 /**
- * Build the base compiler options Typedown checks with: the project tsconfig (or
+ * Build the base compiler options Kiira checks with: the project tsconfig (or
  * defaults), the unused-symbol toggle, and — in workspace mode — the monorepo's
  * package `paths`/`typeRoots` so its packages resolve from the repo root. Shared by
  * checking and code-fixes so both see an identical project.
@@ -249,7 +249,7 @@ export async function checkVirtualFiles({
 	cwd,
 	virtualFiles,
 	config,
-}: CheckVirtualFilesInput): Promise<TypedownDiagnostic[]> {
+}: CheckVirtualFilesInput): Promise<KiiraDiagnostic[]> {
 	if (virtualFiles.length === 0) {
 		return []
 	}
@@ -262,7 +262,7 @@ export async function checkVirtualFiles({
 	// `jsxImportSource: "solid-js"` while React docs use React's JSX.
 	const partitions = partitionByOverrides(cwd, virtualFiles, options, resolved.overrides)
 
-	const diagnostics: TypedownDiagnostic[] = []
+	const diagnostics: KiiraDiagnostic[] = []
 	for (const partition of partitions) {
 		diagnostics.push(...collectProgramDiagnostics(partition.virtualFiles, partition.options))
 	}
@@ -345,11 +345,11 @@ function partitionByOverrides(
 	return [...partitions.values()]
 }
 
-function collectProgramDiagnostics(virtualFiles: VirtualFile[], options: ts.CompilerOptions): TypedownDiagnostic[] {
+function collectProgramDiagnostics(virtualFiles: VirtualFile[], options: ts.CompilerOptions): KiiraDiagnostic[] {
 	const host = createOverlayHost(options, virtualFiles)
 	const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
 
-	const diagnostics: TypedownDiagnostic[] = []
+	const diagnostics: KiiraDiagnostic[] = []
 	for (const vf of virtualFiles) {
 		const sourceFile = program.getSourceFile(vf.fileName)
 		if (!sourceFile) {
@@ -384,7 +384,7 @@ const MODULE_NOT_FOUND = 2307
  * a doc snippet importing from an imaginary sibling file or the reader's project,
  * not a real (checkable) package import.
  */
-function isUnresolvedRelativeImport(diagnostic: TypedownDiagnostic): boolean {
+function isUnresolvedRelativeImport(diagnostic: KiiraDiagnostic): boolean {
 	if (diagnostic.code !== MODULE_NOT_FOUND) {
 		return false
 	}
@@ -399,12 +399,12 @@ function isUnresolvedRelativeImport(diagnostic: TypedownDiagnostic): boolean {
  */
 function suggestFrameworkJsx(
 	files: string[],
-	snippets: TypedownCheckResult["snippets"],
-	diagnostics: TypedownDiagnostic[],
+	snippets: KiiraCheckResult["snippets"],
+	diagnostics: KiiraDiagnostic[],
 	resolved: ReturnType<typeof resolveConfig>
-): TypedownDiagnostic[] {
+): KiiraDiagnostic[] {
 	const alreadyOverridden = resolved.overrides.filter((o) => "jsxImportSource" in o).map((o) => picomatch(o.include))
-	const suggestions: TypedownDiagnostic[] = []
+	const suggestions: KiiraDiagnostic[] = []
 
 	// Emit a suggestion per affected file; the config-override fix is de-duplicated
 	// (by include + options) when `--fix` applies it, so a shared glob is written once.
@@ -423,8 +423,8 @@ function suggestFrameworkJsx(
 		suggestions.push({
 			severity: "warning",
 			code: "jsx-framework",
-			source: "typedown",
-			message: `JSX here looks like ${keyword}. Add a \`jsxImportSource: "${jsxImportSource}"\` override for \`${include}\` (run \`typedown check --fix\` to apply).`,
+			source: "kiira",
+			message: `JSX here looks like ${keyword}. Add a \`jsxImportSource: "${jsxImportSource}"\` override for \`${include}\` (run \`kiira check --fix\` to apply).`,
 			markdownFile: file,
 			markdownRange: { start: anchor, end: anchor },
 			fix: { kind: "config-override", include, compilerOptions: { jsxImportSource } },
@@ -436,20 +436,20 @@ function suggestFrameworkJsx(
 interface SuggestGroupingInput {
 	cwd: string
 	files: string[]
-	snippets: TypedownCheckResult["snippets"]
-	diagnostics: TypedownDiagnostic[]
-	config: Partial<TypedownConfig>
+	snippets: KiiraCheckResult["snippets"]
+	diagnostics: KiiraDiagnostic[]
+	config: Partial<KiiraConfig>
 	resolved: ReturnType<typeof resolveConfig>
 }
 
 // Identity of an error for baseline membership: code + full position + message,
 // so two distinct errors that merely share a line and TS code (e.g. two unresolved
 // names on one line) are not conflated when deciding if grouping introduced a new one.
-const errorKey = (d: TypedownDiagnostic): string =>
+const errorKey = (d: KiiraDiagnostic): string =>
 	`${d.code}@${d.markdownRange.start.line}:${d.markdownRange.start.character}:${d.message}`
 
 /** Whether a diagnostic's line falls within a snippet's code span. */
-function isWithinSnippet(diagnostic: TypedownDiagnostic, snippet: TypedownCheckResult["snippets"][number]): boolean {
+function isWithinSnippet(diagnostic: KiiraDiagnostic, snippet: KiiraCheckResult["snippets"][number]): boolean {
 	const start = snippet.codeStart.line
 	const end = start + snippet.code.split("\n").length - 1
 	const line = diagnostic.markdownRange.start.line
@@ -457,10 +457,7 @@ function isWithinSnippet(diagnostic: TypedownDiagnostic, snippet: TypedownCheckR
 }
 
 /** Names a snippet reports as "cannot find" when checked standalone, parsed from its errors. */
-function unresolvedNames(
-	snippet: TypedownCheckResult["snippets"][number],
-	docErrors: TypedownDiagnostic[]
-): Set<string> {
+function unresolvedNames(snippet: KiiraCheckResult["snippets"][number], docErrors: KiiraDiagnostic[]): Set<string> {
 	const names = new Set<string>()
 	for (const d of docErrors) {
 		if (d.markdownFile !== snippet.markdownFile || !isWithinSnippet(d, snippet)) {
@@ -485,7 +482,7 @@ function unresolvedNames(
  * examples never collapse into one redeclaring group even when they share a
  * reference. Returns only multi-member clusters, each as sorted indices.
  */
-function planMinimalGroups(snippets: TypedownCheckResult["snippets"], docErrors: TypedownDiagnostic[]): number[][] {
+function planMinimalGroups(snippets: KiiraCheckResult["snippets"], docErrors: KiiraDiagnostic[]): number[][] {
 	const symbols = snippets.map((s) => analyzeSnippet(s.code, s.lang))
 	const missing = snippets.map((s) => unresolvedNames(s, docErrors))
 
@@ -551,9 +548,9 @@ function planMinimalGroups(snippets: TypedownCheckResult["snippets"], docErrors:
  * type-check probe confirms the cluster removes errors and introduces none. This
  * groups genuine continuations while leaving independent examples alone.
  */
-async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDiagnostic[]> {
+async function suggestGrouping(input: SuggestGroupingInput): Promise<KiiraDiagnostic[]> {
 	const { cwd, files, snippets, diagnostics, config, resolved } = input
-	const suggestions: TypedownDiagnostic[] = []
+	const suggestions: KiiraDiagnostic[] = []
 
 	for (const file of files) {
 		const checkable = snippets
@@ -571,7 +568,7 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 		// Probe every candidate cluster first; keep only those that verify, so the
 		// `-N` slug suffix reflects the number of *surviving* groups (a doc with one
 		// real group gets a clean `group=<doc>`, not `group=<doc>-1`).
-		const survivors: TypedownCheckResult["snippets"][] = []
+		const survivors: KiiraCheckResult["snippets"][] = []
 		for (const plan of planMinimalGroups(checkable, docErrors)) {
 			const members = plan.map((i) => checkable[i])
 			const memberErrors = docErrors.filter((d) => members.some((m) => isWithinSnippet(d, m)))
@@ -583,7 +580,7 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 			// Verify the cluster: type-check it together and require it to strictly
 			// reduce the "cannot find name" errors while introducing no new error of
 			// any kind (a new TS2451 redeclare would mean we merged too much).
-			const probe = members.map((s) => ({ ...s, meta: { ...s.meta, group: "__typedown_probe__" } }))
+			const probe = members.map((s) => ({ ...s, meta: { ...s.meta, group: "__kiira_probe__" } }))
 			const { virtualFiles } = await createVirtualFiles({ cwd, snippets: probe, config })
 			const grouped = (await checkVirtualFiles({ cwd, virtualFiles, config })).filter((d) => d.severity === "error")
 			const groupedCannotFind = grouped.filter((d) => typeof d.code === "number" && CANNOT_FIND_NAME.has(d.code)).length
@@ -599,8 +596,8 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 				suggestions.push({
 					severity: "warning",
 					code: "group",
-					source: "typedown",
-					message: `This snippet continues an earlier one. Tag them \`group=${slug}\` to type-check them together (run \`typedown check --fix\` to apply).`,
+					source: "kiira",
+					message: `This snippet continues an earlier one. Tag them \`group=${slug}\` to type-check them together (run \`kiira check --fix\` to apply).`,
 					markdownFile: file,
 					markdownRange: { start: member.markdownRange.start, end: member.markdownRange.start },
 					fix: { kind: "fence-meta", line: member.markdownRange.start.line, append: `group=${slug}` },
@@ -615,18 +612,18 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<TypedownDia
 export interface CollectSuggestionsInput {
 	cwd: string
 	files: string[]
-	snippets: TypedownCheckResult["snippets"]
+	snippets: KiiraCheckResult["snippets"]
 	/** Diagnostics already produced for these files (extraction + fixture + TS). */
-	diagnostics: TypedownDiagnostic[]
-	config: Partial<TypedownConfig>
+	diagnostics: KiiraDiagnostic[]
+	config: Partial<KiiraConfig>
 }
 
 /**
- * Compute Typedown's suggestion diagnostics (group= and jsxImportSource) for an
+ * Compute Kiira's suggestion diagnostics (group= and jsxImportSource) for an
  * already-checked set of files. Shared by the CLI's whole-project check and the
  * editor's single-document check so both surface the same actionable fixes.
  */
-export async function collectSuggestions(input: CollectSuggestionsInput): Promise<TypedownDiagnostic[]> {
+export async function collectSuggestions(input: CollectSuggestionsInput): Promise<KiiraDiagnostic[]> {
 	const { cwd, files, snippets, diagnostics, config } = input
 	const resolved = resolveConfig(config)
 	const grouping = await suggestGrouping({ cwd, files, snippets, diagnostics, config, resolved })
@@ -637,19 +634,19 @@ export async function collectSuggestions(input: CollectSuggestionsInput): Promis
 export interface CheckMarkdownFilesInput {
 	cwd: string
 	files?: string[]
-	config?: Partial<TypedownConfig>
+	config?: Partial<KiiraConfig>
 }
 
 /** End-to-end: discover, extract, virtualize, and type-check Markdown files. */
-export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promise<TypedownCheckResult> {
+export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promise<KiiraCheckResult> {
 	const { cwd } = input
 	const userConfig = input.config ?? (await loadConfig(cwd))
 	const resolved = resolveConfig(userConfig)
 	const files =
 		input.files ?? (await discoverMarkdownFiles({ cwd, include: resolved.include, exclude: resolved.exclude }))
 
-	const snippets: TypedownCheckResult["snippets"] = []
-	const diagnostics: TypedownDiagnostic[] = []
+	const snippets: KiiraCheckResult["snippets"] = []
+	const diagnostics: KiiraDiagnostic[] = []
 
 	for (const file of files) {
 		const content = await readFile(join(cwd, file), "utf8")

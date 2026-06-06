@@ -1,13 +1,13 @@
-import type { TypedownDiagnostic } from "@alemtuzlak/typedown"
+import type { KiiraDiagnostic } from "@alemtuzlak/kiira-core"
 
 /**
  * Filter the diagnostics that should be shown for a document. Generated
  * (fixture) diagnostics are hidden unless explicitly enabled.
  */
 export function selectDiagnostics(
-	diagnostics: TypedownDiagnostic[],
+	diagnostics: KiiraDiagnostic[],
 	options: { showGenerated: boolean }
-): TypedownDiagnostic[] {
+): KiiraDiagnostic[] {
 	if (options.showGenerated) {
 		return diagnostics
 	}
@@ -15,7 +15,7 @@ export function selectDiagnostics(
 }
 
 /** Render a diagnostic code as a display string (e.g. `TS2305`). */
-export function diagnosticCodeLabel(code: TypedownDiagnostic["code"]): string | undefined {
+export function diagnosticCodeLabel(code: KiiraDiagnostic["code"]): string | undefined {
 	if (typeof code === "number") {
 		return `TS${code}`
 	}

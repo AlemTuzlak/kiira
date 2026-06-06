@@ -1,0 +1,60 @@
+---
+title: "Any CI runner"
+summary: "Run Kiira in any CI without the GitHub Action"
+description: "How to run kiira check in any CI system — install the CLI, run with the github or json reporter, and rely on exit codes. Includes a plain GitHub Actions example without the composite action."
+---
+
+## The recipe
+
+You don't need the composite action to run Kiira in CI. The pattern is the same everywhere:
+
+1. **Install** the CLI (it's just a dev dependency).
+2. **Run** `kiira check` with a CI-friendly reporter.
+3. **Rely on exit codes** — Kiira exits `1` on validation errors and `2` on a setup failure, and CI fails the step on any non-zero exit.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm kiira check --reporter github
+```
+
+Use `--reporter github` on GitHub Actions for inline annotations, or `--reporter json` anywhere you want to capture machine-readable output:
+
+```bash
+pnpm kiira check --reporter json > kiira-report.json
+```
+
+## Plain GitHub Actions (no composite action)
+
+If you'd rather call the CLI directly instead of using the Kiira action:
+
+```yaml
+name: Docs
+on: [push, pull_request]
+
+jobs:
+  kiira:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm kiira check --reporter github
+```
+
+The `github` reporter emits workflow commands, so failures still appear as inline annotations even without the composite action.
+
+## Works in any runner
+
+Because Kiira is a normal CLI that communicates through stdout and exit codes, it runs unchanged in GitLab CI, CircleCI, Jenkins, Buildkite, or any other runner. Install it, run `kiira check`, and let the non-zero exit code fail the job:
+
+```bash
+# Generic CI step
+pnpm install --frozen-lockfile
+pnpm kiira check --reporter json --raw --static
+```
+
+See [Exit codes](/cli/exit-codes) for how to distinguish a docs failure (`1`) from a setup failure (`2`).

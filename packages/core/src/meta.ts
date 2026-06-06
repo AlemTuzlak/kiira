@@ -1,11 +1,11 @@
-import type { TypedownFenceMeta } from "./types"
+import type { KiiraFenceMeta } from "./types"
 
 export interface FenceMetaIssue {
 	message: string
 }
 
 export interface ParsedFenceMeta {
-	meta: TypedownFenceMeta
+	meta: KiiraFenceMeta
 	/** Unknown metadata, preserved verbatim but not acted upon. */
 	unknown: Record<string, string | boolean>
 	issues: FenceMetaIssue[]
@@ -31,11 +31,11 @@ function stripQuotes(value: string): string {
 
 /**
  * Parse a Markdown fence info string (the part after the language) into
- * structured Typedown metadata. Unknown keys are preserved and never fatal;
+ * structured Kiira metadata. Unknown keys are preserved and never fatal;
  * invalid known values produce issues instead of throwing.
  */
 export function parseFenceMeta(raw: string | null | undefined): ParsedFenceMeta {
-	const meta: TypedownFenceMeta = {}
+	const meta: KiiraFenceMeta = {}
 	const unknown: Record<string, string | boolean> = {}
 	const issues: FenceMetaIssue[] = []
 
@@ -55,7 +55,7 @@ export function parseFenceMeta(raw: string | null | undefined): ParsedFenceMeta 
 				break
 			case "validate":
 				if (value !== null && VALIDATE_VALUES.has(value)) {
-					meta.validate = value as TypedownFenceMeta["validate"]
+					meta.validate = value as KiiraFenceMeta["validate"]
 				} else {
 					issues.push({
 						message: `Invalid \`validate\` value ${JSON.stringify(value)}. Expected "type", "runtime", or "none".`,
@@ -64,7 +64,7 @@ export function parseFenceMeta(raw: string | null | undefined): ParsedFenceMeta 
 				break
 			case "package":
 				if (value !== null && PACKAGE_VALUES.has(value)) {
-					meta.package = value as TypedownFenceMeta["package"]
+					meta.package = value as KiiraFenceMeta["package"]
 				} else {
 					issues.push({
 						message: `Invalid \`package\` value ${JSON.stringify(value)}. Expected "workspace" or "packed".`,

@@ -1,7 +1,7 @@
 {
-	"name": "@alemtuzlak/typedown",
+	"name": "@alemtuzlak/kiira-core",
 	"version": "0.1.0",
-	"description": "Core engine for Typedown: extract code fences from Markdown, type-check them, and map diagnostics back to source.",
+	"description": "Core engine for Kiira: extract code fences from Markdown, type-check them, and map diagnostics back to source.",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.mts",
@@ -32,14 +32,14 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/AlemTuzlak/typedown.git",
+		"url": "git+https://github.com/AlemTuzlak/kiira.git",
 		"directory": "packages/core"
 	},
 	"bugs": {
-		"url": "https://github.com/AlemTuzlak/typedown/issues"
+		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
 	"files": ["dist"],
-	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"publishConfig": {
 		"provenance": true
 	},

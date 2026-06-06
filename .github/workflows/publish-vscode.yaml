@@ -91,13 +91,13 @@ jobs:
 
       - name: Build extension (core + bundle + lib typings)
         if: steps.check.outputs.published == 'false'
-        run: pnpm exec nx run typedown-vscode:build
+        run: pnpm exec nx run kiira-vscode:build
 
       - name: Package VSIX
         if: steps.check.outputs.published == 'false'
         run: |
           cd packages/vscode
-          npx --yes @vscode/vsce@^3 package --no-dependencies -o ../../typedown.vsix
+          npx --yes @vscode/vsce@^3 package --no-dependencies -o ../../kiira.vsix
 
       - name: Publish to VS Code Marketplace
         if: steps.check.outputs.published == 'false' && inputs.dry_run != true
@@ -108,7 +108,7 @@ jobs:
             echo "::warning::VSCE_PAT not configured — skipping Marketplace publish. Add the secret to enable it."
             exit 0
           fi
-          npx --yes @vscode/vsce@^3 publish --no-dependencies --packagePath typedown.vsix -p "$VSCE_PAT"
+          npx --yes @vscode/vsce@^3 publish --no-dependencies --packagePath kiira.vsix -p "$VSCE_PAT"
 
       - name: Publish to Open VSX
         if: steps.check.outputs.published == 'false' && inputs.dry_run != true
@@ -120,7 +120,7 @@ jobs:
             echo "::warning::OVSX_PAT not configured — skipping Open VSX publish."
             exit 0
           fi
-          npx --yes ovsx publish typedown.vsix -p "$OVSX_PAT"
+          npx --yes ovsx publish kiira.vsix -p "$OVSX_PAT"
 
       - name: Tag + GitHub Release
         if: steps.check.outputs.published == 'false' && inputs.dry_run != true && env.HAS_VSCE == 'true'

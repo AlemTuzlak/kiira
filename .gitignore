@@ -132,5 +132,8 @@ dist
 .history
 .react-router
 .nx
-# Typedown cache
-.typedown/
+# Kiira cache
+.kiira/
+
+# VS Code extension package artifact
+*.vsix

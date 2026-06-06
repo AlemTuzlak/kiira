@@ -1,7 +1,7 @@
 import ts from "typescript"
-import type { TypedownLanguage } from "./types"
+import type { KiiraLanguage } from "./types"
 
-const SCRIPT_KIND: Record<TypedownLanguage, ts.ScriptKind> = {
+const SCRIPT_KIND: Record<KiiraLanguage, ts.ScriptKind> = {
 	ts: ts.ScriptKind.TS,
 	tsx: ts.ScriptKind.TSX,
 	js: ts.ScriptKind.JS,
@@ -123,7 +123,7 @@ function collectScopeBindings(scopeNode: ts.Node, out: Set<string>): void {
  * identifiers it references, with lexical scoping so inner bindings don't shadow
  * genuine outer references. Parse-only; used to plan minimal snippet groups.
  */
-export function analyzeSnippet(code: string, lang: TypedownLanguage): SnippetSymbols {
+export function analyzeSnippet(code: string, lang: KiiraLanguage): SnippetSymbols {
 	const sourceFile = ts.createSourceFile("snippet", code, ts.ScriptTarget.Latest, true, SCRIPT_KIND[lang])
 	const declares = new Set<string>()
 	for (const statement of sourceFile.statements) {

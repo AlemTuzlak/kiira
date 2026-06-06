@@ -1,12 +1,12 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { checkMarkdownFiles } from "./check"
-import type { TypedownDiagnostic } from "./types"
+import type { KiiraDiagnostic } from "./types"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = resolve(here, "../tests/fixtures/group")
 
-function errors(diagnostics: TypedownDiagnostic[]): TypedownDiagnostic[] {
+function errors(diagnostics: KiiraDiagnostic[]): KiiraDiagnostic[] {
 	return diagnostics.filter((d) => d.severity === "error")
 }
 

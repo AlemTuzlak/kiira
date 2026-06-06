@@ -61,7 +61,7 @@ describe("resolveConfig", () => {
 describe("findConfigFile", () => {
 	it("finds a JSON config", () => {
 		const found = findConfigFile(resolve(fixtures, "config-json"))
-		expect(found?.endsWith("typedown.config.json")).toBe(true)
+		expect(found?.endsWith("kiira.config.json")).toBe(true)
 	})
 
 	it("returns null when no config exists", () => {
@@ -90,7 +90,7 @@ describe("loadConfig", () => {
 
 describe("loadConfigFile", () => {
 	it("loads a config from an explicit path", async () => {
-		const config = await loadConfigFile(resolve(fixtures, "config-json/typedown.config.json"))
+		const config = await loadConfigFile(resolve(fixtures, "config-json/kiira.config.json"))
 		expect(config.include).toEqual(["readme/**/*.md"])
 	})
 })

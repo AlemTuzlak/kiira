@@ -1,30 +1,30 @@
 import {
 	type CodeFixEdit,
-	type TypedownConfig,
-	type TypedownDiagnostic,
-	type TypedownFix,
+	type KiiraConfig,
+	type KiiraDiagnostic,
+	type KiiraFix,
 	type VirtualFile,
 	getCodeFixes,
-} from "@alemtuzlak/typedown"
+} from "@alemtuzlak/kiira-core"
 import * as vscode from "vscode"
 import { fenceLanguageTokenRange } from "./fence-edits"
 
 export interface CodeActionContext {
 	cwd: string
 	markdownFile: string
-	config: Partial<TypedownConfig>
+	config: Partial<KiiraConfig>
 }
 
-export interface TypedownCodeActionDeps {
+export interface KiiraCodeActionDeps {
 	/** Resolve the workspace context (cwd, relative path, config) for a document. */
 	resolveContext: (document: vscode.TextDocument) => Promise<CodeActionContext | undefined>
 	/** The virtual files from this document's most recent check. */
 	getVirtualFiles: (uri: string) => VirtualFile[] | undefined
-	/** The Typedown diagnostics (with their `fix` payloads) from the most recent check. */
-	getDiagnostics: (uri: string) => TypedownDiagnostic[] | undefined
+	/** The Kiira diagnostics (with their `fix` payloads) from the most recent check. */
+	getDiagnostics: (uri: string) => KiiraDiagnostic[] | undefined
 }
 
-function overlaps(a: TypedownDiagnostic["markdownRange"], b: vscode.Range): boolean {
+function overlaps(a: KiiraDiagnostic["markdownRange"], b: vscode.Range): boolean {
 	const start = new vscode.Position(a.start.line, a.start.character)
 	const end = new vscode.Position(a.end.line, a.end.character)
 	// Treat a zero-width diagnostic as covering its whole line so the lightbulb still
@@ -44,8 +44,8 @@ function editsToWorkspaceEdit(uri: vscode.Uri, edits: CodeFixEdit[]): vscode.Wor
 	return edit
 }
 
-/** Build an in-document edit for a Typedown fix (language tag or fence metadata). */
-function typedownFixEdit(document: vscode.TextDocument, fix: TypedownFix): vscode.WorkspaceEdit | undefined {
+/** Build an in-document edit for a Kiira fix (language tag or fence metadata). */
+function kiiraFixEdit(document: vscode.TextDocument, fix: KiiraFix): vscode.WorkspaceEdit | undefined {
 	const edit = new vscode.WorkspaceEdit()
 	if (fix.kind === "fence-language") {
 		const token = fenceLanguageTokenRange(document.lineAt(fix.line).text)
@@ -60,14 +60,14 @@ function typedownFixEdit(document: vscode.TextDocument, fix: TypedownFix): vscod
 		edit.insert(document.uri, new vscode.Position(fix.line, end), ` ${fix.append}`)
 		return edit
 	}
-	// config-override edits an external config file; left to `typedown check --fix`.
+	// config-override edits an external config file; left to `kiira check --fix`.
 	return undefined
 }
 
-export class TypedownCodeActionProvider implements vscode.CodeActionProvider {
+export class KiiraCodeActionProvider implements vscode.CodeActionProvider {
 	static readonly providedKinds = [vscode.CodeActionKind.QuickFix]
 
-	constructor(private readonly deps: TypedownCodeActionDeps) {}
+	constructor(private readonly deps: KiiraCodeActionDeps) {}
 
 	async provideCodeActions(
 		document: vscode.TextDocument,
@@ -84,14 +84,14 @@ export class TypedownCodeActionProvider implements vscode.CodeActionProvider {
 
 		const actions: vscode.CodeAction[] = []
 
-		// 1) Typedown's own fixes (ts->tsx language tag, add group=).
+		// 1) Kiira's own fixes (ts->tsx language tag, add group=).
 		for (const diagnostic of inRange) {
 			if (!diagnostic.fix) {
 				continue
 			}
-			const edit = typedownFixEdit(document, diagnostic.fix)
+			const edit = kiiraFixEdit(document, diagnostic.fix)
 			if (edit) {
-				const action = new vscode.CodeAction(typedownFixTitle(diagnostic.fix), vscode.CodeActionKind.QuickFix)
+				const action = new vscode.CodeAction(kiiraFixTitle(diagnostic.fix), vscode.CodeActionKind.QuickFix)
 				action.edit = edit
 				action.diagnostics = [toVscodeRangeDiagnostic(diagnostic)]
 				actions.push(action)
@@ -134,18 +134,18 @@ export class TypedownCodeActionProvider implements vscode.CodeActionProvider {
 	}
 }
 
-function typedownFixTitle(fix: TypedownFix): string {
+function kiiraFixTitle(fix: KiiraFix): string {
 	if (fix.kind === "fence-language") {
 		return `Change code fence language to \`${fix.language}\``
 	}
 	if (fix.kind === "fence-meta") {
 		return `Add \`${fix.append}\` to this fence`
 	}
-	return "Apply Typedown fix"
+	return "Apply Kiira fix"
 }
 
 /** A lightweight vscode.Diagnostic so the action attaches to the right squiggle. */
-function toVscodeRangeDiagnostic(diagnostic: TypedownDiagnostic): vscode.Diagnostic {
+function toVscodeRangeDiagnostic(diagnostic: KiiraDiagnostic): vscode.Diagnostic {
 	const { start, end } = diagnostic.markdownRange
 	const severity =
 		diagnostic.severity === "error"
@@ -158,6 +158,6 @@ function toVscodeRangeDiagnostic(diagnostic: TypedownDiagnostic): vscode.Diagnos
 		diagnostic.message,
 		severity
 	)
-	result.source = "typedown"
+	result.source = "kiira"
 	return result
 }

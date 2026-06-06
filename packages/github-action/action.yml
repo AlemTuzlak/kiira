@@ -1,4 +1,4 @@
-name: Typedown
+name: Kiira
 description: Type-check TypeScript and JavaScript code fences in Markdown files.
 author: AlemTuzlak
 branding:
@@ -7,11 +7,11 @@ branding:
 
 inputs:
   command:
-    description: The Typedown command to run.
+    description: The Kiira command to run.
     required: false
-    default: typedown check
+    default: kiira check
   config:
-    description: Path to a Typedown config file.
+    description: Path to a Kiira config file.
     required: false
     default: ""
   reporter:
@@ -23,14 +23,14 @@ inputs:
     required: false
     default: ""
   working-directory:
-    description: Directory to run Typedown in.
+    description: Directory to run Kiira in.
     required: false
     default: "."
 
 runs:
   using: composite
   steps:
-    - name: Run Typedown
+    - name: Run Kiira
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       # Inputs are passed via the environment (never interpolated into the script
