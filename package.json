@@ -1,5 +1,5 @@
 {
-	"name": "typedown-monorepo",
+	"name": "kiira-monorepo",
 	"version": "0.0.0",
 	"description": "TypeScript + Markdown validation tooling: type-check code fences in Markdown against the real project API.",
 	"scripts": {
@@ -28,12 +28,12 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/AlemTuzlak/typedown.git"
+		"url": "https://github.com/AlemTuzlak/kiira.git"
 	},
 	"bugs": {
-		"url": "https://github.com/AlemTuzlak/typedown/issues"
+		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
-	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"@changesets/cli": "^2.29.0",
@@ -44,9 +44,9 @@
 		"publint": "^0.3.14",
 		"sherif": "^1.6.1"
 	},
-	"packageManager": "pnpm@10.8.0",
+	"packageManager": "pnpm@11.5.2",
 	"engines": {
-		"pnpm": ">=10.8.0",
+		"pnpm": ">=11.0.0",
 		"node": ">=20.0.0"
 	},
 	"nx": {

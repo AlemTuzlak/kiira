@@ -1,7 +1,7 @@
-import type { TypedownDiagnostic } from "@alemtuzlak/typedown"
+import type { KiiraDiagnostic } from "kiira-core"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 
-function diag(overrides: Partial<TypedownDiagnostic> = {}): TypedownDiagnostic {
+function diag(overrides: Partial<KiiraDiagnostic> = {}): KiiraDiagnostic {
 	return {
 		severity: "error",
 		source: "typescript",

@@ -1,0 +1,53 @@
+---
+title: "Reporters"
+summary: "Choosing how Kiira reports results: pretty, json, and github"
+description: "Reference for Kiira's output reporters — pretty (the default human-readable output), json (machine-readable), and github (GitHub Actions annotations)."
+---
+
+## Choosing a reporter
+
+Use `--reporter` to control output format:
+
+```bash
+kiira check --reporter pretty   # default
+kiira check --reporter json
+kiira check --reporter github
+```
+
+## `pretty` (default)
+
+Human-readable terminal output. By default it's **compact** — it shows which files and fences failed without flooding your terminal. Add `--verbose` to expand each diagnostic with the full error message and a code frame pointing at the offending line:
+
+```bash
+kiira check
+kiira check --verbose
+```
+
+Pair with `--raw` to drop ANSI colors and `--static` to drop the spinner when you're capturing logs:
+
+```bash
+kiira check --raw --static
+```
+
+## `json`
+
+Emits a machine-readable JSON document describing every diagnostic — the file, the line in the Markdown, and the message. Use this when you want to post-process results or feed them into your own tooling:
+
+```bash
+kiira check --reporter json
+```
+
+```bash
+# Example: pipe results into a file for later processing
+kiira check --reporter json > kiira-report.json
+```
+
+## `github`
+
+Emits [GitHub Actions workflow commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) so failures appear as inline annotations on the changed lines in a pull request. Use this in any GitHub Actions workflow:
+
+```bash
+kiira check --reporter github
+```
+
+When you use the official [Kiira GitHub Action](/latest/ci/github-action), `github` is already the default reporter, so annotations work out of the box.

@@ -7,7 +7,7 @@ import { runInit } from "./init"
 let dir: string
 
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "typedown-init-"))
+	dir = mkdtempSync(join(tmpdir(), "kiira-init-"))
 })
 
 afterEach(() => {
@@ -20,9 +20,9 @@ describe("runInit", () => {
 		const code = await runInit({ cwd: dir, log: (m) => logs.push(m) })
 
 		expect(code).toBe(0)
-		expect(existsSync(join(dir, "typedown.config.ts"))).toBe(true)
+		expect(existsSync(join(dir, "kiira.config.ts"))).toBe(true)
 		expect(existsSync(join(dir, "tsconfig.docs.json"))).toBe(true)
-		expect(readFileSync(join(dir, "typedown.config.ts"), "utf8")).toContain("defineConfig")
+		expect(readFileSync(join(dir, "kiira.config.ts"), "utf8")).toContain("defineConfig")
 		expect(JSON.parse(readFileSync(join(dir, "tsconfig.docs.json"), "utf8")).compilerOptions.checkJs).toBe(true)
 	})
 

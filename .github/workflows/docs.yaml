@@ -10,19 +10,25 @@ on:
     branches:
       - main
 
+permissions: {}
+
 jobs:
-  typedown:
+  kiira:
     name: 🔎 Validate example docs
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: ⬇️ Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
 
       - name: ⎔ Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: "package.json"
 
@@ -30,17 +36,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 🔨 Build the CLI
-        run: pnpm exec nx run @alemtuzlak/typedown-cli:build
+        run: pnpm exec nx run kiira:build
 
       - name: 🔎 Type-check example docs
-        # Invoke the freshly-built CLI by path. The `typedown` bin shim is only
-        # linked when @alemtuzlak/typedown-cli's dist exists at install time, which it does
+        # Invoke the freshly-built CLI by path. The `kiira` bin shim is only
+        # linked when kiira's dist exists at install time, which it does
         # not in a from-source checkout (it is built in the step above).
         run: |
           status=0
           cli="$PWD/packages/cli/dist/index.mjs"
           for example in basic react monorepo; do
-            echo "::group::typedown check (examples/${example})"
+            echo "::group::kiira check (examples/${example})"
             (cd "examples/${example}" && node "$cli" check --reporter github) || status=1
             echo "::endgroup::"
           done

@@ -1,25 +1,25 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { TypedownDiagnostic } from "@alemtuzlak/typedown"
+import type { KiiraDiagnostic } from "kiira-core"
 import { afterEach, beforeEach } from "vitest"
 import { applyConfigOverrides, applyFixes } from "./fix"
 
 let dir: string
 
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "typedown-fix-"))
+	dir = mkdtempSync(join(tmpdir(), "kiira-fix-"))
 })
 
 afterEach(() => {
 	rmSync(dir, { recursive: true, force: true })
 })
 
-function diag(line: number, file = "doc.md"): TypedownDiagnostic {
+function diag(line: number, file = "doc.md"): KiiraDiagnostic {
 	return {
 		severity: "warning",
 		code: "language-tag",
-		source: "typedown",
+		source: "kiira",
 		message: "wrong tag",
 		markdownFile: file,
 		markdownRange: { start: { line, character: 0 }, end: { line, character: 0 } },
@@ -55,7 +55,7 @@ describe("applyFixes", () => {
 			{
 				severity: "warning",
 				code: "group",
-				source: "typedown",
+				source: "kiira",
 				message: "group it",
 				markdownFile: "doc.md",
 				markdownRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
@@ -83,11 +83,11 @@ describe("applyFixes", () => {
 })
 
 describe("applyConfigOverrides", () => {
-	function overrideDiag(): TypedownDiagnostic {
+	function overrideDiag(): KiiraDiagnostic {
 		return {
 			severity: "warning",
 			code: "jsx-framework",
-			source: "typedown",
+			source: "kiira",
 			message: "solid",
 			markdownFile: "docs/ai-solid.md",
 			markdownRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
@@ -96,7 +96,7 @@ describe("applyConfigOverrides", () => {
 	}
 
 	it("merges an override into a JSON config", async () => {
-		const configPath = join(dir, "typedown.config.json")
+		const configPath = join(dir, "kiira.config.json")
 		writeFileSync(configPath, JSON.stringify({ include: ["docs/**/*.md"] }, null, 2))
 
 		const result = await applyConfigOverrides(configPath, [overrideDiag()])
@@ -107,7 +107,7 @@ describe("applyConfigOverrides", () => {
 	})
 
 	it("is idempotent — does not duplicate an existing override", async () => {
-		const configPath = join(dir, "typedown.config.json")
+		const configPath = join(dir, "kiira.config.json")
 		writeFileSync(
 			configPath,
 			JSON.stringify({
@@ -120,13 +120,13 @@ describe("applyConfigOverrides", () => {
 	})
 
 	it("returns fixes as manual when the config is not JSON", async () => {
-		const result = await applyConfigOverrides(join(dir, "typedown.config.ts"), [overrideDiag()])
+		const result = await applyConfigOverrides(join(dir, "kiira.config.ts"), [overrideDiag()])
 		expect(result.applied).toEqual([])
 		expect(result.manual).toHaveLength(1)
 	})
 
 	it("throws rather than clobbering a non-array overrides field", async () => {
-		const configPath = join(dir, "typedown.config.json")
+		const configPath = join(dir, "kiira.config.json")
 		writeFileSync(configPath, JSON.stringify({ include: ["docs/**/*.md"], overrides: {} }))
 		await expect(applyConfigOverrides(configPath, [overrideDiag()])).rejects.toThrow(/overrides.*array/i)
 	})

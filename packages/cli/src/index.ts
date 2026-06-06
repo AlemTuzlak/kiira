@@ -46,6 +46,6 @@ main(process.argv.slice(2))
 	})
 	.catch((error) => {
 		// Configuration or runtime failure.
-		console.error(`typedown: ${(error as Error).message}`)
+		console.error(`kiira: ${(error as Error).message}`)
 		process.exitCode = 2
 	})

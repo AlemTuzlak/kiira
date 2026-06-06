@@ -56,7 +56,7 @@ describe("runCheck", () => {
 	})
 
 	it("rewrites a mistagged ts fence to tsx with --fix", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "typedown-cli-fix-"))
+		const dir = mkdtempSync(join(tmpdir(), "kiira-fix-"))
 		try {
 			const md = ["# Comp", "", "```ts", "export const C = () => <div>{1}</div>", "```", ""].join("\n")
 			writeFileSync(join(dir, "comp.md"), md)

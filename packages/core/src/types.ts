@@ -1,12 +1,12 @@
 /**
- * Public type definitions for `@alemtuzlak/typedown`.
+ * Public type definitions for `kiira-core`.
  *
  * Positions throughout the public API are **zero-based** for both `line` and
  * `character`, matching `ts.getLineAndCharacterOfPosition` and the VS Code
  * `Position` model. Consumers that render for humans (e.g. the CLI) add 1.
  */
 
-export type TypedownLanguage = "ts" | "tsx" | "js" | "jsx"
+export type KiiraLanguage = "ts" | "tsx" | "js" | "jsx"
 
 /** A zero-based line/character position. */
 export interface SourcePosition {
@@ -23,7 +23,7 @@ export interface SourceRange {
 }
 
 /** A fixture applied to a snippet before type-checking. */
-export type TypedownFixture =
+export type KiiraFixture =
 	| {
 			type: "prepend"
 			content: string
@@ -39,7 +39,7 @@ export type TypedownFixture =
 	  }
 
 /** Metadata parsed from a fence info string (e.g. ```ts fixture=react). */
-export interface TypedownFenceMeta {
+export interface KiiraFenceMeta {
 	ignore?: boolean
 	validate?: "type" | "runtime" | "none"
 	fixture?: string
@@ -54,16 +54,16 @@ export interface TypedownFenceMeta {
  * as a tsconfig-style `compilerOptions` entry (string enum forms) and merged onto
  * the base options for files matching `include` (e.g. `jsxImportSource` per framework).
  */
-export interface TypedownOverride {
+export interface KiiraOverride {
 	include: string[]
 	[option: string]: unknown
 }
 
-export interface TypedownConfig {
+export interface KiiraConfig {
 	include: string[]
 	exclude?: string[]
 	tsconfig?: string
-	overrides?: TypedownOverride[]
+	overrides?: KiiraOverride[]
 	packageMode?: "workspace" | "packed"
 	defaultValidate?: "type" | "runtime" | "none"
 	defaultFixture?: string
@@ -79,30 +79,30 @@ export interface TypedownConfig {
 	 * (`@scope/pkg`, `react`) are always checked. Set true to enforce.
 	 */
 	checkRelativeImports?: boolean
-	fixtures?: Record<string, TypedownFixture>
-	languages?: TypedownLanguage[]
+	fixtures?: Record<string, KiiraFixture>
+	languages?: KiiraLanguage[]
 	markdown?: {
 		codeFenceLanguages?: string[]
 	}
 }
 
 /**
- * A {@link TypedownConfig} with all defaultable fields resolved. Produced by
+ * A {@link KiiraConfig} with all defaultable fields resolved. Produced by
  * {@link resolveConfig} and consumed by the rest of the pipeline so downstream
  * code never has to re-apply defaults.
  */
-export interface ResolvedTypedownConfig {
+export interface ResolvedKiiraConfig {
 	include: string[]
 	exclude: string[]
 	tsconfig?: string
-	overrides: TypedownOverride[]
+	overrides: KiiraOverride[]
 	packageMode: "workspace" | "packed"
 	defaultValidate: "type" | "runtime" | "none"
 	defaultFixture?: string
 	checkUnusedSymbols: boolean
 	checkRelativeImports: boolean
-	fixtures: Record<string, TypedownFixture>
-	languages: TypedownLanguage[]
+	fixtures: Record<string, KiiraFixture>
+	languages: KiiraLanguage[]
 	markdown: {
 		codeFenceLanguages: string[]
 	}
@@ -116,10 +116,10 @@ export interface ExtractedSnippet {
 	markdownFile: string
 	/** Optional URI (used by editor integrations). */
 	markdownUri?: string
-	lang: TypedownLanguage
+	lang: KiiraLanguage
 	/** The raw source inside the fence (without the fence lines). */
 	code: string
-	meta: TypedownFenceMeta
+	meta: KiiraFenceMeta
 	/** Range of the entire fenced block, including the fence delimiters. */
 	markdownRange: SourceRange
 	/** Position of the first character of the code content. */
@@ -143,23 +143,23 @@ export interface SourceMapping {
 export interface VirtualFile {
 	id: string
 	fileName: string
-	lang: TypedownLanguage
+	lang: KiiraLanguage
 	content: string
 	snippet: ExtractedSnippet
 	mappings: SourceMapping[]
 }
 
 /** An auto-fix that rewrites a code fence's language identifier in the Markdown source. */
-export interface TypedownFenceLanguageFix {
+export interface KiiraFenceLanguageFix {
 	kind: "fence-language"
 	/** Zero-based line of the opening fence to rewrite. */
 	line: number
 	/** The language identifier to write (e.g. "tsx"). */
-	language: TypedownLanguage
+	language: KiiraLanguage
 }
 
 /** An auto-fix that appends metadata to a code fence's info string (e.g. `group=foo`). */
-export interface TypedownFenceMetaFix {
+export interface KiiraFenceMetaFix {
 	kind: "fence-meta"
 	/** Zero-based line of the opening fence to amend. */
 	line: number
@@ -167,8 +167,8 @@ export interface TypedownFenceMetaFix {
 	append: string
 }
 
-/** An auto-fix that adds a per-glob compiler-option override to the Typedown config. */
-export interface TypedownConfigOverrideFix {
+/** An auto-fix that adds a per-glob compiler-option override to the Kiira config. */
+export interface KiiraConfigOverrideFix {
 	kind: "config-override"
 	/** The include glob for the override (e.g. "**\/*solid*"). */
 	include: string
@@ -176,24 +176,24 @@ export interface TypedownConfigOverrideFix {
 	compilerOptions: Record<string, string>
 }
 
-export type TypedownFix = TypedownFenceLanguageFix | TypedownFenceMetaFix | TypedownConfigOverrideFix
+export type KiiraFix = KiiraFenceLanguageFix | KiiraFenceMetaFix | KiiraConfigOverrideFix
 
-export interface TypedownDiagnostic {
+export interface KiiraDiagnostic {
 	severity: "error" | "warning" | "info"
 	code?: string | number
 	message: string
-	source: "typedown" | "typescript" | "runtime"
+	source: "kiira" | "typescript" | "runtime"
 	markdownFile: string
 	markdownRange: SourceRange
 	virtualFile?: string
 	virtualRange?: SourceRange
 	/** True when the diagnostic originates from generated fixture code, not the snippet itself. */
 	generated?: boolean
-	/** An optional automatic fix applied by `typedown check --fix`. */
-	fix?: TypedownFix
+	/** An optional automatic fix applied by `kiira check --fix`. */
+	fix?: KiiraFix
 }
 
-export interface TypedownCheckStats {
+export interface KiiraCheckStats {
 	markdownFiles: number
 	snippets: number
 	checked: number
@@ -202,9 +202,9 @@ export interface TypedownCheckStats {
 	warnings: number
 }
 
-export interface TypedownCheckResult {
+export interface KiiraCheckResult {
 	snippets: ExtractedSnippet[]
 	virtualFiles: VirtualFile[]
-	diagnostics: TypedownDiagnostic[]
-	stats: TypedownCheckStats
+	diagnostics: KiiraDiagnostic[]
+	stats: KiiraCheckStats
 }

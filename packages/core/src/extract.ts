@@ -4,41 +4,35 @@ import type { Code, Nodes, Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
 import { FENCE_ALIASES, resolveConfig } from "./config"
 import { parseFenceMeta } from "./meta"
-import type {
-	ExtractedSnippet,
-	ResolvedTypedownConfig,
-	TypedownConfig,
-	TypedownDiagnostic,
-	TypedownLanguage,
-} from "./types"
+import type { ExtractedSnippet, KiiraConfig, KiiraDiagnostic, KiiraLanguage, ResolvedKiiraConfig } from "./types"
 
 export interface ExtractInput {
 	cwd: string
 	files: string[]
-	config: Partial<TypedownConfig>
+	config: Partial<KiiraConfig>
 }
 
 export interface ExtractContentInput {
 	markdownFile: string
 	content: string
-	config: ResolvedTypedownConfig
+	config: ResolvedKiiraConfig
 	markdownUri?: string
 }
 
 export interface SnippetExtraction {
 	snippets: ExtractedSnippet[]
-	diagnostics: TypedownDiagnostic[]
+	diagnostics: KiiraDiagnostic[]
 }
 
-// Invert FENCE_ALIASES once: any recognized identifier -> its TypedownLanguage.
-const ALIAS_TO_LANG = new Map<string, TypedownLanguage>()
-for (const [lang, aliases] of Object.entries(FENCE_ALIASES) as [TypedownLanguage, string[]][]) {
+// Invert FENCE_ALIASES once: any recognized identifier -> its KiiraLanguage.
+const ALIAS_TO_LANG = new Map<string, KiiraLanguage>()
+for (const [lang, aliases] of Object.entries(FENCE_ALIASES) as [KiiraLanguage, string[]][]) {
 	for (const alias of aliases) {
 		ALIAS_TO_LANG.set(alias, lang)
 	}
 }
 
-function normalizeLang(raw: string): TypedownLanguage | undefined {
+function normalizeLang(raw: string): KiiraLanguage | undefined {
 	return ALIAS_TO_LANG.get(raw.toLowerCase())
 }
 
@@ -69,10 +63,10 @@ export function extractSnippetsFromContent({
 
 	// `codeFenceLanguages` controls which fence identifiers are recognized
 	// (it defaults to each configured language plus its aliases); the identifier
-	// is then normalized to a TypedownLanguage so ```typescript maps to ts.
+	// is then normalized to a KiiraLanguage so ```typescript maps to ts.
 	const recognized = new Set<string>(config.markdown.codeFenceLanguages.map((l) => l.toLowerCase()))
 	const snippets: ExtractedSnippet[] = []
-	const diagnostics: TypedownDiagnostic[] = []
+	const diagnostics: KiiraDiagnostic[] = []
 	let index = 0
 
 	for (const node of codeNodes) {
@@ -113,7 +107,7 @@ export function extractSnippetsFromContent({
 		for (const issue of parsed.issues) {
 			diagnostics.push({
 				severity: "warning",
-				source: "typedown",
+				source: "kiira",
 				message: issue.message,
 				markdownFile,
 				markdownRange,

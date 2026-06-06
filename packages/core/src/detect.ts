@@ -1,20 +1,20 @@
 import ts from "typescript"
-import type { TypedownLanguage } from "./types"
+import type { KiiraLanguage } from "./types"
 
 // Only `ts` is remapped: JSX in a `ts` fence is a hard syntax error, whereas
 // `js` fences parse and type-check JSX fine, so they need no correction.
-const JSX_VARIANT: Partial<Record<TypedownLanguage, TypedownLanguage>> = {
+const JSX_VARIANT: Partial<Record<KiiraLanguage, KiiraLanguage>> = {
 	ts: "tsx",
 }
 
-const SCRIPT_KIND: Record<TypedownLanguage, ts.ScriptKind> = {
+const SCRIPT_KIND: Record<KiiraLanguage, ts.ScriptKind> = {
 	ts: ts.ScriptKind.TS,
 	tsx: ts.ScriptKind.TSX,
 	js: ts.ScriptKind.JS,
 	jsx: ts.ScriptKind.JSX,
 }
 
-function parse(code: string, lang: TypedownLanguage): ts.SourceFile {
+function parse(code: string, lang: KiiraLanguage): ts.SourceFile {
 	return ts.createSourceFile("snippet", code, ts.ScriptTarget.Latest, false, SCRIPT_KIND[lang])
 }
 
@@ -40,7 +40,7 @@ function containsJsx(sourceFile: ts.SourceFile): boolean {
 }
 
 export interface LanguageTagSuggestion {
-	suggested: TypedownLanguage
+	suggested: KiiraLanguage
 }
 
 /**
@@ -52,7 +52,7 @@ export interface LanguageTagSuggestion {
  * look like JSX — type assertions (`<T>x`) and generic arrows (`<T>() => …`) —
  * fail to parse under `tsx`, so they never satisfy the "clean as JSX" condition.
  */
-export function detectLanguageTag(code: string, declaredLang: TypedownLanguage): LanguageTagSuggestion | undefined {
+export function detectLanguageTag(code: string, declaredLang: KiiraLanguage): LanguageTagSuggestion | undefined {
 	const variant = JSX_VARIANT[declaredLang]
 	if (!variant) {
 		return undefined // tsx/jsx already accept JSX

@@ -1,0 +1,129 @@
+---
+title: "Options reference"
+summary: "Every Kiira config option with its default"
+description: "Complete reference for Kiira config options: include, exclude, tsconfig, packageMode, defaultValidate, checkUnusedSymbols, checkRelativeImports, overrides, fixtures, defaultFixture, and languages."
+---
+
+## Options at a glance
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `include` | `string[]` | **required** | Glob patterns for the Markdown files to check. |
+| `exclude` | `string[]` | `[]` | Glob patterns to exclude from `include`. |
+| `tsconfig` | `string` | auto | Path to the tsconfig used to compile snippets. Auto-resolves `tsconfig.docs.json`, then `tsconfig.json`. |
+| `packageMode` | `"workspace" \| "packed"` | `"workspace"` | How package imports are resolved. |
+| `defaultValidate` | `"type" \| "runtime" \| "none"` | `"type"` | Default validation level for fences. |
+| `checkUnusedSymbols` | `boolean` | `false` | Report unused symbols (TS6133). |
+| `checkRelativeImports` | `boolean` | `false` | Report unresolved relative imports. |
+| `overrides` | `Override[]` | `[]` | Per-glob compiler option overrides. |
+| `fixtures` | `Record<string, Fixture>` | `{}` | Named prepend/wrap code applied to fences. |
+| `defaultFixture` | `string` | — | Fixture applied to every fence by default. |
+| `languages` | `string[]` | `["ts","tsx","js","jsx"]` | Fence languages Kiira checks. |
+
+## `include` (required)
+
+Glob patterns for the Markdown files Kiira checks. This is the only required option.
+
+```ts
+include: ["docs/**/*.md", "docs/**/*.mdx", "README.md"]
+```
+
+`--entry` on the CLI overrides `include` for a single run.
+
+## `exclude`
+
+Glob patterns removed from the set matched by `include`. Defaults to `[]`.
+
+```ts
+exclude: ["docs/api/**", "**/*.generated.md"]
+```
+
+## `tsconfig`
+
+Path to the TypeScript config used when compiling your snippets. When omitted, Kiira **auto-resolves** `tsconfig.docs.json` first (so you can use docs-specific settings) and falls back to `tsconfig.json`.
+
+```ts
+tsconfig: "tsconfig.docs.json"
+```
+
+## `packageMode`
+
+How Kiira resolves package imports referenced in your snippets:
+
+- `"workspace"` (default) — discovers your monorepo's workspaces and resolves package names to their source. See [Monorepos](/latest/projects/monorepos).
+- `"packed"` — resolves against the packed/published form of the package.
+
+```ts
+packageMode: "workspace"
+```
+
+## `defaultValidate`
+
+The default validation level applied to every fence (override per-fence with the `validate=` token):
+
+- `"type"` (default) — full TypeScript type-checking.
+- `"runtime"` — runtime-oriented validation.
+- `"none"` — skip validation for that fence.
+
+```ts
+defaultValidate: "type"
+```
+
+## `checkUnusedSymbols`
+
+When `true`, Kiira reports unused symbols (TypeScript's `TS6133`). **Defaults to `false`** because docs snippets frequently declare imports or variables for illustration without using them.
+
+```ts
+checkUnusedSymbols: false
+```
+
+## `checkRelativeImports`
+
+When `true`, Kiira reports unresolved **relative** imports (e.g. `./utils`). **Defaults to `false`**, because relative paths in docs often point at files that don't exist in the docs project. Bare package imports (e.g. `your-lib`) are **always** checked regardless of this setting.
+
+```ts
+checkRelativeImports: false
+```
+
+## `overrides`
+
+Per-glob compiler option overrides — for example, setting a different `jsxImportSource` for docs that target another framework. Kiira runs a separate TypeScript program per distinct option set. See [Per-glob overrides](/latest/projects/per-glob-overrides).
+
+```ts
+overrides: [
+  {
+    include: ["docs/solid/**/*.mdx"],
+    jsxImportSource: "solid-js",
+  },
+]
+```
+
+## `fixtures`
+
+Named blocks of code that Kiira can prepend to (or wrap around) a fence before compiling it — useful for providing shared imports or setup so individual snippets stay focused. Reference a fixture per-fence with the `fixture=` token.
+
+```ts
+fixtures: {
+  setup: {
+    type: "prepend", content: `import { createApp } from "your-lib"\nconst app = createApp()`,
+  },
+}
+```
+
+## `defaultFixture`
+
+The name of a fixture applied to every fence by default (still overridable per-fence):
+
+```ts
+defaultFixture: "setup"
+```
+
+## `languages`
+
+The fence languages Kiira checks. Defaults to all four:
+
+```ts
+languages: ["ts", "tsx", "js", "jsx"]
+```
+
+Narrow this if you only want to check, say, TypeScript fences.

@@ -1,0 +1,35 @@
+---
+title: "Exit codes"
+summary: "How Kiira's results map to process exit codes"
+description: "Kiira CLI exit codes: 0 for a clean run, 1 for validation errors, and 2 for a config or runtime failure — and how to use them in CI."
+---
+
+## Exit codes
+
+`kiira check` communicates its result through the process exit code, which is what lets CI fail a build automatically:
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Clean — every checked fence type-checked successfully. |
+| `1` | Validation errors — one or more fences failed to type-check. |
+| `2` | Config or runtime failure — Kiira could not run (e.g. a bad config, a missing tsconfig, or an internal error). |
+
+## Using exit codes in CI
+
+Most CI runners fail a step when a command exits non-zero, so you usually don't need to do anything special:
+
+```bash
+kiira check --reporter github
+```
+
+If the run produces validation errors it exits `1` and the step fails. A `2` indicates a setup problem (broken config, unresolved tsconfig) rather than a docs problem — worth distinguishing in scripts that treat the two differently:
+
+```bash
+kiira check --reporter json
+status=$?
+if [ "$status" -eq 2 ]; then
+  echo "Kiira failed to run — check your config."
+elif [ "$status" -eq 1 ]; then
+  echo "Docs have type errors."
+fi
+```

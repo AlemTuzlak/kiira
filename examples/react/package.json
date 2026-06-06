@@ -1,15 +1,15 @@
 {
-	"name": "@typedown-example/react",
+	"name": "@kiira-example/react",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"check:docs": "typedown check"
+		"check:docs": "kiira check"
 	},
 	"devDependencies": {
-		"@alemtuzlak/typedown": "workspace:*",
-		"@alemtuzlak/typedown-cli": "workspace:*",
 		"@types/react": "^18.3.0",
+		"kiira": "workspace:*",
+		"kiira-core": "workspace:*",
 		"react": "^18.3.0",
 		"typescript": "^5.4.0"
 	}

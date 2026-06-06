@@ -3,13 +3,13 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { checkMarkdownFiles } from "./check"
-import type { TypedownDiagnostic } from "./types"
+import type { KiiraDiagnostic } from "./types"
 import { buildWorkspaceResolution, discoverWorkspacePackages, parsePnpmWorkspacePackages } from "./workspace"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const workspace = resolve(here, "../tests/fixtures/workspace")
 
-function errors(diagnostics: TypedownDiagnostic[]): TypedownDiagnostic[] {
+function errors(diagnostics: KiiraDiagnostic[]): KiiraDiagnostic[] {
 	return diagnostics.filter((d) => d.severity === "error")
 }
 
@@ -50,7 +50,7 @@ describe("buildWorkspaceResolution", () => {
 	})
 
 	it("collects @types as typeRoots and maps runtime-only packages to their @types declarations", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "typedown-ws-"))
+		const dir = mkdtempSync(join(tmpdir(), "kiira-ws-"))
 		try {
 			writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
 			const pkg = join(dir, "packages", "lib")

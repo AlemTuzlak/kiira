@@ -1,15 +1,15 @@
 {
-	"name": "@typedown-example/monorepo",
+	"name": "@kiira-example/monorepo",
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"check:docs": "typedown check"
+		"check:docs": "kiira check"
 	},
 	"devDependencies": {
-		"@alemtuzlak/typedown": "workspace:*",
-		"@alemtuzlak/typedown-cli": "workspace:*",
 		"@types/node": "22.14.1",
+		"kiira": "workspace:*",
+		"kiira-core": "workspace:*",
 		"typescript": "^5.4.0"
 	}
 }

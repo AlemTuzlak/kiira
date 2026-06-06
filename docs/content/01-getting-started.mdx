@@ -1,0 +1,101 @@
+---
+title: "Getting Started"
+summary: "Install Kiira and check your first Markdown file in 60 seconds"
+description: "Install Kiira, scaffold a config with kiira init, run your first kiira check, and learn the code fence format Kiira validates."
+---
+
+You have a project with Markdown docs full of TypeScript or JavaScript examples, and nothing checking whether those examples still compile. By the end of this guide you'll have Kiira installed, a config in place, and a `kiira check` run gating your docs — the same check you can wire into CI and your editor.
+
+## Install
+
+Install the Kiira CLI as a dev dependency in the project whose docs you want to check:
+
+```bash
+pnpm add -D kiira
+```
+
+The CLI depends on `kiira-core`, which is installed automatically. You only need to depend on `kiira-core` directly if you want to import `defineConfig` or call the check engine programmatically.
+
+<InfoAlert title="Install it where your types live">
+Kiira runs the TypeScript compiler against **your project's own types**. Install it inside the project (or workspace) whose API your docs reference, so those types resolve.
+</InfoAlert>
+
+## Scaffold a config
+
+Run `kiira init` to scaffold a starter config and a docs-specific tsconfig:
+
+```bash
+pnpm kiira init
+```
+
+This creates two files:
+
+- **`kiira.config.ts`** — your Kiira configuration, using `defineConfig` from `kiira-core`.
+- **`tsconfig.docs.json`** — a TypeScript config Kiira uses when compiling your snippets. Kiira automatically prefers `tsconfig.docs.json` over `tsconfig.json` if it exists, so you can relax or tighten rules for docs without touching your app's config.
+
+A minimal generated `kiira.config.ts` looks like this:
+
+```ts
+import { defineConfig } from "kiira-core"
+
+export default defineConfig({
+  include: ["**/*.md", "**/*.mdx"],
+})
+```
+
+## Run your first check
+
+```bash
+pnpm kiira check
+```
+
+`check` is the default command, so `pnpm kiira` does the same thing. Kiira finds the Markdown files matched by your `include` globs, extracts every TypeScript/JavaScript fence, compiles each one against your project types, and prints any errors mapped to the exact line in the Markdown file.
+
+If everything type-checks, Kiira exits with code `0`. If any snippet has an error, it exits with code `1` — which is what makes it useful in CI.
+
+## The fence format
+
+Kiira checks fenced code blocks whose language is one of `ts`, `tsx`, `js`, or `jsx`. Write your examples exactly as you normally would:
+
+````md
+```ts
+import { defineConfig } from "kiira-core"
+
+const config = defineConfig({
+  include: ["docs/**/*.md"],
+})
+```
+````
+
+By default each fence is checked as its own isolated module. You can tweak how a fence is treated by adding metadata tokens after the language on the info string — for example to skip a fence, change how it's validated, or group it with another:
+
+````md
+```ts ignore
+// Kiira will not type-check this fence
+const wip = somethingNotReadyYet()
+```
+````
+
+See the [Fence metadata](/latest/fences/fence-metadata) reference for every available token.
+
+## 60-second quickstart
+
+```bash
+# 1. Install
+pnpm add -D kiira
+
+# 2. Scaffold kiira.config.ts + tsconfig.docs.json
+pnpm kiira init
+
+# 3. Check your docs
+pnpm kiira check
+
+# 4. See full messages + code frames when something fails
+pnpm kiira check --verbose
+```
+
+That's it — you now have a working docs check. From here:
+
+- Wire `kiira check` into CI with the [GitHub Action](/latest/ci/github-action) or a [plain CI step](/latest/ci/any-ci).
+- Install the [VS Code extension](/latest/vscode/overview) for live diagnostics as you type.
+- Tune behavior with [configuration options](/latest/configuration/options) and [fence metadata](/latest/fences/fence-metadata).

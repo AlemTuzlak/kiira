@@ -7,7 +7,7 @@
 		"useIgnoreFile": true
 	},
 	"formatter": {
-		"ignore": ["examples", "**/dist", "**/out", "**/.typedown"],
+		"ignore": ["examples", "docs", "**/dist", "**/out", "**/.kiira"],
 		"enabled": true,
 		"formatWithErrors": false,
 		"indentStyle": "tab",
@@ -15,11 +15,11 @@
 		"lineWidth": 120
 	},
 	"organizeImports": {
-		"ignore": ["examples", "**/dist", "**/out", "**/.typedown"],
+		"ignore": ["examples", "docs", "**/dist", "**/out", "**/.kiira"],
 		"enabled": true
 	},
 	"linter": {
-		"ignore": ["examples", "**/dist", "**/out", "**/.typedown"],
+		"ignore": ["examples", "docs", "**/dist", "**/out", "**/.kiira"],
 		"enabled": true,
 		"rules": {
 			"recommended": true,

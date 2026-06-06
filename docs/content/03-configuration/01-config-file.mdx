@@ -1,0 +1,38 @@
+---
+title: "The config file"
+summary: "Define Kiira's behavior with defineConfig in kiira.config.ts"
+description: "How to create a Kiira config file with defineConfig from kiira-core, the supported file variants, and how Kiira discovers your config."
+---
+
+## Creating a config
+
+Kiira is configured with a `kiira.config.ts` file at the root of your project, built with `defineConfig` from `kiira-core`:
+
+```ts
+import { defineConfig } from "kiira-core"
+
+export default defineConfig({
+  include: ["docs/**/*.md", "docs/**/*.mdx", "README.md"],
+})
+```
+
+`defineConfig` is an identity helper that gives you full type-safety and autocomplete on every option — it returns the config object unchanged.
+
+## Supported file variants
+
+Kiira auto-discovers a config file with any of these extensions:
+
+- `kiira.config.ts`
+- `kiira.config.mts`
+- `kiira.config.mjs`
+- `kiira.config.js`
+- `kiira.config.cjs`
+- `kiira.config.json`
+
+You can also point at a specific file with `--config`:
+
+```bash
+kiira check --config configs/kiira.config.mts
+```
+
+The only **required** option is `include`. Everything else has a sensible default — see the [Options reference](/latest/configuration/options).

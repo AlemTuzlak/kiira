@@ -1,13 +1,13 @@
 import {
-	type TypedownConfig,
-	type TypedownDiagnostic,
+	type KiiraConfig,
+	type KiiraDiagnostic,
 	type VirtualFile,
 	checkVirtualFiles,
 	collectSuggestions,
 	createVirtualFiles,
 	extractSnippetsFromContent,
 	resolveConfig,
-} from "@alemtuzlak/typedown"
+} from "kiira-core"
 
 export interface CheckDocumentInput {
 	/** Workspace root used for config, tsconfig, and module resolution. */
@@ -16,12 +16,12 @@ export interface CheckDocumentInput {
 	markdownFile: string
 	/** The (possibly unsaved) document text. */
 	text: string
-	config: Partial<TypedownConfig>
+	config: Partial<KiiraConfig>
 	markdownUri?: string
 }
 
 export interface CheckDocumentResult {
-	diagnostics: TypedownDiagnostic[]
+	diagnostics: KiiraDiagnostic[]
 	virtualFiles: VirtualFile[]
 }
 

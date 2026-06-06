@@ -1,0 +1,95 @@
+---
+title: "Flags"
+summary: "Every flag accepted by the kiira CLI"
+description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --config, --reporter, --fix, --verbose, --raw, --static, --help, and --version."
+---
+
+## Flag reference
+
+| Flag | Argument | Description |
+| --- | --- | --- |
+| `--entry` | `<path>` | Directory, file, or glob to check. **Repeatable.** Overrides the config's `include` when present. |
+| `--ignore` | `<path>` | Directory, file, or glob to exclude from the scan. **Repeatable.** |
+| `--config` | `<path>` | Path to a Kiira config file. Defaults to auto-discovery of `kiira.config.*`. |
+| `--reporter` | `<pretty\|json\|github>` | Output format. Defaults to `pretty`. |
+| `--fix` | — | Rewrite mistagged fences, add `group=` tags, and write framework overrides. |
+| `--verbose` | — | Show full error messages and code frames (the `pretty` reporter is compact by default). |
+| `--raw` | — | Disable colored output; emit plain text. |
+| `--static` | — | Disable the loading spinner. |
+| `-h`, `--help` | — | Show help. |
+| `-v`, `--version` | — | Show the version. |
+
+## `--entry <path>`
+
+Restricts the scan to specific directories, files, or globs. It is **repeatable** — pass it multiple times to check several locations:
+
+```bash
+kiira check --entry docs --entry README.md --entry "guides/**/*.mdx"
+```
+
+When any `--entry` is provided, it **overrides** the `include` globs in your config. Use it for quick, targeted runs (for example, checking only the file you just edited) without changing your config.
+
+## `--ignore <path>`
+
+Excludes directories, files, or globs from the scan. Also **repeatable**:
+
+```bash
+kiira check --entry docs --ignore docs/api --ignore "**/*.generated.md"
+```
+
+This layers on top of the resolved entries, so you can include a whole folder and carve out a subfolder you don't want checked.
+
+## `--config <path>`
+
+Points Kiira at a specific config file instead of auto-discovering one:
+
+```bash
+kiira check --config configs/kiira.config.mts
+```
+
+## `--reporter <pretty|json|github>`
+
+Selects the output format. See the [Reporters](/latest/cli/reporters) page for details on each one.
+
+```bash
+kiira check --reporter github
+```
+
+## `--fix`
+
+Applies safe automatic fixes — rewriting mistagged `ts`/`typescript` fences to `tsx` when JSX is detected, adding `group=` tags to ungrouped continuation snippets, and writing framework `jsxImportSource` overrides into your config. See the [--fix](/latest/cli/fix) page.
+
+```bash
+kiira check --fix
+```
+
+## `--verbose`
+
+The `pretty` reporter is compact by default. Add `--verbose` to print full error messages and code frames:
+
+```bash
+kiira check --verbose
+```
+
+## `--raw`
+
+Disables ANSI colors so output is plain text — useful when piping to a file or a log that doesn't render colors:
+
+```bash
+kiira check --raw
+```
+
+## `--static`
+
+Disables the animated loading spinner. Handy in CI logs or non-TTY environments where spinner frames add noise:
+
+```bash
+kiira check --static
+```
+
+## `-h, --help` and `-v, --version`
+
+```bash
+kiira --help
+kiira --version
+```

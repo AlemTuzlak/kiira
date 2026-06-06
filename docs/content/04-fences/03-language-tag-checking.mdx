@@ -1,0 +1,41 @@
+---
+title: "Language-tag checking"
+summary: "Kiira warns when a ts fence actually contains JSX"
+description: "How Kiira detects when a ts fence contains JSX, warns that it should be tsx, checks it as tsx anyway to surface real type errors, and rewrites the tag with kiira check --fix."
+---
+
+## The problem
+
+A code fence tagged `ts` that actually contains JSX is mislabeled — JSX belongs in a `tsx` fence. Beyond being wrong for syntax highlighting, it changes how the snippet should be compiled, and a naive checker would either crash on the JSX or report misleading errors.
+
+## What Kiira does
+
+When Kiira sees a `ts` (or `typescript`) fence whose contents include JSX, it:
+
+1. **Warns** that the fence should be tagged `tsx`.
+2. **Checks it as `tsx` anyway**, so you still get real, accurate type errors for the snippet instead of a parse failure or noise.
+
+````md
+```ts
+// Kiira warns: this looks like JSX — tag it `tsx`.
+// It still type-checks the snippet as tsx so you get real errors.
+const el = <Button onClick={handleClick}>Save</Button>
+```
+````
+
+## Fixing the tag
+
+Run [`kiira check --fix`](/latest/cli/fix) to rewrite the language tag from `ts`/`typescript` to `tsx`:
+
+````md
+<!-- after `kiira check --fix` -->
+```tsx
+const el = <Button onClick={handleClick}>Save</Button>
+```
+````
+
+Because Kiira already checks mislabeled fences as `tsx`, fixing the tag doesn't change the validation result — it just makes the Markdown accurate and improves highlighting.
+
+<InfoAlert title="Non-React JSX?">
+If the JSX targets a framework other than the default React runtime (Solid, Preact, …), you may also need a `jsxImportSource` override. See [Per-glob overrides](/latest/projects/per-glob-overrides).
+</InfoAlert>

@@ -17,6 +17,6 @@ export default defineConfig({
 		// TypeScript breaks its default-lib resolution, so the build also copies its
 		// `lib.*.d.ts` into `out/lib` and the extension points TypeScript there via
 		// `setTypescriptLibDir` on activation.
-		alwaysBundle: ["@alemtuzlak/typedown", "typescript", "jiti", "mdast-util-from-markdown", "tinyglobby"],
+		alwaysBundle: ["kiira-core", "typescript", "jiti", "mdast-util-from-markdown", "tinyglobby"],
 	},
 })

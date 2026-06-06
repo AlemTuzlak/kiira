@@ -1,0 +1,67 @@
+---
+title: "Commands"
+summary: "The kiira check and kiira init commands"
+description: "Reference for the two Kiira CLI commands: kiira check, which validates your Markdown code fences, and kiira init, which scaffolds a config."
+---
+
+## Overview
+
+The Kiira CLI exposes a single binary, `kiira`, with two commands:
+
+```bash
+kiira [check] [files...] [options]
+kiira init
+```
+
+`check` is the default command, so running `kiira` with no command runs a check.
+
+## `kiira check`
+
+Validates the TypeScript/JavaScript code fences in your Markdown files. This is the command you run locally and in CI.
+
+```bash
+# Check everything matched by your config's `include`
+kiira check
+
+# Equivalent — check is the default command
+kiira
+```
+
+`check` resolves which files to scan from (in order of precedence) the `--entry` flags, then any positional file arguments, then the `include` globs in your config. It extracts every `ts` / `tsx` / `js` / `jsx` fence, compiles each one against your project types, and reports diagnostics on the matching Markdown line.
+
+Common invocations:
+
+```bash
+# Limit the scan to specific paths
+kiira check --entry docs --entry README.md
+
+# Exclude a folder
+kiira check --entry docs --ignore docs/api
+
+# Use a specific config and machine-readable output
+kiira check --config kiira.config.ts --reporter json
+```
+
+See the [Flags](/latest/cli/flags) page for the full list of options, and [Exit codes](/latest/cli/exit-codes) for how results map to process exit codes.
+
+## `kiira init`
+
+Scaffolds a starter configuration so you can get checking immediately:
+
+```bash
+kiira init
+```
+
+It writes two files:
+
+- **`kiira.config.ts`** — a config using `defineConfig` from `kiira-core` with a sensible `include`.
+- **`tsconfig.docs.json`** — a TypeScript config used when compiling your snippets. Kiira automatically prefers this over `tsconfig.json` when it's present.
+
+Run `init` once when you first add Kiira to a project, then switch to `kiira check` for everyday use.
+
+## Help and version
+
+```bash
+kiira --help     # or -h
+kiira --version  # or -v
+```

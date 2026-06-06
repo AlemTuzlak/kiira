@@ -1,5 +1,5 @@
-import type { TypedownCheckResult, TypedownDiagnostic } from "@alemtuzlak/typedown"
 import { Chalk, type ChalkInstance } from "chalk"
+import type { KiiraCheckResult, KiiraDiagnostic } from "kiira-core"
 import type { ReporterName } from "./args"
 
 interface ReporterContext {
@@ -16,7 +16,7 @@ interface ReporterContext {
 const styled = new Chalk()
 const plain = new Chalk({ level: 0 })
 
-function severityColor(c: ChalkInstance, severity: TypedownDiagnostic["severity"]): ChalkInstance["red"] {
+function severityColor(c: ChalkInstance, severity: KiiraDiagnostic["severity"]): ChalkInstance["red"] {
 	if (severity === "error") {
 		return c.red
 	}
@@ -27,7 +27,7 @@ function severityColor(c: ChalkInstance, severity: TypedownDiagnostic["severity"
 }
 
 /** Render a TS code (e.g. 2305) as `TS2305`; pass other codes through. */
-function codeLabel(code: TypedownDiagnostic["code"]): string {
+function codeLabel(code: KiiraDiagnostic["code"]): string {
 	if (typeof code === "number") {
 		return `TS${code}`
 	}
@@ -40,13 +40,13 @@ function pluralize(count: number, noun: string): string {
 
 // --- JSON -----------------------------------------------------------------
 
-/** Number of diagnostics that `typedown check --fix` can resolve automatically. */
-function fixableCount(result: TypedownCheckResult): number {
+/** Number of diagnostics that `kiira check --fix` can resolve automatically. */
+function fixableCount(result: KiiraCheckResult): number {
 	return result.diagnostics.filter((d) => d.fix).length
 }
 
 /** Machine-readable report. Positions are 1-based for both line and character. */
-export function formatJson(result: TypedownCheckResult): string {
+export function formatJson(result: KiiraCheckResult): string {
 	const diagnostics = result.diagnostics.map((d) => ({
 		severity: d.severity,
 		source: d.source,
@@ -64,7 +64,7 @@ export function formatJson(result: TypedownCheckResult): string {
 
 // --- GitHub ---------------------------------------------------------------
 
-function githubSeverity(severity: TypedownDiagnostic["severity"]): "error" | "warning" | "notice" {
+function githubSeverity(severity: KiiraDiagnostic["severity"]): "error" | "warning" | "notice" {
 	if (severity === "error") {
 		return "error"
 	}
@@ -79,7 +79,7 @@ function escapeGithubData(value: string): string {
 }
 
 /** GitHub Actions workflow command annotations (1-based line/col). */
-export function formatGithub(result: TypedownCheckResult): string {
+export function formatGithub(result: KiiraCheckResult): string {
 	return result.diagnostics
 		.map((d) => {
 			const line = d.markdownRange.start.line + 1
@@ -93,7 +93,7 @@ export function formatGithub(result: TypedownCheckResult): string {
 
 // --- Pretty ---------------------------------------------------------------
 
-function renderCodeFrame(lines: string[], diagnostic: TypedownDiagnostic, c: ChalkInstance): string {
+function renderCodeFrame(lines: string[], diagnostic: KiiraDiagnostic, c: ChalkInstance): string {
 	const lineIndex = diagnostic.markdownRange.start.line
 	const source = lines[lineIndex]
 	if (source === undefined) {
@@ -111,12 +111,12 @@ function renderCodeFrame(lines: string[], diagnostic: TypedownDiagnostic, c: Cha
 	].join("\n")
 }
 
-function location(d: TypedownDiagnostic, c: ChalkInstance): string {
+function location(d: KiiraDiagnostic, c: ChalkInstance): string {
 	return c.cyan(`${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`)
 }
 
 /** One compact line per diagnostic: `file:line:col severity CODE message`. */
-function compactLine(d: TypedownDiagnostic, c: ChalkInstance): string {
+function compactLine(d: KiiraDiagnostic, c: ChalkInstance): string {
 	const severity = severityColor(c, d.severity)(d.severity)
 	const code = codeLabel(d.code)
 	const codePart = code ? `${c.dim(code)} ` : ""
@@ -124,7 +124,7 @@ function compactLine(d: TypedownDiagnostic, c: ChalkInstance): string {
 }
 
 /** A verbose block: header, full message, and a code frame. */
-function verboseBlock(d: TypedownDiagnostic, ctx: ReporterContext, c: ChalkInstance): string {
+function verboseBlock(d: KiiraDiagnostic, ctx: ReporterContext, c: ChalkInstance): string {
 	const code = codeLabel(d.code)
 	const header = `${location(d, c)} ${severityColor(c, d.severity)(d.severity)}${code ? ` ${c.dim(code)}` : ""}`
 	const frameLines = ctx.getSourceLines?.(d.markdownFile)
@@ -132,7 +132,7 @@ function verboseBlock(d: TypedownDiagnostic, ctx: ReporterContext, c: ChalkInsta
 	return [header, d.message, frame].filter(Boolean).join("\n")
 }
 
-export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext): string {
+export function formatPretty(result: KiiraCheckResult, ctx: ReporterContext): string {
 	const { stats } = result
 	const c = ctx.raw ? plain : styled
 	const sections: string[] = []
@@ -141,7 +141,7 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 		sections.push(...result.diagnostics.map((d) => verboseBlock(d, ctx, c)))
 	} else {
 		// Group compact lines under a per-file header.
-		const byFile = new Map<string, TypedownDiagnostic[]>()
+		const byFile = new Map<string, KiiraDiagnostic[]>()
 		for (const d of result.diagnostics) {
 			const list = byFile.get(d.markdownFile) ?? []
 			list.push(d)
@@ -163,13 +163,13 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 
 	const summary: string[] = []
 	if (stats.errors === 0 && stats.warnings === 0) {
-		summary.push(c.green(`✓ Typedown found no errors in ${pluralize(stats.markdownFiles, "file")}.`))
+		summary.push(c.green(`✓ Kiira found no errors in ${pluralize(stats.markdownFiles, "file")}.`))
 	} else {
 		const parts = [c.red(pluralize(stats.errors, "error"))]
 		if (stats.warnings > 0) {
 			parts.push(c.yellow(pluralize(stats.warnings, "warning")))
 		}
-		summary.push(`${c.red("✖")} Typedown found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`)
+		summary.push(`${c.red("✖")} Kiira found ${parts.join(" and ")} in ${pluralize(stats.markdownFiles, "file")}.`)
 	}
 	summary.push(
 		c.dim(
@@ -178,7 +178,7 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 	)
 	const fixable = fixableCount(result)
 	if (fixable > 0) {
-		summary.push(c.cyan(`${pluralize(fixable, "issue")} fixable with \`typedown check --fix\`.`))
+		summary.push(c.cyan(`${pluralize(fixable, "issue")} fixable with \`kiira check --fix\`.`))
 	}
 
 	const body = sections.join(ctx.verbose ? "\n\n" : "\n")
@@ -188,7 +188,7 @@ export function formatPretty(result: TypedownCheckResult, ctx: ReporterContext):
 
 // --- Dispatch -------------------------------------------------------------
 
-export function formatReport(reporter: ReporterName, result: TypedownCheckResult, ctx: ReporterContext): string {
+export function formatReport(reporter: ReporterName, result: KiiraCheckResult, ctx: ReporterContext): string {
 	switch (reporter) {
 		case "json":
 			return formatJson(result)

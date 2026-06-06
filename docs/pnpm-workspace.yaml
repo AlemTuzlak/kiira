@@ -1,0 +1,12 @@
+# The docs site is a standalone pnpm project (it deploys on its own via the
+# bundled Dockerfile / Fly config, where only this folder is present).
+#
+# pnpm 11 gates dependency lifecycle (build) scripts behind `allowBuilds` — this
+# replaced the deprecated `pnpm.onlyBuiltDependencies` field in package.json.
+# Allow the build scripts the site actually needs so a fresh `pnpm install`
+# (e.g. in the Docker build) doesn't fail with ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  '@biomejs/biome': true
+  esbuild: true
+  lefthook: true
+  msw: true

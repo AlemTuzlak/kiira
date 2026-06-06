@@ -1,7 +1,7 @@
-import type { TypedownCheckResult } from "@alemtuzlak/typedown"
+import type { KiiraCheckResult } from "kiira-core"
 import { formatGithub, formatJson, formatPretty } from "./reporters"
 
-function result(): TypedownCheckResult {
+function result(): KiiraCheckResult {
 	return {
 		snippets: [],
 		virtualFiles: [],
@@ -22,12 +22,12 @@ function result(): TypedownCheckResult {
 	}
 }
 
-function fixableResult(): TypedownCheckResult {
+function fixableResult(): KiiraCheckResult {
 	const r = result()
 	r.diagnostics.push({
 		severity: "warning",
 		code: "language-tag",
-		source: "typedown",
+		source: "kiira",
 		message: "This `ts` fence contains JSX.",
 		markdownFile: "docs/quickstart.md",
 		markdownRange: { start: { line: 40, character: 0 }, end: { line: 40, character: 0 } },
@@ -45,7 +45,7 @@ describe("fixable stat", () => {
 	it("shows a fixable line in pretty output when fixes are available", () => {
 		expect(formatPretty(result(), { cwd: "/repo" })).not.toContain("fixable")
 		const out = formatPretty(fixableResult(), { cwd: "/repo" })
-		expect(out).toContain("1 issue fixable with `typedown check --fix`.")
+		expect(out).toContain("1 issue fixable with `kiira check --fix`.")
 	})
 })
 
@@ -111,7 +111,7 @@ describe("formatPretty", () => {
 	})
 
 	it("counts failed snippets (not error messages) so Passed never goes negative", () => {
-		const r: TypedownCheckResult = {
+		const r: KiiraCheckResult = {
 			snippets: [],
 			virtualFiles: [],
 			diagnostics: [
@@ -149,7 +149,7 @@ describe("formatPretty", () => {
 	})
 
 	it("reports success when there are no diagnostics", () => {
-		const clean: TypedownCheckResult = {
+		const clean: KiiraCheckResult = {
 			snippets: [],
 			virtualFiles: [],
 			diagnostics: [],

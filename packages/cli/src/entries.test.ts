@@ -7,7 +7,7 @@ import { toIgnoreGlobs, toIncludeGlobs } from "./entries"
 let dir: string
 
 beforeEach(() => {
-	dir = mkdtempSync(join(tmpdir(), "typedown-entries-"))
+	dir = mkdtempSync(join(tmpdir(), "kiira-entries-"))
 	mkdirSync(join(dir, "docs", "api"), { recursive: true })
 	writeFileSync(join(dir, "README.md"), "# readme")
 })

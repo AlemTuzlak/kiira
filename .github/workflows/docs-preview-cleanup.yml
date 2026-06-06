@@ -1,0 +1,37 @@
+name: 🧹 Docs Preview Cleanup
+
+# Tears down the per-PR docs preview app (kiira-docs-pr-<number>) created by
+# docs-preview.yml when the pull request is closed (merged or not).
+
+on:
+  pull_request:
+    types: [closed]
+
+concurrency:
+  group: docs-preview-cleanup-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  destroy-preview:
+    name: 🧹 Destroy PR preview
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      vars.FLY_ORG != ''
+    permissions:
+      contents: read
+    steps:
+      - name: ⬇️ Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: 🧹 Destroy Fly app
+        uses: forge-42/fly-destroy@a88d588a7a44e34ff844c09f84b79fb9dac4e32c # v1.0.0-rc.2
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_ORG: ${{ vars.FLY_ORG }}
+        with:
+          app_name: kiira-docs-pr-${{ github.event.number }}

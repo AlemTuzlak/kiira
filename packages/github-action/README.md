@@ -1,10 +1,10 @@
-# typedown-action
+# kiira-action
 
-A GitHub composite action that runs [Typedown](https://github.com/AlemTuzlak/typedown) to
+A GitHub composite action that runs [Kiira](https://github.com/AlemTuzlak/kiira) to
 type-check the TypeScript and JavaScript code fences in your Markdown docs as part of CI.
 
-The action assumes Typedown is already installed in your project (e.g. via
-`pnpm add -D @alemtuzlak/typedown-cli`) and that dependencies have been installed in a previous step.
+The action assumes Kiira is already installed in your project (e.g. via
+`pnpm add -D kiira`) and that dependencies have been installed in a previous step.
 
 ## Usage
 
@@ -18,7 +18,7 @@ on:
       - main
 
 jobs:
-  typedown:
+  kiira:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - uses: AlemTuzlak/typedown/packages/github-action@v1
+      - uses: AlemTuzlak/kiira/packages/github-action@v1
         with:
-          command: pnpm typedown check
+          command: pnpm kiira check
           reporter: github
 ```
 
@@ -44,11 +44,11 @@ jobs:
 
 | Input               | Default          | Description                                              |
 | ------------------- | ---------------- | -------------------------------------------------------- |
-| `command`           | `typedown check` | The Typedown command to run.                             |
-| `config`            | _(none)_         | Path to a Typedown config file.                          |
+| `command`           | `kiira check` | The Kiira command to run.                             |
+| `config`            | _(none)_         | Path to a Kiira config file.                          |
 | `reporter`          | `github`         | Reporter format: `pretty`, `github`, `json`, or `sarif`. |
 | `files`             | _(none)_         | Optional space-separated Markdown files/globs to check.  |
-| `working-directory` | `.`              | Directory to run Typedown in.                            |
+| `working-directory` | `.`              | Directory to run Kiira in.                            |
 
 With `reporter: github`, validation errors appear as inline annotations on the
 offending Markdown lines and a non-zero exit code fails the job.

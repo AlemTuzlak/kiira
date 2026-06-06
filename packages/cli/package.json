@@ -1,10 +1,10 @@
 {
-	"name": "@alemtuzlak/typedown-cli",
+	"name": "kiira",
 	"version": "0.1.0",
-	"description": "Command-line interface for Typedown: validate TypeScript and JavaScript code fences in your Markdown docs.",
+	"description": "Command-line interface for Kiira: validate TypeScript and JavaScript code fences in your Markdown docs.",
 	"type": "module",
 	"bin": {
-		"typedown": "./dist/index.mjs"
+		"kiira": "./dist/index.mjs"
 	},
 	"main": "./dist/index.mjs",
 	"types": "./dist/index.d.mts",
@@ -27,20 +27,20 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/AlemTuzlak/typedown.git",
+		"url": "git+https://github.com/AlemTuzlak/kiira.git",
 		"directory": "packages/cli"
 	},
 	"bugs": {
-		"url": "https://github.com/AlemTuzlak/typedown/issues"
+		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
 	"files": ["dist"],
-	"homepage": "https://github.com/AlemTuzlak/typedown#readme",
+	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"publishConfig": {
 		"provenance": true
 	},
 	"dependencies": {
-		"@alemtuzlak/typedown": "workspace:*",
-		"chalk": "^5.4.1"
+		"chalk": "^5.4.1",
+		"kiira-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/node": "22.14.1",

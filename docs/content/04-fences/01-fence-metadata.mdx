@@ -1,0 +1,78 @@
+---
+title: "Fence metadata"
+summary: "Control how individual fences are checked with info-string tokens"
+description: "Reference for Kiira fence metadata tokens — ignore, validate, fixture, name, group, and package — written after the language on a Markdown code fence's info string."
+---
+
+## What is fence metadata?
+
+A Markdown code fence's first line is its **info string** — the part right after the opening backticks. The first word is the language; anything after it is metadata. Kiira reads metadata tokens to control how that specific fence is checked:
+
+````md
+```ts validate=type group=example name=basic
+const x = 1
+```
+````
+
+## Tokens
+
+| Token | Values | Description |
+| --- | --- | --- |
+| `ignore` | — | Skip this fence entirely; Kiira does not type-check it. |
+| `validate=` | `type` \| `runtime` \| `none` | Validation level for this fence. Overrides `defaultValidate`. |
+| `fixture=` | `<name>` | Apply a named fixture from your config to this fence. |
+| `name=` | `<id>` | Give the fence an id (useful for tooling and the VS Code "open virtual file" command). |
+| `group=` | `<id>` | Type-check this fence together with other fences that share the id, in document order. |
+| `package=` | `workspace` \| `packed` | Override `packageMode` for this fence's import resolution. |
+
+### `ignore`
+
+```md
+```ts ignore
+// pseudo-code, not meant to compile
+doSomething(...)
+```
+```
+
+### `validate=type|runtime|none`
+
+```md
+```ts validate=none
+// shown for illustration; don't validate
+```
+```
+
+### `fixture=<name>`
+
+Applies a named fixture (defined under `fixtures` in your config) so the fence has the imports/setup it needs:
+
+```md
+```ts fixture=setup
+app.route("/", handler)
+```
+```
+
+### `name=<id>` and `group=<id>`
+
+```md
+```ts name=step-1 group=walkthrough
+const user = getUser()
+```
+```
+
+`group=` is covered in depth on the [Grouping snippets](/latest/fences/grouping-snippets) page.
+
+### `package=workspace|packed`
+
+```md
+```ts package=packed
+import { thing } from "your-lib"
+```
+```
+
+## Default behavior worth knowing
+
+Two defaults trip people up, so they're worth stating explicitly:
+
+- **Unused symbols are ignored by default.** TypeScript's `TS6133` (declared but never read) is suppressed unless you enable `checkUnusedSymbols`. Docs routinely import or declare things purely for illustration.
+- **Unresolved *relative* imports are ignored by default.** A `./foo` that doesn't exist in the docs project won't fail unless you enable `checkRelativeImports`. **Bare package imports are always checked** — that's the whole point of validating against your real API.

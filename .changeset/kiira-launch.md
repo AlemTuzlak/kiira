@@ -1,0 +1,11 @@
+---
+"kiira-core": minor
+"kiira": minor
+"kiira-vscode": minor
+---
+
+Type-check TypeScript & JavaScript code fences in Markdown against your real
+project. Includes monorepo-aware module resolution, snippet grouping (`group=`),
+per-glob compiler-option overrides, language-tag detection, and a VS Code
+extension with live diagnostics and quick fixes (TypeScript auto-import, spelling,
+etc.) plus the `kiira` CLI and GitHub Action.

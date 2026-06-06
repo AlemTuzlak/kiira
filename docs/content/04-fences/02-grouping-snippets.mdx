@@ -1,0 +1,53 @@
+---
+title: "Grouping snippets"
+summary: "Type-check related fences together with group="
+description: "How Kiira groups code fences — by default each fence is an isolated module, but fences sharing a group= id are type-checked together in document order so later snippets can use earlier declarations."
+---
+
+## The default: isolated fences
+
+By default, **each fence is checked as its own isolated module.** That means a fence cannot see declarations from a fence above it. This snippet fails on its own because `user` is never defined:
+
+````md
+```ts
+console.log(user.name)
+```
+````
+
+## Grouping with `group=`
+
+When you give two or more fences the same `group=` id, Kiira type-checks them **together, in document order** — concatenating them into a single virtual module. A later fence can use a `const` (or any declaration) from an earlier fence in the same group:
+
+````md
+```ts group=walkthrough
+const user = getUser()
+```
+
+Some explanatory prose between the snippets…
+
+```ts group=walkthrough
+console.log(user.name) // ✅ `user` is in scope from the first fence
+```
+````
+
+This is exactly how step-by-step tutorials read: each fence builds on the last. Grouping lets you split a single coherent example across several fences with prose in between, while still type-checking it as one program.
+
+## Auto-detected continuations
+
+Kiira **auto-detects** when an ungrouped fence is really a continuation of an earlier one (for example, it references a symbol declared above). When detected:
+
+- During a normal `kiira check`, Kiira treats them as a continuation so you get meaningful results instead of spurious "cannot find name" errors.
+- Running [`kiira check --fix`](/latest/cli/fix) writes explicit `group=` tags onto those fences so the relationship is recorded in the Markdown:
+
+````md
+<!-- after `kiira check --fix` -->
+```ts group=example-1
+const user = getUser()
+```
+
+```ts group=example-1
+console.log(user.name)
+```
+````
+
+Adding the tags yourself is always fine, and it makes intent explicit for readers and other tooling.

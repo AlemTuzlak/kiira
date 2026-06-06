@@ -1,12 +1,6 @@
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
-import {
-	type TypedownConfig,
-	checkMarkdownFiles,
-	findConfigFile,
-	loadConfig,
-	loadConfigFile,
-} from "@alemtuzlak/typedown"
+import { type KiiraConfig, checkMarkdownFiles, findConfigFile, loadConfig, loadConfigFile } from "kiira-core"
 import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"
@@ -46,14 +40,14 @@ function createSourceLineReader(cwd: string): (markdownFile: string) => string[]
 }
 
 /**
- * Run `typedown check`. Returns the process exit code: 0 when clean, 1 when there
+ * Run `kiira check`. Returns the process exit code: 0 when clean, 1 when there
  * are validation errors. Configuration/runtime failures throw (the caller maps
  * those to exit code 2).
  */
 export async function runCheck(options: RunCheckOptions): Promise<number> {
 	const { cwd } = options
 
-	const loaded: TypedownConfig = options.config
+	const loaded: KiiraConfig = options.config
 		? await loadConfigFile(isAbsolute(options.config) ? options.config : resolve(cwd, options.config))
 		: await loadConfig(cwd)
 
@@ -62,7 +56,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	const entries = [...options.files, ...(options.entry ?? [])]
 	const include = entries.length > 0 ? toIncludeGlobs(cwd, entries) : loaded.include
 	const exclude = [...(loaded.exclude ?? []), ...toIgnoreGlobs(cwd, options.ignore ?? [])]
-	const config: TypedownConfig = { ...loaded, include, exclude }
+	const config: KiiraConfig = { ...loaded, include, exclude }
 
 	// Run the (slow) checking under a spinner, deferring all output until it stops
 	// so the spinner line and the report never interleave.
@@ -98,7 +92,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 			}
 
 			if (overrides.manual.length > 0) {
-				pending.push("Add these overrides to your Typedown config (config is not JSON, so apply manually):")
+				pending.push("Add these overrides to your Kiira config (config is not JSON, so apply manually):")
 				for (const fix of overrides.manual) {
 					const opts = Object.entries(fix.compilerOptions)
 						.map(([k, v]) => `"${k}": "${v}"`)

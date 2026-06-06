@@ -1,0 +1,58 @@
+---
+title: "Monorepos"
+summary: "Workspace mode resolves your monorepo packages automatically"
+description: "How Kiira's workspace package mode discovers pnpm, npm, and yarn workspaces, maps each package name to its source, and resolves @your-scope/* and third-party imports with no hand-written tsconfig paths."
+---
+
+## Workspace mode
+
+In a monorepo, your docs often import your own packages by name — `@your-scope/ui`, `@your-scope/core` — and those names map to local source folders, not anything published yet. Kiira handles this automatically with the default `packageMode: "workspace"`.
+
+```ts
+import { defineConfig } from "kiira-core"
+
+export default defineConfig({
+  include: ["docs/**/*.mdx"],
+  packageMode: "workspace", // the default
+})
+```
+
+## What workspace mode does
+
+When `packageMode` is `"workspace"`, Kiira:
+
+- **Discovers your workspaces** — it reads your `pnpm-workspace.yaml` (pnpm) or the `workspaces` field in `package.json` (npm / yarn) to find every package in the repo.
+- **Maps each package name to its source** — so a doc that imports `@your-scope/ui` resolves to that package's source code and is type-checked against the real, current API.
+- **Adds each package's `node_modules` as a resolution fallback** — so third-party libraries that a package depends on also resolve.
+
+The result: docs that import your `@your-scope/*` packages **and** their third-party dependencies type-check correctly, with **no hand-written tsconfig `paths`** to maintain.
+
+## Example
+
+Given a monorepo:
+
+```
+my-monorepo/
+├── pnpm-workspace.yaml
+├── packages/
+│   ├── ui/        # @your-scope/ui
+│   └── core/      # @your-scope/core
+└── docs/
+    └── *.mdx
+```
+
+A snippet in `docs/` can import your packages by name and Kiira resolves them to source:
+
+```tsx
+import { Button } from "@your-scope/ui"
+import { createClient } from "@your-scope/core"
+
+const client = createClient()
+const el = <Button onClick={() => client.refresh()}>Refresh</Button>
+```
+
+If `Button` later drops the `onClick` prop or `createClient` changes its signature, this snippet fails the check — even though the package was never published.
+
+## When to use `packed` instead
+
+If you'd rather check docs against the **published / packed** form of a package (the shape consumers actually install), set `packageMode: "packed"` globally, or override it per fence with the `package=packed` token. See [Fence metadata](/latest/fences/fence-metadata).

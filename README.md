@@ -1,24 +1,37 @@
 <div align="center">
 
-# Typedown
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/AlemTuzlak/kiira/main/assets/cover-light.png" />
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/AlemTuzlak/kiira/main/assets/cover-dark.png" />
+  <img alt="Kiira — type-check the code in your Markdown" src="https://raw.githubusercontent.com/AlemTuzlak/kiira/main/assets/cover-dark.png" width="860" />
+</picture>
+
+# Kiira
 
 **Type-check the code in your Markdown.**
 
-Typedown extracts TypeScript and JavaScript code fences from your Markdown docs, type-checks
+Kiira extracts TypeScript and JavaScript code fences from your Markdown docs, type-checks
 them against your real project API, and reports any errors right back on the Markdown line —
 in your editor, on the command line, and in CI.
 
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/CodeForge.typedown-vscode?label=VS%20Code%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=CodeForge.typedown-vscode)
-[![npm](https://img.shields.io/npm/v/@alemtuzlak/typedown-cli?label=@alemtuzlak/typedown-cli&logo=npm)](https://www.npmjs.com/package/@alemtuzlak/typedown-cli)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/CodeForge.kiira-vscode?label=VS%20Code%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode)
+[![npm](https://img.shields.io/npm/v/kiira?label=kiira&logo=npm)](https://www.npmjs.com/package/kiira)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
 
 ---
 
+## Documentation
+
+📚 **Full documentation lives in [`/docs`](docs)** — a browsable site covering every CLI
+feature, configuration, CI recipes, and the VS Code extension. Run it locally with
+`pnpm install && pnpm run dev` from inside `docs/`, or deploy it (Docker / Fly.io configs are
+included).
+
 ## Why
 
-Docs are increasingly written and updated by agents, and agents hallucinate APIs. Typedown
+Docs are increasingly written and updated by agents, and agents hallucinate APIs. Kiira
 catches the things that make a copy-pasted example fail:
 
 - invalid imports and missing exports
@@ -31,21 +44,21 @@ catches the things that make a copy-pasted example fail:
 
 | Package                                     | Description                                            |
 | ------------------------------------------- | ------------------------------------------------------ |
-| [`@alemtuzlak/typedown`](packages/core)           | Extraction, virtual files, type-checking, diagnostics. |
-| [`@alemtuzlak/typedown-cli`](packages/cli)             | `typedown check` for local and CI validation.          |
-| [`typedown-vscode`](packages/vscode)        | Live squiggles inside Markdown code fences.            |
-| [`typedown-action`](packages/github-action) | GitHub composite action for CI.                        |
+| [`kiira-core`](packages/core)           | Extraction, virtual files, type-checking, diagnostics. |
+| [`kiira`](packages/cli)             | `kiira check` for local and CI validation.          |
+| [`kiira-vscode`](packages/vscode)        | Live squiggles inside Markdown code fences.            |
+| [`kiira-action`](packages/github-action) | GitHub composite action for CI.                        |
 
 ## Quick start
 
 ```bash
-pnpm add -D @alemtuzlak/typedown-cli
+pnpm add -D kiira
 ```
 
-Create a `tsconfig.docs.json` and (optionally) a `typedown.config.ts`, then run:
+Create a `tsconfig.docs.json` and (optionally) a `kiira.config.ts`, then run:
 
 ```bash
-typedown check
+kiira check
 ```
 
 ### Fence format
@@ -88,13 +101,13 @@ await client.send("hi")   // resolves: same group as the snippet above
 ```
 ````
 
-Typedown also **detects** ungrouped continuations automatically — if grouping a document's
-snippets would resolve "cannot find name" errors, it warns and `typedown check --fix` adds the
+Kiira also **detects** ungrouped continuations automatically — if grouping a document's
+snippets would resolve "cannot find name" errors, it warns and `kiira check --fix` adds the
 `group=` tags for you.
 
 ## Monorepos
 
-In `packageMode: "workspace"` (the default) Typedown discovers your pnpm/npm/yarn workspace,
+In `packageMode: "workspace"` (the default) Kiira discovers your pnpm/npm/yarn workspace,
 maps every package name to its source, and adds each package's `node_modules` as a resolution
 fallback. So in a monorepo, docs that import `@your-scope/*` **and** third-party libs resolve
 out of the box — no hand-written `tsconfig` `paths` required.
@@ -115,33 +128,33 @@ export default defineConfig({
 ```
 
 Each override's non-`include` fields are merged onto the base compiler options for matching
-files (Typedown runs a separate TypeScript program per distinct option set). Typedown also
+files (Kiira runs a separate TypeScript program per distinct option set). Kiira also
 **detects** the framework from the file path: if a file's JSX fails for lack of the right
-runtime types (TS7026), it suggests a `jsxImportSource` override and `typedown check --fix`
+runtime types (TS7026), it suggests a `jsxImportSource` override and `kiira check --fix`
 writes it into a JSON config for you.
 
 ## Language-tag checking
 
-Typedown warns when a `ts` fence actually contains JSX (it should be `tsx`), checks it as `tsx`
+Kiira warns when a `ts` fence actually contains JSX (it should be `tsx`), checks it as `tsx`
 anyway so you get real type errors instead of a syntax-error cascade, and can rewrite the tag
 for you:
 
 ```bash
-typedown check --fix    # rewrites mistagged fences (ts/typescript -> tsx)
+kiira check --fix    # rewrites mistagged fences (ts/typescript -> tsx)
 ```
 
 ## CLI
 
 ```bash
-typedown check                     # validate everything in your include globs
-typedown check --entry docs        # check a directory (repeatable)
-typedown check --entry docs --ignore docs/api   # ...excluding a subdirectory
-typedown check "docs/**/*.md"      # validate specific files/globs
-typedown check --reporter json     # machine-readable output
-typedown check --reporter github   # GitHub Actions annotations
-typedown check --fix               # rewrite mistagged code fences (ts -> tsx)
-typedown check --verbose           # full messages + code frames (default is compact)
-typedown init                      # scaffold typedown.config.ts + tsconfig.docs.json
+kiira check                     # validate everything in your include globs
+kiira check --entry docs        # check a directory (repeatable)
+kiira check --entry docs --ignore docs/api   # ...excluding a subdirectory
+kiira check "docs/**/*.md"      # validate specific files/globs
+kiira check --reporter json     # machine-readable output
+kiira check --reporter github   # GitHub Actions annotations
+kiira check --fix               # rewrite mistagged code fences (ts -> tsx)
+kiira check --verbose           # full messages + code frames (default is compact)
+kiira init                      # scaffold kiira.config.ts + tsconfig.docs.json
 ```
 
 ### Flags
@@ -150,7 +163,7 @@ typedown init                      # scaffold typedown.config.ts + tsconfig.docs
 | --- | --- |
 | `--entry <path>` | Directory, file, or glob to check. Repeatable. Overrides `include`. |
 | `--ignore <path>` | Directory, file, or glob to exclude. Repeatable (e.g. `--ignore docs/api`). |
-| `--config <path>` | Path to a Typedown config file. |
+| `--config <path>` | Path to a Kiira config file. |
 | `--reporter <name>` | Output format: `pretty` (default), `json`, or `github` (Actions annotations). |
 | `--fix` | Apply auto-fixes: rewrite mistagged fences (`ts`→`tsx`), add `group=` tags, write framework `jsxImportSource` overrides. |
 | `--verbose` | Full error messages and code frames (default output is compact). |
@@ -163,10 +176,10 @@ Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
 
 ### Configuration
 
-`typedown.config.ts` (or `.js`/`.json`); all fields are optional except `include`:
+`kiira.config.ts` (or `.js`/`.json`); all fields are optional except `include`:
 
 ```ts
-import { defineConfig } from "@alemtuzlak/typedown"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.md", "README.md"],
@@ -229,10 +242,10 @@ reader's project. Bare package imports (`@scope/pkg`, `react`) are always checke
 
 ## Editor (VS Code)
 
-Install **Typedown** from the
-[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CodeForge.typedown-vscode)
-(or `ext install CodeForge.typedown-vscode`). It also publishes to
-[Open VSX](https://open-vsx.org/extension/CodeForge/typedown-vscode).
+Install **Kiira** from the
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode)
+(or `ext install CodeForge.kiira-vscode`). It also publishes to
+[Open VSX](https://open-vsx.org/extension/CodeForge/kiira-vscode).
 
 It type-checks your Markdown code fences against your real project, live:
 
@@ -241,7 +254,7 @@ It type-checks your Markdown code fences against your real project, live:
 - **Quick fixes** (`Ctrl+.` / `Cmd+.`):
   - TypeScript's own fixes inside fences — **auto-import a missing symbol**, fix a
     misspelled name, add a missing `await`, implement an interface, …
-  - Typedown's fixes — change a mistagged `` ```ts `` fence to `` ```tsx `` for JSX,
+  - Kiira's fixes — change a mistagged `` ```ts `` fence to `` ```tsx `` for JSX,
     or tag continuation snippets with `group=…`.
 - **Inspect** the generated virtual file for any snippet.
 
@@ -249,30 +262,30 @@ It type-checks your Markdown code fences against your real project, live:
 
 | Command | Description |
 | --- | --- |
-| `Typedown: Check Current File` | Re-check the active Markdown document. |
-| `Typedown: Check Workspace` | Check every Markdown file in the workspace. |
-| `Typedown: Open Virtual File For Snippet` | Inspect the generated code for a fence. |
-| `Typedown: Restart Typedown Server` | Clear and re-check all open documents. |
+| `Kiira: Check Current File` | Re-check the active Markdown document. |
+| `Kiira: Check Workspace` | Check every Markdown file in the workspace. |
+| `Kiira: Open Virtual File For Snippet` | Inspect the generated code for a fence. |
+| `Kiira: Restart Kiira Server` | Clear and re-check all open documents. |
 
 ### Settings
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `typedown.enable` | `true` | Enable Typedown diagnostics in Markdown files. |
-| `typedown.configPath` | `typedown.config.ts` | Path to the Typedown config, relative to the workspace root. |
-| `typedown.debounceMs` | `300` | Delay before re-checking after a change. |
-| `typedown.checkOnChange` | `true` | Re-check as the document changes (debounced). |
-| `typedown.checkOnSave` | `true` | Re-check when the document is saved. |
-| `typedown.showGeneratedDiagnostics` | `false` | Show diagnostics from generated fixture code (debugging). |
+| `kiira.enable` | `true` | Enable Kiira diagnostics in Markdown files. |
+| `kiira.configPath` | `kiira.config.ts` | Path to the Kiira config, relative to the workspace root. |
+| `kiira.debounceMs` | `300` | Delay before re-checking after a change. |
+| `kiira.checkOnChange` | `true` | Re-check as the document changes (debounced). |
+| `kiira.checkOnSave` | `true` | Re-check when the document is saved. |
+| `kiira.showGeneratedDiagnostics` | `false` | Show diagnostics from generated fixture code (debugging). |
 
 ## CI
 
 Use the [composite action](packages/github-action):
 
 ```yaml
-- uses: AlemTuzlak/typedown/packages/github-action@v1
+- uses: AlemTuzlak/kiira/packages/github-action@v1
   with:
-    command: pnpm typedown check
+    command: pnpm kiira check
     reporter: github
 ```
 

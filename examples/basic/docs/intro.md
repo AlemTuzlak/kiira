@@ -1,6 +1,6 @@
 # Basic example
 
-Typedown type-checks the snippets below against TypeScript and the `node` types.
+Kiira type-checks the snippets below against TypeScript and the `node` types.
 
 A snippet using Node's promises API (top-level `await` works because every
 snippet is treated as a module):
