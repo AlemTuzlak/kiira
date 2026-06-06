@@ -18,10 +18,30 @@ Kiira ships three artifacts from this monorepo:
    - publishes `kiira-core` and `kiira` to npm (with provenance), and
    - bumps `kiira-vscode`'s version, which triggers the **Publish VS Code
      Extension** workflow to build, package, and publish the `.vsix` to the
-     Marketplace and Open VSX, then tag + cut a GitHub Release.
+     Marketplace and Open VSX, then tag + cut a GitHub Release, and
+   - deploys the production docs (the `deploy-docs` job in **Release**).
 
 The VS Code extension is `private: true`, so Changesets version-bumps it but never
 publishes it to npm — only the Marketplace workflow ships it.
+
+> [!IMPORTANT]
+> **Merge the "Version Packages" PR with a *merge commit* — not a squash.**
+> Changesets opens that PR as `github-actions[bot]`, and GitHub will not trigger
+> workflows from a bot-authored push (anti-recursion, because CI uses the default
+> `GITHUB_TOKEN`). A **merge commit** is authored by *you* (the human clicking
+> merge), so it triggers the **Release** workflow and everything downstream
+> publishes automatically. A **squash** rewrites the tip into a single
+> bot-authored commit, which does **not** trigger anything — so the version bump
+> lands on `main` but nothing publishes.
+>
+> If you do squash it by accident (or the publish otherwise doesn't fire), the
+> recovery is one click: run the **Release** workflow manually via
+> *workflow_dispatch* (Actions → Release → Run workflow). `changeset publish` is
+> idempotent — it only publishes versions not already on npm, and the VS Code and
+> docs jobs self-gate the same way, so a manual run is always safe.
+>
+> Normal feature PRs can be squashed freely; this only matters for the
+> Changesets-authored "Version Packages" PR.
 
 ## One-time setup (required before the first publish)
 

@@ -6,6 +6,12 @@ name: 🧹 Docs Preview Cleanup
 on:
   pull_request:
     types: [closed]
+    # Only PRs that touch docs/ get a preview app (see docs-preview.yml), so only
+    # those need teardown. Without this filter the job runs for every closed PR
+    # and `fly apps destroy` fails with "Could not find App" for PRs that never
+    # had a preview (e.g. workflow- or package-only changes).
+    paths:
+      - "docs/**"
 
 concurrency:
   group: docs-preview-cleanup-${{ github.event.number }}
