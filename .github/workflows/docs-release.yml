@@ -74,4 +74,5 @@ jobs:
         if: steps.deploy.outputs.app_url != ''
         env:
           APP_URL: ${{ steps.deploy.outputs.app_url }}
-        run: echo "📚 Docs deployed: $APP_URL" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "📚 Docs deployed: $APP_URL" >> "$GITHUB_STEP_SUMMARY"
