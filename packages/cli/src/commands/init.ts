@@ -2,7 +2,7 @@ import { existsSync } from "node:fs"
 import { writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
-const CONFIG_TEMPLATE = `import { defineConfig } from "@alemtuzlak/kiira-core"
+const CONFIG_TEMPLATE = `import { defineConfig } from "kiira-core"
 
 export default defineConfig({
 \tinclude: ["docs/**/*.md", "README.md"],

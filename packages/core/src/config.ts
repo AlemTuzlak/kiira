@@ -80,7 +80,7 @@ export async function loadConfigFile(filepath: string): Promise<KiiraConfig> {
 		return JSON.parse(raw) as KiiraConfig
 	}
 
-	// Resolve bare imports (e.g. `@alemtuzlak/kiira-core`) relative to the config's directory.
+	// Resolve bare imports (e.g. `kiira-core`) relative to the config's directory.
 	const jiti = createJiti(pathToFileURL(join(dirname(filepath), "__kiira_config__.js")).href)
 	return jiti.import<KiiraConfig>(filepath, { default: true })
 }

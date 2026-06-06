@@ -1,4 +1,4 @@
-// @alemtuzlak/kiira-core public API.
+// kiira-core public API.
 
 export const KIIRA_CORE_VERSION = "0.1.0"
 

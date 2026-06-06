@@ -1,15 +1,15 @@
 ---
 title: "The config file"
 summary: "Define Kiira's behavior with defineConfig in kiira.config.ts"
-description: "How to create a Kiira config file with defineConfig from @alemtuzlak/kiira-core, the supported file variants, and how Kiira discovers your config."
+description: "How to create a Kiira config file with defineConfig from kiira-core, the supported file variants, and how Kiira discovers your config."
 ---
 
 ## Creating a config
 
-Kiira is configured with a `kiira.config.ts` file at the root of your project, built with `defineConfig` from `@alemtuzlak/kiira-core`:
+Kiira is configured with a `kiira.config.ts` file at the root of your project, built with `defineConfig` from `kiira-core`:
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.md", "docs/**/*.mdx", "README.md"],

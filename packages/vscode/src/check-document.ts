@@ -7,7 +7,7 @@ import {
 	createVirtualFiles,
 	extractSnippetsFromContent,
 	resolveConfig,
-} from "@alemtuzlak/kiira-core"
+} from "kiira-core"
 
 export interface CheckDocumentInput {
 	/** Workspace root used for config, tsconfig, and module resolution. */

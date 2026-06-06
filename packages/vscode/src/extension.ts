@@ -8,7 +8,7 @@ import {
 	loadConfig,
 	loadConfigFile,
 	setTypescriptLibDir,
-} from "@alemtuzlak/kiira-core"
+} from "kiira-core"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
 import { KiiraCodeActionProvider } from "./code-actions"

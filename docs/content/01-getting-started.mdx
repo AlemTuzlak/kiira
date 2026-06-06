@@ -11,10 +11,10 @@ You have a project with Markdown docs full of TypeScript or JavaScript examples,
 Install the Kiira CLI as a dev dependency in the project whose docs you want to check:
 
 ```bash
-pnpm add -D @alemtuzlak/kiira
+pnpm add -D kiira
 ```
 
-The CLI depends on `@alemtuzlak/kiira-core`, which is installed automatically. You only need to depend on `kiira-core` directly if you want to import `defineConfig` or call the check engine programmatically.
+The CLI depends on `kiira-core`, which is installed automatically. You only need to depend on `kiira-core` directly if you want to import `defineConfig` or call the check engine programmatically.
 
 <InfoAlert title="Install it where your types live">
 Kiira runs the TypeScript compiler against **your project's own types**. Install it inside the project (or workspace) whose API your docs reference, so those types resolve.
@@ -30,13 +30,13 @@ pnpm kiira init
 
 This creates two files:
 
-- **`kiira.config.ts`** — your Kiira configuration, using `defineConfig` from `@alemtuzlak/kiira-core`.
+- **`kiira.config.ts`** — your Kiira configuration, using `defineConfig` from `kiira-core`.
 - **`tsconfig.docs.json`** — a TypeScript config Kiira uses when compiling your snippets. Kiira automatically prefers `tsconfig.docs.json` over `tsconfig.json` if it exists, so you can relax or tighten rules for docs without touching your app's config.
 
 A minimal generated `kiira.config.ts` looks like this:
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["**/*.md", "**/*.mdx"],
@@ -59,7 +59,7 @@ Kiira checks fenced code blocks whose language is one of `ts`, `tsx`, `js`, or `
 
 ````md
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 const config = defineConfig({
   include: ["docs/**/*.md"],
@@ -82,7 +82,7 @@ See the [Fence metadata](/latest/fences/fence-metadata) reference for every avai
 
 ```bash
 # 1. Install
-pnpm add -D @alemtuzlak/kiira
+pnpm add -D kiira
 
 # 2. Scaffold kiira.config.ts + tsconfig.docs.json
 pnpm kiira init

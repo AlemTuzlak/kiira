@@ -9,7 +9,7 @@ description: "How Kiira's workspace package mode discovers pnpm, npm, and yarn w
 In a monorepo, your docs often import your own packages by name — `@your-scope/ui`, `@your-scope/core` — and those names map to local source folders, not anything published yet. Kiira handles this automatically with the default `packageMode: "workspace"`.
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.mdx"],

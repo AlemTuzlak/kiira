@@ -1,12 +1,6 @@
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
-import {
-	type KiiraConfig,
-	checkMarkdownFiles,
-	findConfigFile,
-	loadConfig,
-	loadConfigFile,
-} from "@alemtuzlak/kiira-core"
+import { type KiiraConfig, checkMarkdownFiles, findConfigFile, loadConfig, loadConfigFile } from "kiira-core"
 import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"

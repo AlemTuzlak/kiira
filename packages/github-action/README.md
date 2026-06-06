@@ -4,7 +4,7 @@ A GitHub composite action that runs [Kiira](https://github.com/AlemTuzlak/kiira)
 type-check the TypeScript and JavaScript code fences in your Markdown docs as part of CI.
 
 The action assumes Kiira is already installed in your project (e.g. via
-`pnpm add -D @alemtuzlak/kiira`) and that dependencies have been installed in a previous step.
+`pnpm add -D kiira`) and that dependencies have been installed in a previous step.
 
 ## Usage
 

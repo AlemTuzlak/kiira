@@ -1,6 +1,6 @@
 ---
-"@alemtuzlak/kiira-core": minor
-"@alemtuzlak/kiira": minor
+"kiira-core": minor
+"kiira": minor
 "kiira-vscode": minor
 ---
 

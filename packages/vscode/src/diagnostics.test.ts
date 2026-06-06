@@ -1,4 +1,4 @@
-import type { KiiraDiagnostic } from "@alemtuzlak/kiira-core"
+import type { KiiraDiagnostic } from "kiira-core"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 
 function diag(overrides: Partial<KiiraDiagnostic> = {}): KiiraDiagnostic {

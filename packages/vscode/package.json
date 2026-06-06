@@ -94,7 +94,7 @@
 		"directory": "packages/vscode"
 	},
 	"dependencies": {
-		"@alemtuzlak/kiira-core": "workspace:*"
+		"kiira-core": "workspace:*"
 	},
 	"devDependencies": {
 		"@types/node": "22.14.1",

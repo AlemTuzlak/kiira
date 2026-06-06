@@ -9,7 +9,7 @@ description: "Use Kiira overrides to set compiler options like jsxImportSource p
 Some doc sites cover **multiple frameworks** — a React guide, a Solid guide, a Preact guide — all in one repository. Each needs different compiler options, most commonly a different `jsxImportSource` so JSX compiles against the right runtime. The `overrides` option lets you set compiler options per glob.
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.mdx"],

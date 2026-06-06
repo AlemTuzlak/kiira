@@ -7,9 +7,9 @@
 		"check:docs": "kiira check"
 	},
 	"devDependencies": {
-		"@alemtuzlak/kiira": "workspace:*",
-		"@alemtuzlak/kiira-core": "workspace:*",
 		"@types/node": "22.14.1",
+		"kiira": "workspace:*",
+		"kiira-core": "workspace:*",
 		"typescript": "^5.4.0"
 	}
 }

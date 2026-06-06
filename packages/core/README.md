@@ -6,29 +6,29 @@
   <img alt="Kiira — type-check the code in your Markdown" src="https://raw.githubusercontent.com/AlemTuzlak/kiira/main/assets/cover-dark.png" width="860" />
 </picture>
 
-# @alemtuzlak/kiira-core
+# kiira-core
 
 **The Kiira engine — extract Markdown code fences, type-check them, and map diagnostics back to source.**
 
-[![npm](https://img.shields.io/npm/v/@alemtuzlak/kiira-core?label=@alemtuzlak/kiira-core&logo=npm)](https://www.npmjs.com/package/@alemtuzlak/kiira-core)
+[![npm](https://img.shields.io/npm/v/kiira-core?label=kiira-core&logo=npm)](https://www.npmjs.com/package/kiira-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/AlemTuzlak/kiira/blob/main/LICENSE)
 
 </div>
 
 ---
 
-`@alemtuzlak/kiira-core` is the programmatic engine behind the [`kiira` CLI](https://www.npmjs.com/package/@alemtuzlak/kiira)
+`kiira-core` is the programmatic engine behind the [`kiira` CLI](https://www.npmjs.com/package/kiira)
 and the [Kiira VS Code extension](https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode).
 Install it directly when you want to embed Markdown code-fence type-checking in your own
 tooling — a custom CLI, a lint rule, a docs pipeline, or an editor integration.
 
-> Most users want the [`kiira` CLI](https://www.npmjs.com/package/@alemtuzlak/kiira) instead.
+> Most users want the [`kiira` CLI](https://www.npmjs.com/package/kiira) instead.
 > Reach for `kiira-core` only when you're building tooling on top of the engine.
 
 ## Install
 
 ```bash
-pnpm add @alemtuzlak/kiira-core
+pnpm add kiira-core
 ```
 
 The package is published dual ESM/CJS with full type declarations.
@@ -55,7 +55,7 @@ Kiira's pipeline is a sequence of pure-ish stages you can use end-to-end or one 
 Define a config with full type-checking and autocomplete:
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.md", "README.md"],
@@ -69,7 +69,7 @@ Check Markdown files programmatically — `checkMarkdownFiles` runs the whole pi
 (discover → extract → virtualize → type-check) and returns typed diagnostics and stats:
 
 ```ts
-import { checkMarkdownFiles } from "@alemtuzlak/kiira-core"
+import { checkMarkdownFiles } from "kiira-core"
 
 const result = await checkMarkdownFiles({
   cwd: process.cwd(),
@@ -90,7 +90,7 @@ console.log(result.stats) // { markdownFiles, snippets, checked, ignored, errors
 
 ## Public API
 
-`@alemtuzlak/kiira-core` exports the whole pipeline. Highlights:
+`kiira-core` exports the whole pipeline. Highlights:
 
 | Export | Purpose |
 | --- | --- |
@@ -110,7 +110,7 @@ All input/result/option shapes are exported as types (e.g. `KiiraConfig`, `Resol
 
 ## Configuration reference
 
-See the [`kiira` CLI README](https://www.npmjs.com/package/@alemtuzlak/kiira) for the full
+See the [`kiira` CLI README](https://www.npmjs.com/package/kiira) for the full
 config and fence-metadata reference (`include`, `exclude`, `tsconfig`, `packageMode`,
 `defaultValidate`, `checkUnusedSymbols`, `checkRelativeImports`, `overrides`, `fixtures`,
 `defaultFixture`, `languages`) — `kiira-core` consumes exactly the same shape via `defineConfig`.

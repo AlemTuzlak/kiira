@@ -1,4 +1,4 @@
-import type { KiiraDiagnostic } from "@alemtuzlak/kiira-core"
+import type { KiiraDiagnostic } from "kiira-core"
 
 /**
  * Filter the diagnostics that should be shown for a document. Generated

@@ -25,7 +25,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 const DOCS_BASE = `/${getLatestVersion()}`
 const GITHUB_URL = "https://github.com/AlemTuzlak/kiira"
-const NPM_URL = "https://www.npmjs.com/package/@alemtuzlak/kiira"
+const NPM_URL = "https://www.npmjs.com/package/kiira"
 const MARKETPLACE_URL = "https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode"
 
 type CardDef = {
@@ -87,7 +87,7 @@ const SURFACES: SurfaceDef[] = [
 	{
 		icon: "Code",
 		title: "CLI",
-		body: "Install @alemtuzlak/kiira and run kiira check locally or in CI.",
+		body: "Install kiira and run kiira check locally or in CI.",
 		cta: "View on npm",
 		href: NPM_URL,
 	},
@@ -130,7 +130,7 @@ function CommandBlock() {
 	return (
 		<pre className="w-full max-w-2xl overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-background-active)] px-5 py-4 text-left font-mono text-[var(--color-text-active)] text-sm">
 			<code>
-				<span className="text-[var(--color-text-muted)]">$ </span>pnpm add -D @alemtuzlak/kiira
+				<span className="text-[var(--color-text-muted)]">$ </span>pnpm add -D kiira
 				{"\n"}
 				<span className="text-[var(--color-text-muted)]">$ </span>pnpm kiira init
 				{"\n"}

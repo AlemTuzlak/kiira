@@ -7,7 +7,7 @@ import type { ComponentPropsWithoutRef } from "react"
  *
  * Example usage:
  * <p>
- *   Install it using <InlineCode>pnpm add -D @alemtuzlak/kiira</InlineCode>.
+ *   Install it using <InlineCode>pnpm add -D kiira</InlineCode>.
  * </p>
  */
 export const InlineCode = (props: ComponentPropsWithoutRef<"code">) => {

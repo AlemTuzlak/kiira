@@ -1,5 +1,5 @@
-import type { KiiraCheckResult, KiiraDiagnostic } from "@alemtuzlak/kiira-core"
 import { Chalk, type ChalkInstance } from "chalk"
+import type { KiiraCheckResult, KiiraDiagnostic } from "kiira-core"
 import type { ReporterName } from "./args"
 
 interface ReporterContext {

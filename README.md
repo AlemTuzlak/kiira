@@ -15,7 +15,7 @@ them against your real project API, and reports any errors right back on the Mar
 in your editor, on the command line, and in CI.
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/CodeForge.kiira-vscode?label=VS%20Code%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode)
-[![npm](https://img.shields.io/npm/v/@alemtuzlak/kiira?label=@alemtuzlak/kiira&logo=npm)](https://www.npmjs.com/package/@alemtuzlak/kiira)
+[![npm](https://img.shields.io/npm/v/kiira?label=kiira&logo=npm)](https://www.npmjs.com/package/kiira)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -44,15 +44,15 @@ catches the things that make a copy-pasted example fail:
 
 | Package                                     | Description                                            |
 | ------------------------------------------- | ------------------------------------------------------ |
-| [`@alemtuzlak/kiira-core`](packages/core)           | Extraction, virtual files, type-checking, diagnostics. |
-| [`@alemtuzlak/kiira`](packages/cli)             | `kiira check` for local and CI validation.          |
+| [`kiira-core`](packages/core)           | Extraction, virtual files, type-checking, diagnostics. |
+| [`kiira`](packages/cli)             | `kiira check` for local and CI validation.          |
 | [`kiira-vscode`](packages/vscode)        | Live squiggles inside Markdown code fences.            |
 | [`kiira-action`](packages/github-action) | GitHub composite action for CI.                        |
 
 ## Quick start
 
 ```bash
-pnpm add -D @alemtuzlak/kiira
+pnpm add -D kiira
 ```
 
 Create a `tsconfig.docs.json` and (optionally) a `kiira.config.ts`, then run:
@@ -179,7 +179,7 @@ Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
 `kiira.config.ts` (or `.js`/`.json`); all fields are optional except `include`:
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.md", "README.md"],

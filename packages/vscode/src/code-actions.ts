@@ -5,7 +5,7 @@ import {
 	type KiiraFix,
 	type VirtualFile,
 	getCodeFixes,
-} from "@alemtuzlak/kiira-core"
+} from "kiira-core"
 import * as vscode from "vscode"
 import { fenceLanguageTokenRange } from "./fence-edits"
 

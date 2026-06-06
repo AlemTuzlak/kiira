@@ -1,4 +1,4 @@
-import type { KiiraCheckResult } from "@alemtuzlak/kiira-core"
+import type { KiiraCheckResult } from "kiira-core"
 import { formatGithub, formatJson, formatPretty } from "./reporters"
 
 function result(): KiiraCheckResult {

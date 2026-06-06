@@ -6,18 +6,18 @@
   <img alt="Kiira — type-check the code in your Markdown" src="https://raw.githubusercontent.com/AlemTuzlak/kiira/main/assets/cover-dark.png" width="860" />
 </picture>
 
-# @alemtuzlak/kiira
+# kiira
 
 **The Kiira command line — type-check the code in your Markdown.**
 
-[![npm](https://img.shields.io/npm/v/@alemtuzlak/kiira?label=@alemtuzlak/kiira&logo=npm)](https://www.npmjs.com/package/@alemtuzlak/kiira)
+[![npm](https://img.shields.io/npm/v/kiira?label=kiira&logo=npm)](https://www.npmjs.com/package/kiira)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/AlemTuzlak/kiira/blob/main/LICENSE)
 
 </div>
 
 ---
 
-`@alemtuzlak/kiira` installs the `kiira` binary. It extracts the TypeScript and JavaScript
+`kiira` installs the `kiira` binary. It extracts the TypeScript and JavaScript
 code fences from your Markdown, type-checks them against your **real project API** — the same
 `tsconfig`, the same workspace packages, the same dependency types — and reports any errors
 back on the exact Markdown line, locally and in CI.
@@ -40,7 +40,7 @@ catches the things that make a copy-pasted example fail:
 ## Install
 
 ```bash
-pnpm add -D @alemtuzlak/kiira      # npm i -D / yarn add -D / bun add -d
+pnpm add -D kiira      # npm i -D / yarn add -D / bun add -d
 ```
 
 The package ships the `kiira` bin, so `pnpm kiira …` (or `npx kiira …`) just works.
@@ -150,7 +150,7 @@ codes are what make Kiira a CI gate.
 `include`:
 
 ```ts
-import { defineConfig } from "@alemtuzlak/kiira-core"
+import { defineConfig } from "kiira-core"
 
 export default defineConfig({
   include: ["docs/**/*.md", "README.md"],
