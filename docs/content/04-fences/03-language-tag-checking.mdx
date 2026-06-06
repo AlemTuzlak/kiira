@@ -25,7 +25,7 @@ const el = <Button onClick={handleClick}>Save</Button>
 
 ## Fixing the tag
 
-Run [`kiira check --fix`](/cli/fix) to rewrite the language tag from `ts`/`typescript` to `tsx`:
+Run [`kiira check --fix`](/latest/cli/fix) to rewrite the language tag from `ts`/`typescript` to `tsx`:
 
 ````md
 <!-- after `kiira check --fix` -->
@@ -36,4 +36,6 @@ const el = <Button onClick={handleClick}>Save</Button>
 
 Because Kiira already checks mislabeled fences as `tsx`, fixing the tag doesn't change the validation result — it just makes the Markdown accurate and improves highlighting.
 
-> Note: if the JSX targets a framework other than the default React runtime (Solid, Preact, …), you may also need a `jsxImportSource` override. See [Per-glob overrides](/projects/per-glob-overrides).
+<InfoAlert title="Non-React JSX?">
+If the JSX targets a framework other than the default React runtime (Solid, Preact, …), you may also need a `jsxImportSource` override. See [Per-glob overrides](/latest/projects/per-glob-overrides).
+</InfoAlert>

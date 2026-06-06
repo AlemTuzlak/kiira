@@ -4,6 +4,10 @@ summary: "Annotate failing docs on pull requests with the Kiira GitHub Action"
 description: "Use the official Kiira GitHub Action to run kiira check in CI and surface failures as inline annotations on the exact Markdown line. Documents the command, config, reporter, files, and working-directory inputs."
 ---
 
+<InfoAlert title="Not using GitHub Actions?">
+The composite action is GitHub-specific. To run Kiira in GitLab CI, CircleCI, Jenkins, or any other runner, see [Any CI runner](/latest/ci/any-ci) — it's the same `kiira check` gated by its exit code.
+</InfoAlert>
+
 ## Usage
 
 Add the Kiira action to a workflow. With the `github` reporter (the action's default), failures appear as inline annotations on the exact Markdown line in the pull request:

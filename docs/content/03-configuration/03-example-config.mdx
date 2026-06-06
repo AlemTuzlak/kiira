@@ -42,18 +42,18 @@ export default defineConfig({
   overrides: [
     {
       include: ["docs/solid/**/*.mdx"],
-      compilerOptions: { jsxImportSource: "solid-js" },
+      jsxImportSource: "solid-js",
     },
     {
       include: ["docs/preact/**/*.mdx"],
-      compilerOptions: { jsxImportSource: "preact" },
+      jsxImportSource: "preact",
     },
   ],
 
   // Shared setup injected into snippets that opt in via `fixture=`.
   fixtures: {
     setup: {
-      prepend: `import { createApp } from "your-lib"\nconst app = createApp()`,
+      type: "prepend", content: `import { createApp } from "your-lib"\nconst app = createApp()`,
     },
   },
 
@@ -62,4 +62,4 @@ export default defineConfig({
 })
 ```
 
-For the meaning and defaults of each option, see the [Options reference](/configuration/options).
+For the meaning and defaults of each option, see the [Options reference](/latest/configuration/options).

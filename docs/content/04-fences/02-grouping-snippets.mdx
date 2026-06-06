@@ -37,7 +37,7 @@ This is exactly how step-by-step tutorials read: each fence builds on the last. 
 Kiira **auto-detects** when an ungrouped fence is really a continuation of an earlier one (for example, it references a symbol declared above). When detected:
 
 - During a normal `kiira check`, Kiira treats them as a continuation so you get meaningful results instead of spurious "cannot find name" errors.
-- Running [`kiira check --fix`](/cli/fix) writes explicit `group=` tags onto those fences so the relationship is recorded in the Markdown:
+- Running [`kiira check --fix`](/latest/cli/fix) writes explicit `group=` tags onto those fences so the relationship is recorded in the Markdown:
 
 ````md
 <!-- after `kiira check --fix` -->

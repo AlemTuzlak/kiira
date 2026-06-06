@@ -16,11 +16,11 @@ export default defineConfig({
   overrides: [
     {
       include: ["docs/solid/**/*.mdx"],
-      compilerOptions: { jsxImportSource: "solid-js" },
+      jsxImportSource: "solid-js",
     },
     {
       include: ["docs/preact/**/*.mdx"],
-      compilerOptions: { jsxImportSource: "preact" },
+      jsxImportSource: "preact",
     },
   ],
 })
@@ -36,4 +36,4 @@ For every **distinct set of compiler options**, Kiira runs a **separate TypeScri
 
 Kiira also **detects the framework from the file path** and from compilation failures. When a JSX snippet fails with TypeScript's `TS7026` (JSX element implicitly has type `any` because no interface `JSX.IntrinsicElements` exists) — the classic symptom of the wrong JSX runtime — Kiira **suggests an override**.
 
-Running [`kiira check --fix`](/cli/fix) then **writes that override into your config** for you, so subsequent runs compile those files against the right framework automatically.
+Running [`kiira check --fix`](/latest/cli/fix) then **writes that override into your config** for you, so subsequent runs compile those files against the right framework automatically.

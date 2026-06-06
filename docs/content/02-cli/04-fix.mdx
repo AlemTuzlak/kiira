@@ -30,7 +30,7 @@ const el = <div>hello</div>
 ```
 ````
 
-See [Language-tag checking](/projects/language-tag-checking) for how detection works and what Kiira does when you *don't* run `--fix`.
+See [Language-tag checking](/latest/fences/language-tag-checking) for how detection works and what Kiira does when you *don't* run `--fix`.
 
 ### 2. Ungrouped continuation snippets (`group=`)
 
@@ -56,13 +56,13 @@ console.log(user.name)
 ```
 ````
 
-See [Grouping snippets](/fences/grouping-snippets) for the full model.
+See [Grouping snippets](/latest/fences/grouping-snippets) for the full model.
 
 ### 3. Framework `jsxImportSource` overrides
 
 When a JSX snippet fails because TypeScript can't find the right JSX runtime (for example a Solid or Preact example checked with the default React runtime), `--fix` writes the appropriate `jsxImportSource` override into your config so matching files compile against the correct framework.
 
-See [Per-glob overrides](/projects/per-glob-overrides) for how overrides work and how the framework is detected.
+See [Per-glob overrides](/latest/projects/per-glob-overrides) for how overrides work and how the framework is detected.
 
 ## What it never touches
 

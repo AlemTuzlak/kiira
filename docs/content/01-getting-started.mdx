@@ -4,6 +4,8 @@ summary: "Install Kiira and check your first Markdown file in 60 seconds"
 description: "Install Kiira, scaffold a config with kiira init, run your first kiira check, and learn the code fence format Kiira validates."
 ---
 
+You have a project with Markdown docs full of TypeScript or JavaScript examples, and nothing checking whether those examples still compile. By the end of this guide you'll have Kiira installed, a config in place, and a `kiira check` run gating your docs — the same check you can wire into CI and your editor.
+
 ## Install
 
 Install the Kiira CLI as a dev dependency in the project whose docs you want to check:
@@ -14,7 +16,9 @@ pnpm add -D @alemtuzlak/kiira
 
 The CLI depends on `@alemtuzlak/kiira-core`, which is installed automatically. You only need to depend on `kiira-core` directly if you want to import `defineConfig` or call the check engine programmatically.
 
-> Kiira runs the TypeScript compiler against **your project's own types**. Install it inside the project (or workspace) whose API your docs reference, so those types resolve.
+<InfoAlert title="Install it where your types live">
+Kiira runs the TypeScript compiler against **your project's own types**. Install it inside the project (or workspace) whose API your docs reference, so those types resolve.
+</InfoAlert>
 
 ## Scaffold a config
 
@@ -72,7 +76,7 @@ const wip = somethingNotReadyYet()
 ```
 ````
 
-See the **Fence metadata** page for every available token.
+See the [Fence metadata](/latest/fences/fence-metadata) reference for every available token.
 
 ## 60-second quickstart
 
@@ -90,8 +94,8 @@ pnpm kiira check
 pnpm kiira check --verbose
 ```
 
-That's it. From here:
+That's it — you now have a working docs check. From here:
 
-- Wire `kiira check` into CI with the **GitHub Action** or a plain CI step.
-- Install the **VS Code extension** for live diagnostics as you type.
-- Tune behavior in the **Configuration** section.
+- Wire `kiira check` into CI with the [GitHub Action](/latest/ci/github-action) or a [plain CI step](/latest/ci/any-ci).
+- Install the [VS Code extension](/latest/vscode/overview) for live diagnostics as you type.
+- Tune behavior with [configuration options](/latest/configuration/options) and [fence metadata](/latest/fences/fence-metadata).
