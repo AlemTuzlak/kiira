@@ -14,6 +14,13 @@ name: 📚 Docs Release
 #   - variable FLY_APP_NAME  (optional; defaults to "kiira-docs")
 
 on:
+  # Redeploy production docs whenever docs/ changes land on main — no full
+  # package release required. (A release also deploys via the workflow_call
+  # below, so version bumps still ship fresh docs.)
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
   workflow_call:
     secrets:
       FLY_API_TOKEN:

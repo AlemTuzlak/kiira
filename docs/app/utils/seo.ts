@@ -1,6 +1,5 @@
 import { generateMeta } from "@forge42/seo-tools/remix/metadata"
 import type { MetaDescriptor } from "react-router"
-import PackageLogo from "/static/images/package-logo-1200x630.png"
 
 interface MetaFields {
 	domain: string
@@ -19,7 +18,8 @@ export function generateMetaFields({ domain, title, description, path, additiona
 			description,
 			url: fullUrl,
 			siteName: "Kiira",
-			image: PackageLogo,
+			// Absolute URL (OG/Twitter scrapers require it). Served from public/.
+			image: `${domain}/static/images/cover-dark.png`,
 		},
 		[
 			// Open Graph
