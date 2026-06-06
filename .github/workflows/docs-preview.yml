@@ -70,6 +70,10 @@ jobs:
           app_name: kiira-docs-pr-${{ github.event.number }}
           workspace_name: kiira-docs # locates the docs/ folder by its package.json name
           use_isolated_workspace: true
+          # License-gated React Bits Pro components are fetched inside the Docker
+          # build via this secret (see docs/Dockerfile).
+          build_secrets: |
+            REACTBITS_LICENSE_KEY=${{ secrets.REACTBITS_LICENSE_KEY }}
           env_vars: |
             APP_ENV=production
             GITHUB_OWNER=${{ github.repository_owner }}

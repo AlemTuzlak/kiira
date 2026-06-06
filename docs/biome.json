@@ -64,5 +64,20 @@
 			"semicolons": "asNeeded",
 			"trailingCommas": "es5"
 		}
-	}
+	},
+	"overrides": [
+		{
+			"include": ["scripts/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					},
+					"nursery": {
+						"noProcessEnv": "off"
+					}
+				}
+			}
+		}
+	]
 }

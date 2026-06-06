@@ -1,7 +1,13 @@
-import { useNavigate } from "react-router"
-import { Header } from "~/components/header"
-import { Logo } from "~/components/logo"
+import { useEffect, useState } from "react"
+import { Link } from "react-router"
+import BlinkingSquares from "~/components/blinking-squares"
+import { CheckFlow } from "~/components/check-flow"
+import FallingRays from "~/components/falling-rays"
+import RisingLines from "~/components/rising-lines"
+import SilkWaves from "~/components/silk-waves"
+import { UsageFlow } from "~/components/usage-flow"
 import { Icon } from "~/ui/icon/icon"
+import { VSCodeIcon } from "~/ui/vscode-icon"
 import { getDomain } from "~/utils/get-domain"
 import { generateMetaFields } from "~/utils/seo"
 import { getLatestVersion } from "~/utils/version-resolvers"
@@ -24,9 +30,24 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 const DOCS_BASE = `/${getLatestVersion()}`
+const DOCS_START = `${DOCS_BASE}/getting-started`
 const GITHUB_URL = "https://github.com/AlemTuzlak/kiira"
 const NPM_URL = "https://www.npmjs.com/package/kiira"
 const MARKETPLACE_URL = "https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode"
+const LOGO = "/static/images/kiira-logo.png"
+
+// Brand palette — teal/cyan base + the logo's red (errors caught) and green (passing).
+const TEAL = "#2c8794"
+const RED = "#e8272b"
+const GREEN = "#7bac42"
+
+/** WebGL/canvas components touch the DOM — only render them after mount. */
+function ClientOnly({ children }: { children: React.ReactNode }) {
+	const [mounted, setMounted] = useState(false)
+	useEffect(() => setMounted(true), [])
+	if (!mounted) return null
+	return <>{children}</>
+}
 
 type CardDef = {
 	icon: React.ComponentProps<typeof Icon>["name"]
@@ -40,7 +61,7 @@ const CARDS: CardDef[] = [
 		icon: "Code",
 		title: "Real type checking",
 		body: "Kiira runs the code fences in your Markdown through the TypeScript compiler against your real project API — invalid imports, missing exports, and wrong option names fail.",
-		href: `${DOCS_BASE}/getting-started`,
+		href: DOCS_START,
 	},
 	{
 		icon: "FileText",
@@ -74,6 +95,16 @@ const CARDS: CardDef[] = [
 	},
 ]
 
+// The failure modes Kiira catches — a clean, legible list.
+const FAILURES = [
+	"invalid imports",
+	"missing exports",
+	"wrong package subpaths",
+	"wrong prop / option names",
+	"hallucinated APIs",
+	"non-copy-pasteable examples",
+]
+
 type SurfaceDef = {
 	icon: React.ComponentProps<typeof Icon>["name"]
 	title: string
@@ -101,7 +132,7 @@ const SURFACES: SurfaceDef[] = [
 	{
 		icon: "Github",
 		title: "GitHub Action",
-		body: "Annotate failing docs on the exact line of every pull request.",
+		body: "Drop AlemTuzlak/kiira@v1 into a workflow to annotate failing docs on the exact line of every pull request.",
 		cta: "Read the guide",
 		href: `${DOCS_BASE}/ci/github-action`,
 		internal: true,
@@ -110,173 +141,299 @@ const SURFACES: SurfaceDef[] = [
 
 function Card({ icon, title, body, href }: CardDef) {
 	return (
-		<a
-			href={href}
-			className="group block rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-6 text-left transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2c8794]"
+		<Link
+			to={href}
+			className="group block rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]/80 p-7 text-left backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[#7bac42] hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-[#2c8794]"
 		>
-			<div className="mb-4 inline-flex size-12 items-center justify-center rounded-xl bg-gradient-to-r from-[#2c8794] to-[#329baa]">
+			<div className="mb-5 inline-flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#2c8794] to-[#7bac42] shadow-[0_0_28px_-6px_#2c8794]">
 				<Icon name={icon} className="size-6 text-white" />
 			</div>
-			<h3 className="mb-2 font-semibold text-[var(--color-text-active)] text-lg">{title}</h3>
+			<h3 className="mb-2.5 font-semibold text-[var(--color-text-active)] text-lg">{title}</h3>
 			<p className="text-[var(--color-text-muted)] text-sm leading-relaxed">{body}</p>
-			<span className="mt-3 inline-flex items-center gap-1 font-medium text-[var(--color-text-active)] text-sm">
-				Learn more <Icon name="ChevronRight" className="size-4" />
+			<span className="mt-4 inline-flex items-center gap-1 font-medium text-[var(--color-text-active)] text-sm">
+				Learn more <Icon name="ChevronRight" className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
 			</span>
-		</a>
+		</Link>
 	)
 }
 
-function CommandBlock() {
+function TerminalBlock() {
 	return (
-		<pre className="w-full max-w-2xl overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-background-active)] px-5 py-4 text-left font-mono text-[var(--color-text-active)] text-sm">
-			<code>
-				<span className="text-[var(--color-text-muted)]">$ </span>pnpm add -D kiira
-				{"\n"}
-				<span className="text-[var(--color-text-muted)]">$ </span>pnpm kiira init
-				{"\n"}
-				<span className="text-[var(--color-text-muted)]">$ </span>pnpm kiira check
-			</code>
-		</pre>
-	)
-}
-
-function ExampleBlock() {
-	return (
-		<div className="w-full max-w-2xl overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-background-active)] text-left">
-			<div className="flex items-center gap-2 border-[var(--color-border)] border-b px-4 py-2 text-[var(--color-text-muted)] text-xs">
-				<Icon name="FileText" className="size-4" />
-				README.md
+		<div className="w-full max-w-xl overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-background-active)]/90 text-left shadow-2xl backdrop-blur">
+			<div className="flex items-center gap-2 border-[var(--color-border)] border-b px-4 py-3">
+				<span className="size-3 rounded-full" style={{ backgroundColor: RED }} />
+				<span className="size-3 rounded-full" style={{ backgroundColor: GREEN }} />
+				<span className="size-3 rounded-full" style={{ backgroundColor: "var(--color-text-muted)" }} />
+				<span className="ml-2 text-[var(--color-text-muted)] text-xs">terminal</span>
 			</div>
-			<pre className="overflow-x-auto px-5 py-4 font-mono text-sm leading-relaxed">
+			<pre className="overflow-x-auto px-5 py-5 font-mono text-[var(--color-text-active)] text-sm leading-loose">
 				<code>
-					<span className="text-[var(--color-text-muted)]">```ts{"\n"}</span>
-					<span className="text-[var(--color-text-normal)]">
-						import {"{"} renderToString {"}"} from "your-lib"
-					</span>
-					{"\n"}
-					<span className="text-[var(--color-text-muted)]">```{"\n"}</span>
+					<span className="text-[var(--color-text-muted)]">$ </span>pnpm add -D kiira{"\n"}
+					<span className="text-[var(--color-text-muted)]">$ </span>pnpm kiira init{"\n"}
+					<span className="text-[var(--color-text-muted)]">$ </span>pnpm kiira check{"\n"}
+					<span style={{ color: GREEN }}>✓ Kiira found no errors in 12 files.</span>
 				</code>
 			</pre>
-			<div className="flex items-start gap-2 border-[var(--color-border)] border-t px-5 py-3 text-sm">
-				<Icon name="TriangleAlert" className="mt-0.5 size-4 shrink-0 text-[#fb4bb5]" />
-				<span className="text-[var(--color-text-muted)]">
-					<span className="font-medium text-[var(--color-text-active)]">TS2305</span> — Module "your-lib" has no
-					exported member "renderToString". <span className="text-[var(--color-text-active)]">Caught on line 2.</span>
-				</span>
-			</div>
 		</div>
 	)
 }
 
-export default function Index() {
-	const navigate = useNavigate()
-
+function SiteHeader() {
+	const iconLink =
+		"text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-active)]"
 	return (
-		<div className="flex min-h-screen flex-col bg-[var(--color-background)] 2xl:container 2xl:mx-auto">
-			<Header>
-				<Logo>
-					<span className="p-0">Kiira</span>
-				</Logo>
-			</Header>
+		<header className="sticky top-0 z-50 w-full bg-[var(--color-background)]/80 backdrop-blur">
+			<div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-3.5">
+				<Link to="/" aria-label="Kiira home" className="flex items-center">
+					<img src={LOGO} alt="Kiira" className="size-9 rounded-lg border border-[var(--color-border)]" />
+				</Link>
+				<nav className="flex items-center gap-4 sm:gap-5">
+					<Link
+						to={DOCS_START}
+						className="font-medium text-[var(--color-text-muted)] text-sm transition-colors hover:text-[var(--color-text-active)]"
+					>
+						Docs
+					</Link>
+					<a
+						href={MARKETPLACE_URL}
+						target="_blank"
+						rel="noopener noreferrer"
+						aria-label="Kiira on the VS Code Marketplace"
+						className={iconLink}
+					>
+						<VSCodeIcon className="size-5" />
+					</a>
+					<a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub" className={iconLink}>
+						<Icon name="Github" className="size-5" />
+					</a>
+				</nav>
+			</div>
+		</header>
+	)
+}
+
+export default function Index() {
+	return (
+		<div className="flex min-h-screen flex-col bg-[var(--color-background)]">
+			<SiteHeader />
 
 			<main className="flex flex-1 flex-col items-center">
-				<section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-7 px-6 py-16 text-center">
-					<div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-info-border)] bg-[var(--color-info-bg)] px-3 py-1 text-[var(--color-info-text)] text-sm">
-						<Icon name="Zap" className="size-4" />
-						Version {getLatestVersion()} now available
-					</div>
+				{/* Hero with slow silk-waves background */}
+				<section className="relative w-full overflow-hidden">
+					<ClientOnly>
+						<div className="pointer-events-none absolute inset-0 z-0 opacity-25">
+							<SilkWaves colors={[GREEN, RED, GREEN]} speed={0.4} scale={2.4} opacity={1} className="size-full" />
+						</div>
+					</ClientOnly>
+					<div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-b from-[var(--color-background)]/60 via-[var(--color-background)]/50 to-[var(--color-background)]" />
 
-					<h1 className="font-bold text-3xl text-[var(--color-text-active)] leading-snug md:text-4xl xl:text-5xl">
-						Type-check the code{" "}
-						<span className="bg-gradient-to-r from-[#48ddf3] to-[#fb4bb5] bg-clip-text text-transparent">
-							in your Markdown
-						</span>
-					</h1>
+					<div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center gap-9 px-6 py-28 text-center md:py-40">
+						<div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-background)]/70 px-4 py-1.5 text-[var(--color-text-muted)] text-sm backdrop-blur">
+							<Icon name="ShieldCheck" className="size-4" style={{ color: GREEN }} />
+							Verified against your real project types
+						</div>
 
-					<p className="max-w-2xl text-[var(--color-text-muted)] text-lg leading-relaxed">
-						Kiira runs the TypeScript and JavaScript code fences in your docs through the compiler against your real
-						project API, reporting errors on the exact Markdown line — in your editor, on the CLI, and in CI.
-					</p>
+						<h1 className="max-w-4xl font-bold text-4xl text-[var(--color-text-active)] leading-[1.1] md:text-6xl xl:text-7xl">
+							Type-check the code{" "}
+							<span className="bg-gradient-to-r from-[#e8272b] to-[#7bac42] bg-clip-text text-transparent">
+								in your Markdown
+							</span>
+						</h1>
 
-					<CommandBlock />
-
-					<div className="flex flex-wrap items-center justify-center gap-4">
-						<button
-							type="button"
-							onClick={() => navigate(`${DOCS_BASE}/getting-started`)}
-							className="flex items-center gap-2 rounded-lg bg-[#2c8794] px-6 py-3 font-medium text-white transition-colors hover:bg-[#329baa]"
-						>
-							<Icon name="Rocket" className="size-5" />
-							Get started
-						</button>
-
-						<a
-							href={GITHUB_URL}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="flex items-center gap-2 rounded-lg bg-[var(--color-background-active)] px-6 py-3 font-medium text-[var(--color-text-active)] transition-colors hover:bg-[var(--color-border)]"
-						>
-							<Icon name="Github" className="size-5" />
-							View on GitHub
-						</a>
-					</div>
-				</section>
-
-				<section className="w-full border-[var(--color-border)] border-y bg-[var(--color-background-active)]/40">
-					<div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-6 py-14 text-center">
-						<h2 className="font-semibold text-2xl text-[var(--color-text-active)]">
-							Broken examples fail like broken code
-						</h2>
-						<p className="max-w-2xl text-[var(--color-text-muted)]">
-							A snippet that imports something your library doesn't export is a real type error — and Kiira points
-							right at it.
+						<p className="max-w-2xl text-[var(--color-text-muted)] text-lg leading-relaxed md:text-xl">
+							Kiira runs the TypeScript and JavaScript code fences in your docs through the compiler against your real
+							project API, reporting errors on the exact Markdown line — in your editor, on the CLI, and in CI.
 						</p>
-						<ExampleBlock />
+
+						<TerminalBlock />
+
+						<div className="mt-2 flex flex-wrap items-center justify-center gap-4">
+							<Link
+								to={DOCS_START}
+								className="flex items-center gap-2 rounded-lg bg-[#7bac42] px-7 py-3.5 font-medium text-white shadow-[0_0_34px_-8px_#7bac42] transition-colors duration-300 hover:bg-[#6f9f3b]"
+							>
+								<Icon name="Rocket" className="size-5" />
+								Get started
+							</Link>
+							<a
+								href={GITHUB_URL}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="flex items-center gap-2 rounded-lg bg-[var(--color-background-active)] px-7 py-3.5 font-medium text-[var(--color-text-active)] transition-colors duration-300 hover:bg-[var(--color-border)]"
+							>
+								<Icon name="Github" className="size-5" />
+								View on GitHub
+							</a>
+						</div>
 					</div>
 				</section>
 
-				<section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-8 px-6 py-16 text-center">
-					<h2 className="font-semibold text-2xl text-[var(--color-text-active)]">Everything Kiira gives you</h2>
-					<div className="grid w-full gap-6 sm:grid-cols-2 lg:grid-cols-3">
-						{CARDS.map((c) => (
-							<Card key={c.title} {...c} />
-						))}
+				{/* See it work — wrong code -> Kiira -> highlighted errors */}
+				<section className="w-full border-[var(--color-border)] border-t">
+					<div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-14 px-6 py-28 text-center">
+						<div className="max-w-2xl">
+							<h2 className="font-semibold text-3xl text-[var(--color-text-active)] leading-tight md:text-4xl">
+								Watch Kiira catch a bug
+							</h2>
+							<p className="mt-5 text-[var(--color-text-muted)] text-lg leading-relaxed">
+								A broken snippet goes in, runs through the real TypeScript compiler, and comes back with the errors
+								flagged on the exact line — the same check you get in your editor, on the CLI, and in CI.
+							</p>
+						</div>
+						<CheckFlow />
 					</div>
 				</section>
 
-				<section className="w-full border-[var(--color-border)] border-t bg-[var(--color-background-active)]/40">
-					<div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-8 px-6 py-16 text-center">
-						<h2 className="font-semibold text-2xl text-[var(--color-text-active)]">Three ways to run Kiira</h2>
-						<div className="grid w-full gap-6 sm:grid-cols-3">
-							{SURFACES.map((s) => (
-								<a
-									key={s.title}
-									href={s.href}
-									target={s.internal ? undefined : "_blank"}
-									rel={s.internal ? undefined : "noopener noreferrer"}
-									className="group flex flex-col items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)] p-6 transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2c8794]"
+				{/* What breaks a copy-pasted example — a clean list */}
+				<section className="w-full border-[var(--color-border)] border-t">
+					<div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-6 py-28 md:grid-cols-2">
+						<div className="text-left">
+							<h2 className="font-semibold text-3xl text-[var(--color-text-active)] leading-tight md:text-4xl">
+								Everything that breaks a copy-pasted example
+							</h2>
+							<p className="mt-5 max-w-md text-[var(--color-text-muted)] text-lg leading-relaxed">
+								Docs rot quietly — and agents hallucinate APIs with total confidence. Kiira fails the check the moment
+								an example stops matching your real types.
+							</p>
+						</div>
+						<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+							{FAILURES.map((f) => (
+								<div
+									key={f}
+									className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-background-active)]/60 px-4 py-3.5"
 								>
-									<div className="inline-flex size-12 items-center justify-center rounded-xl bg-gradient-to-r from-[#2c8794] to-[#329baa]">
-										<Icon name={s.icon} className="size-6 text-white" />
-									</div>
-									<h3 className="font-semibold text-[var(--color-text-active)] text-lg">{s.title}</h3>
-									<p className="text-[var(--color-text-muted)] text-sm leading-relaxed">{s.body}</p>
-									<span className="mt-1 inline-flex items-center gap-1 font-medium text-[var(--color-text-active)] text-sm">
-										{s.cta} <Icon name="ChevronRight" className="size-4" />
+									<span
+										className="flex size-6 shrink-0 items-center justify-center rounded-full"
+										style={{ backgroundColor: "rgba(232,39,43,0.14)" }}
+									>
+										<Icon name="X" className="size-3.5" style={{ color: RED }} />
 									</span>
-								</a>
+									<span className="text-[var(--color-text-active)] text-sm">{f}</span>
+								</div>
 							))}
 						</div>
 					</div>
 				</section>
 
-				<footer className="mx-auto w-full max-w-6xl px-6 py-10 text-center text-[var(--color-text-muted)] text-sm">
-					Kiira ·{" "}
-					<a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text)]">
-						github.com/AlemTuzlak/kiira
-					</a>{" "}
-					· MIT
-				</footer>
+				{/* One engine, every surface — center-flow diagram */}
+				<section className="relative w-full overflow-hidden border-[var(--color-border)] border-t bg-[var(--color-background-active)]/30">
+					<div className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-6 py-28 text-center">
+						<div className="max-w-2xl">
+							<h2 className="font-semibold text-3xl text-[var(--color-text-active)] leading-tight md:text-4xl">
+								One engine, every surface
+							</h2>
+							<p className="mt-5 text-[var(--color-text-muted)] text-lg leading-relaxed">
+								The same check powers your editor, the command line, and CI — so "it passes locally" means "it passes
+								in the PR."
+							</p>
+						</div>
+						<UsageFlow />
+					</div>
+				</section>
+
+				{/* Feature cards over a faint blinking-squares field */}
+				<section className="relative w-full overflow-hidden border-[var(--color-border)] border-t">
+					<ClientOnly>
+						<div className="pointer-events-none absolute inset-0 z-0 opacity-[0.12]">
+							<BlinkingSquares
+								squareColor={TEAL}
+								backgroundColor="transparent"
+								gridSize={16}
+								twinkleSpeed={0.5}
+								twinkleStrength={0.6}
+								className="size-full"
+							/>
+						</div>
+					</ClientOnly>
+					<div className="pointer-events-none absolute inset-0 z-0 bg-[var(--color-background)]/40" />
+					<div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-14 px-6 py-32 text-center">
+						<h2 className="font-semibold text-3xl text-[var(--color-text-active)] leading-tight md:text-4xl">
+							Everything Kiira gives you
+						</h2>
+						<div className="grid w-full gap-7 sm:grid-cols-2 lg:grid-cols-3">
+							{CARDS.map((c) => (
+								<Card key={c.title} {...c} />
+							))}
+						</div>
+					</div>
+				</section>
+
+				{/* CTA band with slow falling-rays (teal -> green) */}
+				<section className="relative w-full overflow-hidden border-[var(--color-border)] border-t">
+					<ClientOnly>
+						<div className="pointer-events-none absolute inset-0 z-0 opacity-20">
+							<FallingRays
+								color1={TEAL}
+								color2={GREEN}
+								pulseSpeed={0.2}
+								trailLength={0.7}
+								motionBlur={0.5}
+								className="size-full"
+							/>
+						</div>
+					</ClientOnly>
+					<div className="pointer-events-none absolute inset-0 z-0 bg-[var(--color-background)]/70" />
+					<div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-6 py-32 text-center">
+						<h2 className="font-semibold text-3xl text-[var(--color-text-active)] leading-tight md:text-4xl">
+							Three ways to run Kiira
+						</h2>
+						<div className="grid w-full gap-7 sm:grid-cols-3">
+							{SURFACES.map((s) => {
+								const cls =
+									"group flex flex-col items-center gap-3.5 rounded-2xl border border-[var(--color-border)] bg-[var(--color-background)]/80 p-7 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[#7bac42] hover:shadow-xl"
+								const inner = (
+									<>
+										<div className="inline-flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#2c8794] to-[#7bac42]">
+											<Icon name={s.icon} className="size-6 text-white" />
+										</div>
+										<h3 className="font-semibold text-[var(--color-text-active)] text-lg">{s.title}</h3>
+										<p className="text-[var(--color-text-muted)] text-sm leading-relaxed">{s.body}</p>
+										<span className="mt-1 inline-flex items-center gap-1 font-medium text-[var(--color-text-active)] text-sm">
+											{s.cta} <Icon name="ChevronRight" className="size-4" />
+										</span>
+									</>
+								)
+								return s.internal ? (
+									<Link key={s.title} to={s.href} className={cls}>
+										{inner}
+									</Link>
+								) : (
+									<a key={s.title} href={s.href} target="_blank" rel="noopener noreferrer" className={cls}>
+										{inner}
+									</a>
+								)
+							})}
+						</div>
+						<Link
+							to={DOCS_START}
+							className="mt-4 flex items-center gap-2 rounded-lg bg-[#7bac42] px-7 py-3.5 font-medium text-white shadow-[0_0_34px_-8px_#7bac42] transition-colors duration-300 hover:bg-[#6f9f3b]"
+						>
+							<Icon name="Rocket" className="size-5" />
+							Get started in 60 seconds
+						</Link>
+					</div>
+				</section>
+
+				{/* Footer band with slow rising-lines */}
+				<section className="relative w-full overflow-hidden border-[var(--color-border)] border-t">
+					<ClientOnly>
+						<div className="pointer-events-none absolute inset-0 z-0 opacity-20">
+							<RisingLines color={TEAL} riseSpeed={0.06} flowSpeed={0.12} className="size-full" />
+						</div>
+					</ClientOnly>
+					<div className="pointer-events-none absolute inset-0 z-0 bg-[var(--color-background)]/70" />
+					<footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-2 px-6 py-20 text-center text-[var(--color-text-muted)] text-sm">
+						<img src={LOGO} alt="Kiira" className="size-10 rounded-lg border border-[var(--color-border)]" />
+						<p className="mt-1 font-semibold text-[var(--color-text-active)] text-xl">Kiira</p>
+						<p>Type-check the code in your Markdown.</p>
+						<p className="mt-3">
+							<a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text)]">
+								github.com/AlemTuzlak/kiira
+							</a>{" "}
+							· MIT
+						</p>
+					</footer>
+				</section>
 			</main>
 		</div>
 	)

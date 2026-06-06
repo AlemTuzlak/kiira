@@ -79,3 +79,4 @@ jobs:
     uses: ./.github/workflows/docs-release.yml
     secrets:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      REACTBITS_LICENSE_KEY: ${{ secrets.REACTBITS_LICENSE_KEY }}

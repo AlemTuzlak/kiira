@@ -298,3 +298,37 @@
 		content: none !important;
 	}
 }
+
+/* Landing-page CheckFlow demo animations (wrong code -> Kiira -> highlighted errors). */
+@keyframes kiira-beam-in {
+	0% { left: 0%; opacity: 0; }
+	10% { opacity: 1; }
+	24% { left: 100%; opacity: 1; }
+	30%, 100% { left: 100%; opacity: 0; }
+}
+@keyframes kiira-beam-out {
+	0%, 40% { left: 0%; opacity: 0; }
+	50% { opacity: 1; }
+	64% { left: 100%; opacity: 1; }
+	70%, 100% { left: 100%; opacity: 0; }
+}
+@keyframes kiira-core-pulse {
+	0%, 18% { box-shadow: 0 0 0 0 rgba(44, 135, 148, 0); transform: scale(1); }
+	32% { box-shadow: 0 0 36px 4px rgba(44, 135, 148, 0.55); transform: scale(1.04); }
+	48%, 100% { box-shadow: 0 0 0 0 rgba(44, 135, 148, 0); transform: scale(1); }
+}
+@keyframes kiira-reveal {
+	0%, 54% { opacity: 0; transform: translateY(6px); }
+	64% { opacity: 1; transform: translateY(0); }
+	93% { opacity: 1; }
+	100% { opacity: 0; }
+}
+@keyframes kiira-squiggle {
+	0%, 52% { opacity: 0; }
+	62% { opacity: 1; }
+	94% { opacity: 1; }
+	100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.kiira-anim { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
