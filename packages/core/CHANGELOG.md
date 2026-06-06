@@ -1,5 +1,14 @@
 # kiira-core
 
+## 0.3.0
+
+### Minor Changes
+
+- a285163: Documentation: new animated landing page (hero, a "watch Kiira catch a bug" demo
+  showing wrong code → Kiira → highlighted errors, and a "core → Kiira → CLI / VS
+  Code / GitHub Action" usage flow) with a header logo + Docs / VS Code / GitHub
+  links. No public API changes.
+
 ## 0.2.0
 
 ### Minor Changes
