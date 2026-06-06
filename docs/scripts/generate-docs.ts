@@ -126,16 +126,20 @@ function buildRef(ref: string, labelForOutDir: string) {
 	})
 
 	try {
-		const rootPkg = existsSync(resolve(worktreePath, "package.json"))
-		const rootLock = existsSync(resolve(worktreePath, "pnpm-lock.yaml"))
-		if (rootPkg) {
-			run(`pnpm install ${rootLock ? "--frozen-lockfile" : "--no-frozen-lockfile"}`, {
-				cwd: worktreePath,
+		const sourceDir = workspaceRelativePath ? resolve(worktreePath, workspaceRelativePath) : worktreePath
+		// Install in the docs workspace itself, not the repo root. The docs site is
+		// a standalone pnpm project (own lockfile + pnpm-workspace.yaml) that is NOT
+		// part of the monorepo root workspace, so a root install would not provide
+		// its dependencies and content-collections:build would fail in the worktree.
+		const pkg = existsSync(resolve(sourceDir, "package.json"))
+		const lock = existsSync(resolve(sourceDir, "pnpm-lock.yaml"))
+		if (pkg) {
+			run(`pnpm install ${lock ? "--frozen-lockfile" : "--no-frozen-lockfile"}`, {
+				cwd: sourceDir,
 				inherit: true,
 			})
 		}
 
-		const sourceDir = workspaceRelativePath ? resolve(worktreePath, workspaceRelativePath) : worktreePath
 		const outDir = resolve(outputDir, labelForOutDir)
 		buildDocs(sourceDir, outDir)
 	} finally {

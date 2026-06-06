@@ -1,8 +1,11 @@
 name: 📚 Docs Release
 
-# When a new release is published, regenerate the versioned docs (so the new
-# tag/version is picked up) and deploy them to the production docs app on Fly.io.
-# Also runnable on demand via workflow_dispatch.
+# Regenerate the docs and deploy them to the production docs app on Fly.io.
+# Called by the Release workflow when changesets actually publishes (so a new
+# docs version goes out with every release), and runnable on demand. It is a
+# reusable workflow (workflow_call) rather than a `release:`-triggered one because
+# the releases are created by changesets via GITHUB_TOKEN, and events created by
+# GITHUB_TOKEN do not trigger other workflows.
 #
 # Enable by setting:
 #   - secret FLY_API_TOKEN
@@ -11,8 +14,10 @@ name: 📚 Docs Release
 #   - variable FLY_APP_NAME  (optional; defaults to "kiira-docs")
 
 on:
-  release:
-    types: [published]
+  workflow_call:
+    secrets:
+      FLY_API_TOKEN:
+        required: false
   workflow_dispatch: {}
 
 concurrency:
