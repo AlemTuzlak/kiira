@@ -20,8 +20,8 @@
 		"test:deps": "sherif",
 		"changeset": "changeset",
 		"release": "changeset publish",
-		"local-release": "changeset version && changeset publish",
-		"version": "changeset version",
+		"local-release": "changeset version && pnpm run check:fix && changeset publish",
+		"version": "changeset version && pnpm run check:fix",
 		"watch": ""
 	},
 	"author": "AlemTuzlak",

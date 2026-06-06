@@ -13,7 +13,7 @@ The composite action is GitHub-specific. To run Kiira in GitLab CI, CircleCI, Je
 Add the Kiira action to a workflow. With the `github` reporter (the action's default), failures appear as inline annotations on the exact Markdown line in the pull request:
 
 ```yaml
-- uses: AlemTuzlak/kiira/packages/github-action@v1
+- uses: AlemTuzlak/kiira@v1
   with:
     command: pnpm kiira check
     reporter: github
@@ -36,7 +36,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - uses: AlemTuzlak/kiira/packages/github-action@v1
+      - uses: AlemTuzlak/kiira@v1
         with:
           command: pnpm kiira check
           reporter: github

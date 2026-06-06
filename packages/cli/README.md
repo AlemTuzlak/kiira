@@ -226,10 +226,10 @@ checks it as `tsx` anyway so you get real type errors instead of a syntax-error 
 
 ## CI
 
-Use the [composite action](https://github.com/AlemTuzlak/kiira/tree/main/packages/github-action):
+Use the [composite action](https://github.com/AlemTuzlak/kiira/blob/main/action.yml):
 
 ```yaml
-- uses: AlemTuzlak/kiira/packages/github-action@v1
+- uses: AlemTuzlak/kiira@v1
   with:
     command: pnpm kiira check
     reporter: github

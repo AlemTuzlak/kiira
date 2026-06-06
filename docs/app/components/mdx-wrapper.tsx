@@ -5,6 +5,7 @@ import { InlineCode } from "~/ui/inline-code"
 import { ListItem } from "~/ui/list-item"
 import { OrderedList } from "~/ui/ordered-list"
 import { Strong } from "~/ui/strong-text"
+import { Table, TableCell, TableHead, TableHeaderCell } from "~/ui/table"
 import { WarningAlert } from "~/ui/warning-alert"
 import { CodeBlock } from "./code-block/code-block"
 
@@ -18,6 +19,10 @@ export const MDXWrapper = ({ content }: { content: string }) => (
 			li: ListItem,
 			strong: Strong,
 			a: Anchor,
+			table: Table,
+			thead: TableHead,
+			th: TableHeaderCell,
+			td: TableCell,
 			InfoAlert,
 			WarningAlert,
 			// You can add any custom component here or override existing ones by following the MDX documentation: https://mdxjs.com/table-of-components/#components
