@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+  # Manual escape hatch. Changesets opens the "Version Packages" PR and, when
+  # merged, that merge commit is authored by github-actions[bot] — GitHub does
+  # not trigger workflows from bot-authored pushes (anti-recursion), so the
+  # publish step does not auto-run after merging the version PR. Dispatch this
+  # workflow (or push any human-authored commit to main) to publish the bumped
+  # versions; `changeset publish` is idempotent and only publishes versions not
+  # already on npm.
+  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
