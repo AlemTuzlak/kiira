@@ -26,7 +26,12 @@ RUN pnpm install --prod=false --frozen-lockfile
 
 COPY . .
 
-RUN pnpm run build
+# `pnpm run build` runs the prebuild hook, which fetches the license-gated React
+# Bits Pro components via shadcn. The key is provided as a build secret (passed by
+# the fly-deploy `build_secrets` input) so it never lands in an image layer.
+RUN --mount=type=secret,id=REACTBITS_LICENSE_KEY \
+    REACTBITS_LICENSE_KEY="$(cat /run/secrets/REACTBITS_LICENSE_KEY 2>/dev/null || true)" \
+    pnpm run build
 
 # Prune dev deps
 RUN pnpm prune --prod
