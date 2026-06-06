@@ -18,7 +18,9 @@ RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3 && \
     rm -rf /var/lib/apt/lists/*
 
-COPY .npmrc package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml carries the pnpm 11 `allowBuilds` settings, so it must be
+# present before install or `pnpm install` fails with ERR_PNPM_IGNORED_BUILDS.
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod=false --frozen-lockfile
 
 

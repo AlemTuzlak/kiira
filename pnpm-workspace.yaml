@@ -1,7 +1,14 @@
 packages:
   - packages/*
   - examples/*
-onlyBuiltDependencies:
-  - '@biomejs/biome'
-  - esbuild
-  - lefthook
+# pnpm 11 gates dependency lifecycle (build) scripts behind `allowBuilds` (this
+# replaced the deprecated onlyBuiltDependencies/ignoredBuiltDependencies lists).
+# Allow only the packages whose build scripts we actually need; explicitly disallow
+# the rest so a fresh install doesn't fail with ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  '@biomejs/biome': true
+  esbuild: true
+  lefthook: true
+  '@vscode/vsce-sign': false
+  keytar: false
+  nx: false
