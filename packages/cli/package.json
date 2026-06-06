@@ -33,9 +33,7 @@
 	"bugs": {
 		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
-	"files": [
-		"dist"
-	],
+	"files": ["dist"],
 	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"publishConfig": {
 		"provenance": true
