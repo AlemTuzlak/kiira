@@ -47,7 +47,7 @@ catches the things that make a copy-pasted example fail:
 | [`kiira-core`](packages/core)           | Extraction, virtual files, type-checking, diagnostics. |
 | [`kiira`](packages/cli)             | `kiira check` for local and CI validation.          |
 | [`kiira-vscode`](packages/vscode)        | Live squiggles inside Markdown code fences.            |
-| [`kiira-action`](packages/github-action) | GitHub composite action for CI.                        |
+| [`AlemTuzlak/kiira@v1`](action.yml)       | GitHub composite action for CI.                        |
 
 ## Quick start
 
@@ -280,10 +280,10 @@ It type-checks your Markdown code fences against your real project, live:
 
 ## CI
 
-Use the [composite action](packages/github-action):
+Use the [composite action](action.yml):
 
 ```yaml
-- uses: AlemTuzlak/kiira/packages/github-action@v1
+- uses: AlemTuzlak/kiira@v1
   with:
     command: pnpm kiira check
     reporter: github
