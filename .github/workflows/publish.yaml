@@ -4,17 +4,24 @@ on:
   push:
     branches:
       - main
-  # Manual escape hatch. Changesets opens the "Version Packages" PR and, when
-  # merged, that merge commit is authored by github-actions[bot] — GitHub does
-  # not trigger workflows from bot-authored pushes (anti-recursion), so the
-  # publish step does not auto-run after merging the version PR. Dispatch this
-  # workflow (or push any human-authored commit to main) to publish the bumped
-  # versions; `changeset publish` is idempotent and only publishes versions not
-  # already on npm.
+  # Auto-publish when the "Version Packages" PR is merged. Changesets opens that
+  # PR with commits authored by github-actions[bot]; GitHub does not trigger
+  # `push` workflows from bot-authored pushes (anti-recursion), so the merge's
+  # push to main never fires this workflow. But *merging a PR* is a human action,
+  # so the `pull_request: closed` event does fire — we gate it (below) to the
+  # `changeset-release/main` PR being merged and run the publish from there.
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  # Manual escape hatch — publish the bumped versions without a new merge.
+  # `changeset publish` is idempotent and only publishes versions not already on npm.
   workflow_dispatch: {}
 
+# Serialize all release runs (across push / pull_request / dispatch) so two
+# events can never publish concurrently.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 permissions: {}
@@ -22,8 +29,19 @@ permissions: {}
 jobs:
   release:
     name: Release
-    # Only run in the source repo, never on forks.
-    if: github.repository_owner == 'AlemTuzlak'
+    # Run in the source repo only (never forks), and for `pull_request` events
+    # only when the bot's "Version Packages" PR was actually merged — so a normal
+    # PR close doesn't kick off a publish, and a fork PR can't either.
+    if: >-
+      github.repository_owner == 'AlemTuzlak' &&
+      (
+        github.event_name != 'pull_request' ||
+        (
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.head.ref == 'changeset-release/main' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
     runs-on: ubuntu-latest
     outputs:
       published: ${{ steps.changesets.outputs.published }}
@@ -34,9 +52,12 @@ jobs:
     steps:
       - name: Checkout Repo
         # persist-credentials is required: changesets/action pushes the release
-        # PR using the checkout's git credentials.
+        # PR using the checkout's git credentials. `ref: main` pins the post-merge
+        # tip so the `pull_request: closed` run sees the bumped versions (a
+        # pull_request checkout would otherwise default to the PR merge ref).
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3 # zizmor: ignore[artipacked]
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Install pnpm
