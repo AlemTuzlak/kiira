@@ -1,5 +1,11 @@
 # kiira
 
+## 0.4.1
+
+### Patch Changes
+
+- 1a300ab: Ship TanStack Intent agent skills with the `kiira` package. Five task-focused skills guide AI coding agents working with Kiira: `getting-started`, `authoring-and-debugging-fences`, `monorepo-and-frameworks`, `ci-integration`, and `editor-vscode`. Agents discover and load them via `npx @tanstack/intent@latest install`.
+
 ## 0.4.0
 
 ### Minor Changes
