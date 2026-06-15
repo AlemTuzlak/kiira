@@ -1,7 +1,7 @@
 {
 	"name": "kiira-vscode",
 	"displayName": "Kiira",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Live type-checking for TypeScript and JavaScript code fences inside Markdown files.",
 	"publisher": "CodeForge",
 	"icon": "icon.png",
