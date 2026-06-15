@@ -15,13 +15,13 @@ type-checks them against your real project API, and reports any errors right bac
 source line — in your editor, on the command line, and in CI.
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/kiira"><img alt="npm version" src="https://shieldcn.dev/npm/kiira.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
-  <a href="https://www.npmjs.com/package/kiira"><img alt="npm downloads" src="https://shieldcn.dev/npm/dw/kiira.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode"><img alt="VS Code installs" src="https://shieldcn.dev/vscode/installs/CodeForge/kiira-vscode.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
-  <a href="https://github.com/AlemTuzlak/kiira/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/stars/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
-  <a href="https://github.com/AlemTuzlak/kiira/actions"><img alt="CI status" src="https://shieldcn.dev/github/ci/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
-  <a href="https://github.com/AlemTuzlak/kiira/blob/main/LICENSE"><img alt="License: MIT" src="https://shieldcn.dev/github/license/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
-  <a href="https://github.com/AlemTuzlak/kiira/commits/main"><img alt="Last commit" src="https://shieldcn.dev/github/last-commit/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=7bac42&size=xs" /></a>
+  <a href="https://www.npmjs.com/package/kiira"><img alt="npm version" src="https://shieldcn.dev/npm/kiira.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
+  <a href="https://www.npmjs.com/package/kiira"><img alt="npm downloads" src="https://shieldcn.dev/npm/dw/kiira.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode"><img alt="VS Code installs" src="https://shieldcn.dev/vscode/installs/CodeForge/kiira-vscode.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
+  <a href="https://github.com/AlemTuzlak/kiira/stargazers"><img alt="GitHub stars" src="https://shieldcn.dev/github/stars/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
+  <a href="https://github.com/AlemTuzlak/kiira/actions"><img alt="CI status" src="https://shieldcn.dev/github/ci/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
+  <a href="https://github.com/AlemTuzlak/kiira/blob/main/LICENSE"><img alt="License: MIT" src="https://shieldcn.dev/github/license/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
+  <a href="https://github.com/AlemTuzlak/kiira/commits/main"><img alt="Last commit" src="https://shieldcn.dev/github/last-commit/AlemTuzlak/kiira.svg?split=true&labelColor=0d0e12&color=16a34a&size=xs" /></a>
 </p>
 
 </div>
