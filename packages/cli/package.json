@@ -1,6 +1,6 @@
 {
 	"name": "kiira",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"description": "Command-line interface for Kiira: validate TypeScript and JavaScript code fences in your Markdown docs.",
 	"type": "module",
 	"bin": {
@@ -33,7 +33,9 @@
 	"bugs": {
 		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
-	"files": ["dist"],
+	"files": [
+		"dist"
+	],
 	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"publishConfig": {
 		"provenance": true
