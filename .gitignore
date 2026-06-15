@@ -137,3 +137,6 @@ dist
 
 # VS Code extension package artifact
 *.vsix
+
+# Claude Code local state (agents, worktrees, settings)
+.claude/
