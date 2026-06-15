@@ -112,6 +112,49 @@ describe("group= checking", () => {
 		expect(result.diagnostics.some((d) => d.code === "group")).toBe(false)
 	})
 
+	it("defaultGroup=file collapses TS2304 continuations with no annotations", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["file-group.md"],
+			config: { include: ["**/*.md"], defaultGroup: "file" },
+		})
+		expect(errors(result.diagnostics)).toHaveLength(0)
+		// Both fences share one virtual file under the file-level group.
+		expect(result.virtualFiles).toHaveLength(1)
+	})
+
+	it("does not suggest group= when defaultGroup=file is active", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["file-group.md"],
+			config: { include: ["**/*.md"], defaultGroup: "file" },
+		})
+		expect(result.diagnostics.some((d) => d.code === "group")).toBe(false)
+	})
+
+	it("group=none detaches a fence from the file group, re-surfacing TS2304", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["file-group-detach.md"],
+			config: { include: ["**/*.md"], defaultGroup: "file" },
+		})
+		expect(errors(result.diagnostics).some((d) => d.code === 2304)).toBe(true)
+	})
+
+	it("a per-glob override can opt a subtree out of file grouping", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["file-group.md"],
+			config: {
+				include: ["**/*.md"],
+				defaultGroup: "file",
+				overrides: [{ include: ["**/*.md"], defaultGroup: "none" }],
+			},
+		})
+		// Opted back out -> the continuation fence cannot find `greeting`.
+		expect(errors(result.diagnostics).some((d) => d.code === 2304)).toBe(true)
+	})
+
 	it("groups two fences into a single virtual file plus the ungrouped one", async () => {
 		const result = await checkMarkdownFiles({
 			cwd: fixtures,

@@ -5,7 +5,7 @@ import { join } from "node:path"
 const CONFIG_TEMPLATE = `import { defineConfig } from "kiira-core"
 
 export default defineConfig({
-\tinclude: ["docs/**/*.md", "README.md"],
+\tinclude: ["docs/**/*.{md,mdx}", "README.md"],
 \ttsconfig: "tsconfig.docs.json",
 \tdefaultValidate: "type",
 \tlanguages: ["ts", "tsx", "js", "jsx"],

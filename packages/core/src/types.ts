@@ -56,6 +56,8 @@ export interface KiiraFenceMeta {
  */
 export interface KiiraOverride {
 	include: string[]
+	/** Per-glob default grouping (overrides the top-level `defaultGroup`). */
+	defaultGroup?: "none" | "file"
 	[option: string]: unknown
 }
 
@@ -79,6 +81,13 @@ export interface KiiraConfig {
 	 * (`@scope/pkg`, `react`) are always checked. Set true to enforce.
 	 */
 	checkRelativeImports?: boolean
+	/**
+	 * Implicitly group all checkable fences in a file (concatenated in document
+	 * order) so later fences see earlier declarations. `"none"` (default) keeps
+	 * per-fence isolation. Settable per-glob via `overrides`. An explicit `group=`
+	 * on a fence always wins; `group=none` detaches a fence from the file group.
+	 */
+	defaultGroup?: "none" | "file"
 	fixtures?: Record<string, KiiraFixture>
 	languages?: KiiraLanguage[]
 	markdown?: {
@@ -99,6 +108,7 @@ export interface ResolvedKiiraConfig {
 	packageMode: "workspace" | "packed"
 	defaultValidate: "type" | "runtime" | "none"
 	defaultFixture?: string
+	defaultGroup: "none" | "file"
 	checkUnusedSymbols: boolean
 	checkRelativeImports: boolean
 	fixtures: Record<string, KiiraFixture>

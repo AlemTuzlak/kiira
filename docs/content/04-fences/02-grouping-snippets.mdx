@@ -51,3 +51,57 @@ console.log(user.name)
 ````
 
 Adding the tags yourself is always fine, and it makes intent explicit for readers and other tooling.
+
+## File-level grouping for literate docs
+
+If your docs are **literate** — one fence sets up imports and values, and later fences build on them throughout the page — tagging every fence with `group=` doesn't scale. Set `defaultGroup: "file"` in your [config](/latest/configuration/options) and Kiira groups **every checkable fence in a file** into one implicit group, in document order, as if you'd stamped the same `group=` on each:
+
+```ts
+import { defineConfig } from "kiira-core"
+
+export default defineConfig({
+  include: ["docs/**/*.{md,mdx}"],
+  defaultGroup: "file", // "none" (default) | "file"
+})
+```
+
+Now this page type-checks with no annotations — the second fence resolves `greeting` from the first:
+
+````md
+```ts
+const greeting = "hello"
+```
+
+Some prose…
+
+```ts
+console.log(greeting.toUpperCase()) // ✅ resolved from the fence above
+```
+````
+
+You can scope it per directory with [per-glob overrides](/latest/projects/per-glob-overrides) — for example, file-group your guides but keep an isolated reference section:
+
+```ts
+defaultGroup: "file",
+overrides: [{ include: ["docs/reference/**"], defaultGroup: "none" }],
+```
+
+### Detaching a fence with `group=none`
+
+File grouping concatenates every fence, so two fences that each redeclare the same name (e.g. showing two alternatives that both do `const backend = …`) would now collide with `TS2451 Cannot redeclare`. Detach one with `group=none` to restore its isolation:
+
+````md
+```ts
+const backend = new RedisBackend()
+```
+
+```ts group=none
+const backend = new MemoryBackend() // ✅ checked on its own, no redeclare
+```
+````
+
+`group=none` (and an explicit `group=<id>`) always wins over `defaultGroup`. Fences marked `ignore` or `validate=none` are left out of the group entirely, exactly as without file grouping.
+
+<InfoAlert title="Tip">
+Turning on `defaultGroup: "file"` makes Kiira stop suggesting `group=` fixes for that file — there's nothing left to group.
+</InfoAlert>

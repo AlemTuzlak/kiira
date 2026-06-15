@@ -18,7 +18,7 @@ function isDirectory(cwd: string, path: string): boolean {
 
 /**
  * Turn `--entry` / positional arguments into include globs. A glob is used as-is;
- * a directory becomes `<dir>/**\/*.md`; a file path is used as-is.
+ * a directory becomes `<dir>/**\/*.{md,mdx}`; a file path is used as-is.
  */
 export function toIncludeGlobs(cwd: string, entries: string[]): string[] {
 	return entries.map((entry) => {
@@ -27,7 +27,7 @@ export function toIncludeGlobs(cwd: string, entries: string[]): string[] {
 			return value
 		}
 		if (isDirectory(cwd, entry)) {
-			return `${value.replace(/\/+$/, "")}/**/*.md`
+			return `${value.replace(/\/+$/, "")}/**/*.{md,mdx}`
 		}
 		return value
 	})

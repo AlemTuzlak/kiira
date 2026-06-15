@@ -85,4 +85,52 @@ describe("extractMarkdownSnippets", () => {
 		// Both fences are recognized and normalized to "ts".
 		expect(snippets.map((s) => s.lang)).toEqual(["ts", "ts"])
 	})
+
+	it("extracts a fence nested in a JSX element from .mdx (no blank line)", () => {
+		const content = ["<Callout>", "```ts", "const x = 1", "```", "</Callout>", ""].join("\n")
+		const { snippets } = extractSnippetsFromContent({
+			markdownFile: "docs/page.mdx",
+			content,
+			config: resolveConfig({}),
+		})
+		expect(snippets).toHaveLength(1)
+		expect(snippets[0]?.code).toBe("const x = 1")
+	})
+
+	it("extracts fences from .mdx with top-level ESM imports/exports", () => {
+		const content = ["import { Tabs } from './t'", "export const a = 1", "", "```ts", "const y = 2", "```", ""].join(
+			"\n"
+		)
+		const { snippets } = extractSnippetsFromContent({
+			markdownFile: "docs/page.mdx",
+			content,
+			config: resolveConfig({}),
+		})
+		expect(snippets).toHaveLength(1)
+		expect(snippets[0]?.code).toBe("const y = 2")
+	})
+
+	it("reports malformed .mdx as a diagnostic instead of throwing", () => {
+		// An unclosed JSX tag makes the MDX parser throw; it must degrade to a
+		// Kiira diagnostic so other files still get checked.
+		const content = ["<Callout>", "", "Some text with no closing tag."].join("\n")
+		let result: ReturnType<typeof extractSnippetsFromContent> | undefined
+		expect(() => {
+			result = extractSnippetsFromContent({ markdownFile: "docs/broken.mdx", content, config: resolveConfig({}) })
+		}).not.toThrow()
+		expect(result?.snippets).toHaveLength(0)
+		const parseError = result?.diagnostics.find((d) => d.severity === "error" && d.source === "kiira")
+		expect(parseError?.message).toContain("Failed to parse MDX")
+	})
+
+	it("keeps the plain parser for .md (literal <Foo> does not break extraction)", () => {
+		const content = ["<Foo>", "", "```ts", "const z = 3", "```", ""].join("\n")
+		const { snippets } = extractSnippetsFromContent({
+			markdownFile: "docs/page.md",
+			content,
+			config: resolveConfig({}),
+		})
+		expect(snippets).toHaveLength(1)
+		expect(snippets[0]?.code).toBe("const z = 3")
+	})
 })

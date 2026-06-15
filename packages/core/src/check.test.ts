@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { checkMarkdownFiles } from "./check"
+import { checkMarkdownFiles, optionsForFile } from "./check"
 import type { KiiraDiagnostic } from "./types"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -76,5 +76,14 @@ describe("checkMarkdownFiles", () => {
 		// The error is on the single code line (Markdown line 1), despite the
 		// three prepended fixture lines pushing it to virtual line 3.
 		expect(typeError?.markdownRange.start.line).toBe(1)
+	})
+
+	it("does not leak a defaultGroup override into compilerOptions", () => {
+		// `defaultGroup` is a Kiira concept, not a tsconfig option, so it must be
+		// stripped before the override is converted — otherwise TS throws "Unknown
+		// compiler option 'defaultGroup'".
+		expect(() =>
+			optionsForFile(fixtures, {}, [{ include: ["**/*.md"], defaultGroup: "none" }], "docs.md")
+		).not.toThrow()
 	})
 })

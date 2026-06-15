@@ -1,7 +1,7 @@
 ---
 title: "Options reference"
 summary: "Every Kiira config option with its default"
-description: "Complete reference for Kiira config options: include, exclude, tsconfig, packageMode, defaultValidate, checkUnusedSymbols, checkRelativeImports, overrides, fixtures, defaultFixture, and languages."
+description: "Complete reference for Kiira config options: include, exclude, tsconfig, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, overrides, fixtures, defaultFixture, and languages."
 ---
 
 ## Options at a glance
@@ -13,6 +13,7 @@ description: "Complete reference for Kiira config options: include, exclude, tsc
 | `tsconfig` | `string` | auto | Path to the tsconfig used to compile snippets. Auto-resolves `tsconfig.docs.json`, then `tsconfig.json`. |
 | `packageMode` | `"workspace" \| "packed"` | `"workspace"` | How package imports are resolved. |
 | `defaultValidate` | `"type" \| "runtime" \| "none"` | `"type"` | Default validation level for fences. |
+| `defaultGroup` | `"none" \| "file"` | `"none"` | Implicitly group every checkable fence in a file so later fences see earlier declarations. |
 | `checkUnusedSymbols` | `boolean` | `false` | Report unused symbols (TS6133). |
 | `checkRelativeImports` | `boolean` | `false` | Report unresolved relative imports. |
 | `overrides` | `Override[]` | `[]` | Per-glob compiler option overrides. |
@@ -25,8 +26,10 @@ description: "Complete reference for Kiira config options: include, exclude, tsc
 Glob patterns for the Markdown files Kiira checks. This is the only required option.
 
 ```ts
-include: ["docs/**/*.md", "docs/**/*.mdx", "README.md"]
+include: ["docs/**/*.{md,mdx}", "README.md"]
 ```
+
+Kiira checks both **`.md` and `.mdx`** files out of the box — `.mdx` is parsed MDX-aware, so fences nested inside JSX components (`<Tabs>`, `<Callout>`, …) and files with ESM `import`/`export` are extracted correctly. A bare glob like `"docs/**/*"` only ever picks up `.md`/`.mdx`; other files are ignored.
 
 `--entry` on the CLI overrides `include` for a single run.
 
@@ -68,6 +71,23 @@ The default validation level applied to every fence (override per-fence with the
 ```ts
 defaultValidate: "type"
 ```
+
+## `defaultGroup`
+
+How fences in a single file are grouped when you haven't tagged them with `group=`:
+
+- `"none"` (default) — each fence is its own isolated module (the original behavior).
+- `"file"` — every checkable fence in a file shares one implicit group, concatenated in document order, so a later fence sees declarations from earlier ones.
+
+```ts
+defaultGroup: "file"
+```
+
+`"file"` is built for **literate docs** — pages where one fence sets up imports and values and later fences build on them — collapsing the `TS2304 Cannot find name` noise without hand-tagging every fence. An explicit `group=` on a fence always wins, and `group=none` detaches a single fence (handy when two fences in the same file each redeclare the same name). You can also set `defaultGroup` per-glob via [`overrides`](/latest/projects/per-glob-overrides).
+
+<InfoAlert title="See it in context">
+The [Grouping snippets](/latest/fences/grouping-snippets) guide walks through file-level grouping and the `group=none` escape hatch end to end.
+</InfoAlert>
 
 ## `checkUnusedSymbols`
 

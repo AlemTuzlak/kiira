@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { Code, Nodes, Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
+import { mdxFromMarkdown } from "mdast-util-mdx"
+import { mdxjs } from "micromark-extension-mdxjs"
 import { FENCE_ALIASES, resolveConfig } from "./config"
 import { parseFenceMeta } from "./meta"
 import type { ExtractedSnippet, KiiraConfig, KiiraDiagnostic, KiiraLanguage, ResolvedKiiraConfig } from "./types"
@@ -36,6 +38,23 @@ function normalizeLang(raw: string): KiiraLanguage | undefined {
 	return ALIAS_TO_LANG.get(raw.toLowerCase())
 }
 
+/**
+ * Parse Markdown to an mdast tree. `.mdx` files use the MDX-aware micromark
+ * extensions so ESM `import`/`export`, JSX elements, and `{…}` expressions parse
+ * as MDX nodes instead of HTML — without which a fence placed directly inside a
+ * JSX element (e.g. `<Callout>`) is silently swallowed as raw HTML. `.md` files
+ * keep the plain parser so a literal `<Foo>` is not reinterpreted as JSX.
+ */
+function parseMarkdown(markdownFile: string, content: string): Root {
+	if (/\.mdx$/i.test(markdownFile)) {
+		return fromMarkdown(content, {
+			extensions: [mdxjs()],
+			mdastExtensions: [mdxFromMarkdown()],
+		}) as Root
+	}
+	return fromMarkdown(content) as Root
+}
+
 function collectCodeNodes(node: Nodes, out: Code[]): void {
 	if (node.type === "code") {
 		out.push(node)
@@ -44,6 +63,27 @@ function collectCodeNodes(node: Nodes, out: Code[]): void {
 		for (const child of node.children) {
 			collectCodeNodes(child, out)
 		}
+	}
+}
+
+/**
+ * Build a Kiira diagnostic for a Markdown/MDX parse failure, anchored to the
+ * failure's line/column when the thrown `VFileMessage` carries them.
+ */
+function parseErrorDiagnostic(markdownFile: string, error: unknown): KiiraDiagnostic {
+	const message = error instanceof Error ? error.message : String(error)
+	// `VFileMessage` exposes 1-based `line`/`column` of the offending construct.
+	const vfile = error as { line?: number | null; column?: number | null }
+	const line = typeof vfile.line === "number" && vfile.line > 0 ? vfile.line - 1 : 0
+	const character = typeof vfile.column === "number" && vfile.column > 0 ? vfile.column - 1 : 0
+	const position = { line, character }
+	const kind = /\.mdx$/i.test(markdownFile) ? "MDX" : "Markdown"
+	return {
+		severity: "error",
+		source: "kiira",
+		message: `Failed to parse ${kind}: ${message}`,
+		markdownFile,
+		markdownRange: { start: position, end: position },
 	}
 }
 
@@ -57,7 +97,20 @@ export function extractSnippetsFromContent({
 	config,
 	markdownUri,
 }: ExtractContentInput): SnippetExtraction {
-	const tree = fromMarkdown(content) as Root
+	const snippets: ExtractedSnippet[] = []
+	const diagnostics: KiiraDiagnostic[] = []
+
+	// The MDX parser (unlike CommonMark) throws on malformed input — an unclosed
+	// JSX tag or an unparseable `{…}` expression. Degrade to a per-file diagnostic
+	// so one bad file (e.g. mid-edit) doesn't abort the whole check run.
+	let tree: Root
+	try {
+		tree = parseMarkdown(markdownFile, content)
+	} catch (error) {
+		diagnostics.push(parseErrorDiagnostic(markdownFile, error))
+		return { snippets, diagnostics }
+	}
+
 	const codeNodes: Code[] = []
 	collectCodeNodes(tree, codeNodes)
 
@@ -65,8 +118,6 @@ export function extractSnippetsFromContent({
 	// (it defaults to each configured language plus its aliases); the identifier
 	// is then normalized to a KiiraLanguage so ```typescript maps to ts.
 	const recognized = new Set<string>(config.markdown.codeFenceLanguages.map((l) => l.toLowerCase()))
-	const snippets: ExtractedSnippet[] = []
-	const diagnostics: KiiraDiagnostic[] = []
 	let index = 0
 
 	for (const node of codeNodes) {
