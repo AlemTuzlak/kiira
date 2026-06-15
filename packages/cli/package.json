@@ -1,6 +1,6 @@
 {
 	"name": "kiira",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"description": "Command-line interface for Kiira: validate TypeScript and JavaScript code fences in your Markdown docs.",
 	"type": "module",
 	"bin": {
