@@ -37,10 +37,11 @@ The package is published dual ESM/CJS with full type declarations.
 
 Kiira's pipeline is a sequence of pure-ish stages you can use end-to-end or one at a time:
 
-1. **Discover** — `discoverMarkdownFiles` expands your `include`/`exclude` globs into a file list.
-2. **Extract** — `extractMarkdownSnippets` / `extractSnippetsFromContent` parse the Markdown AST,
-   pull out each ` ```ts/tsx/js/jsx ` fence, and read its info-string metadata
-   (`parseFenceMeta`).
+1. **Discover** — `discoverMarkdownFiles` expands your `include`/`exclude` globs into a file
+   list of `.md` and `.mdx` files.
+2. **Extract** — `extractMarkdownSnippets` / `extractSnippetsFromContent` parse the Markdown
+   AST (MDX-aware for `.mdx`, so fences inside JSX components are still found), pull out each
+   ` ```ts/tsx/js/jsx ` fence, and read its info-string metadata (`parseFenceMeta`).
 3. **Build virtual files** — `createVirtualFiles` / `buildVirtualFile` / `buildGroupedVirtualFile`
    turn each snippet (or each `group=`) into an in-memory `.ts`/`.tsx` file, applying fixtures
    and recording a line map. Nothing touches disk.

@@ -10,9 +10,9 @@
 
 **Type-check the code in your Markdown.**
 
-Kiira extracts TypeScript and JavaScript code fences from your Markdown docs, type-checks
-them against your real project API, and reports any errors right back on the Markdown line —
-in your editor, on the command line, and in CI.
+Kiira extracts TypeScript and JavaScript code fences from your Markdown and MDX docs,
+type-checks them against your real project API, and reports any errors right back on the
+source line — in your editor, on the command line, and in CI.
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/CodeForge.kiira-vscode?label=VS%20Code%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=CodeForge.kiira-vscode)
 [![npm](https://img.shields.io/npm/v/kiira?label=kiira&logo=npm)](https://www.npmjs.com/package/kiira)
@@ -83,7 +83,7 @@ export function Chat() {
 ````
 
 Supported metadata: `ignore`, `validate=type|runtime|none`, `fixture=<name>`, `name=<id>`,
-`package=workspace|packed`, `group=<id>`.
+`package=workspace|packed`, `group=<id>` (use `group=none` to detach a fence).
 
 ### Grouping snippets
 
@@ -104,6 +104,11 @@ await client.send("hi")   // resolves: same group as the snippet above
 Kiira also **detects** ungrouped continuations automatically — if grouping a document's
 snippets would resolve "cannot find name" errors, it warns and `kiira check --fix` adds the
 `group=` tags for you.
+
+For **literate docs** where most fences build on earlier ones, set `defaultGroup: "file"` in
+your config to implicitly group every fence in a file (in document order) without tagging any
+of them. An explicit `group=` still wins, and `group=none` detaches a fence. `defaultGroup` is
+also settable per-glob via `overrides`.
 
 ## Monorepos
 
@@ -182,7 +187,7 @@ Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
 import { defineConfig } from "kiira-core"
 
 export default defineConfig({
-  include: ["docs/**/*.md", "README.md"],
+  include: ["docs/**/*.{md,mdx}", "README.md"],
   exclude: ["**/node_modules/**"],
   tsconfig: "tsconfig.docs.json",   // defaults to tsconfig.docs.json, then tsconfig.json
   packageMode: "workspace",          // "workspace" (default) | "packed"
@@ -202,11 +207,12 @@ export default defineConfig({
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `include` | — | Markdown globs to check (required). |
+| `include` | — | Markdown/MDX globs to check (required). `.md` and `.mdx` are both checked. |
 | `exclude` | `[]` | Globs to skip. |
 | `tsconfig` | auto | tsconfig to source compiler options from. |
 | `packageMode` | `workspace` | Resolve monorepo packages (`workspace`) or rely on installed packages (`packed`). |
 | `defaultValidate` | `type` | Default validation mode for fences without a `validate=` tag. |
+| `defaultGroup` | `none` | `file` implicitly groups every fence in a file (literate docs). |
 | `checkUnusedSymbols` | `false` | Report unused locals/params/imports (TS6133). |
 | `checkRelativeImports` | `false` | Report unresolved relative imports. |
 | `overrides` | `[]` | Per-glob `compilerOptions` (e.g. `jsxImportSource`). |
@@ -229,6 +235,7 @@ Add tokens after the language on the fence info string:
 | `fixture=<name>` | Wrap the snippet with a named fixture from config. |
 | `name=<id>` | A stable label for the snippet (shown in tooling). |
 | `group=<id>` | Type-check fences sharing an id together, in document order. |
+| `group=none` | Detach a fence from its group (e.g. under `defaultGroup: "file"`). |
 | `package=workspace\|packed` | Override the package resolution mode for this fence. |
 
 Unused locals/parameters/imports (TS6133) are **ignored by default** — doc snippets

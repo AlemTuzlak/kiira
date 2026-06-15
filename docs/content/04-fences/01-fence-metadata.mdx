@@ -22,7 +22,7 @@ const x = 1
 | `validate=` | `type` \| `runtime` \| `none` | Validation level for this fence. Overrides `defaultValidate`. |
 | `fixture=` | `<name>` | Apply a named fixture from your config to this fence. |
 | `name=` | `<id>` | Give the fence an id (useful for tooling and the VS Code "open virtual file" command). |
-| `group=` | `<id>` | Type-check this fence together with other fences that share the id, in document order. |
+| `group=` | `<id>` \| `none` | Type-check this fence with other fences that share the id, in document order. `group=none` detaches the fence (useful under `defaultGroup: "file"`). |
 | `package=` | `workspace` \| `packed` | Override `packageMode` for this fence's import resolution. |
 
 ### `ignore`
@@ -60,7 +60,7 @@ const user = getUser()
 ```
 ```
 
-`group=` is covered in depth on the [Grouping snippets](/latest/fences/grouping-snippets) page.
+`group=` is covered in depth on the [Grouping snippets](/latest/fences/grouping-snippets) page, including `group=none` and file-level grouping with `defaultGroup`.
 
 ### `package=workspace|packed`
 

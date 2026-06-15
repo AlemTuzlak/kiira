@@ -96,6 +96,7 @@ export function Chat() {
 | `fixture=<name>` | Wrap/prepend the snippet with a named fixture from config. |
 | `name=<id>` | A stable label for the snippet (shown in tooling). |
 | `group=<id>` | Type-check fences sharing an id together, in document order. |
+| `group=none` | Detach a fence from its group (e.g. under `defaultGroup: "file"`). |
 | `package=workspace\|packed` | Override the package-resolution mode for this fence. |
 
 Unused locals/parameters/imports (TS6133) are **ignored by default** — doc snippets routinely
@@ -173,11 +174,12 @@ export default defineConfig({
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `include` | — | Markdown globs to check (required). |
+| `include` | — | Markdown/MDX globs to check (required). `.md` and `.mdx` are both checked. |
 | `exclude` | `[]` | Globs to skip. |
 | `tsconfig` | auto | tsconfig to source compiler options from. |
 | `packageMode` | `workspace` | Resolve monorepo packages (`workspace`) or rely on installed packages (`packed`). |
 | `defaultValidate` | `type` | Default validation mode for fences without a `validate=` tag. |
+| `defaultGroup` | `none` | `file` implicitly groups every fence in a file (literate docs). |
 | `checkUnusedSymbols` | `false` | Report unused locals/params/imports (TS6133). |
 | `checkRelativeImports` | `false` | Report unresolved relative imports. |
 | `overrides` | `[]` | Per-glob `compilerOptions` (e.g. `jsxImportSource`). |
@@ -204,6 +206,10 @@ await client.send("hi")   // resolves: same group as the snippet above
 Kiira also **detects** ungrouped continuations automatically — if grouping a document's
 snippets would resolve "cannot find name" errors, it warns and `kiira check --fix` adds the
 `group=` tags for you.
+
+For **literate docs**, set `defaultGroup: "file"` to implicitly group every fence in a file
+(in document order) without tagging any of them. An explicit `group=` still wins, and
+`group=none` detaches a fence. Also settable per-glob via `overrides`.
 
 ## Monorepos
 

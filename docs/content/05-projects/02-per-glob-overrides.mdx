@@ -32,6 +32,20 @@ Files under `docs/solid/` are checked with Solid's JSX runtime, files under `doc
 
 For every **distinct set of compiler options**, Kiira runs a **separate TypeScript program**. Files matched by an override join the program for that option set; unmatched files use the base program. This keeps each framework's snippets type-checking against the correct runtime without cross-contamination.
 
+## Overriding `defaultGroup` per glob
+
+Besides compiler options, an override can carry [`defaultGroup`](/latest/configuration/options) to opt a subtree in or out of file-level grouping. The last matching override wins, so you can file-group your guides while keeping a reference section isolated:
+
+```ts
+export default defineConfig({
+  include: ["docs/**/*.{md,mdx}"],
+  defaultGroup: "file",
+  overrides: [{ include: ["docs/reference/**"], defaultGroup: "none" }],
+})
+```
+
+See [Grouping snippets](/latest/fences/grouping-snippets) for what file-level grouping does.
+
 ## Automatic framework detection
 
 Kiira also **detects the framework from the file path** and from compilation failures. When a JSX snippet fails with TypeScript's `TS7026` (JSX element implicitly has type `any` because no interface `JSX.IntrinsicElements` exists) — the classic symptom of the wrong JSX runtime — Kiira **suggests an override**.
