@@ -65,7 +65,7 @@ async function loadWorkspaceConfig(cwd: string, configPath: string): Promise<Par
 		return await loadConfig(cwd)
 	} catch (error) {
 		output.appendLine(`Failed to load config: ${(error as Error).message}`)
-		return { include: ["**/*.md"] }
+		return { include: ["**/*.{md,mdx}"] }
 	}
 }
 

@@ -15,7 +15,8 @@ function toPosix(path: string): string {
 /**
  * Discover Markdown files under `cwd` matching the `include` globs and not
  * matching `exclude`. Results are posix-relative to `cwd`, de-duplicated, and
- * sorted. Only files ending in `.md` are returned even if a broader glob matches.
+ * sorted. Only files ending in `.md` or `.mdx` are returned even if a broader
+ * glob matches.
  */
 export async function discoverMarkdownFiles({ cwd, include, exclude = [] }: DiscoverInput): Promise<string[]> {
 	const matches = await glob(include, {
@@ -25,7 +26,7 @@ export async function discoverMarkdownFiles({ cwd, include, exclude = [] }: Disc
 		dot: false,
 	})
 
-	const markdown = matches.map(toPosix).filter((file) => file.toLowerCase().endsWith(".md"))
+	const markdown = matches.map(toPosix).filter((file) => /\.mdx?$/i.test(file))
 
 	return Array.from(new Set(markdown)).sort()
 }

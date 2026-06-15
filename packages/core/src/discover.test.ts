@@ -38,4 +38,13 @@ describe("discoverMarkdownFiles", () => {
 		})
 		expect(files).toEqual(["a.md", "generated/c.md", "nested/b.md"])
 	})
+
+	it("discovers .mdx files alongside .md", async () => {
+		const files = await discoverMarkdownFiles({
+			cwd: fixtures,
+			include: ["**/*.{md,mdx}"],
+		})
+		expect(files).toContain("page.mdx")
+		expect(files).toContain("a.md")
+	})
 })

@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe("toIncludeGlobs", () => {
 	it("expands a directory to a recursive markdown glob", () => {
-		expect(toIncludeGlobs(dir, ["docs"])).toEqual(["docs/**/*.md"])
+		expect(toIncludeGlobs(dir, ["docs"])).toEqual(["docs/**/*.{md,mdx}"])
 	})
 
 	it("passes a glob through unchanged", () => {

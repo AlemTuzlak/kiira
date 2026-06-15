@@ -1,5 +1,6 @@
+import { resolveConfig } from "./config"
 import type { ExtractedSnippet } from "./types"
-import { buildVirtualFile, mapVirtualLine, virtualFileName } from "./virtual"
+import { buildVirtualFile, effectiveGroup, mapVirtualLine, virtualFileName } from "./virtual"
 
 function snippet(overrides: Partial<ExtractedSnippet> = {}): ExtractedSnippet {
 	return {
@@ -13,6 +14,34 @@ function snippet(overrides: Partial<ExtractedSnippet> = {}): ExtractedSnippet {
 		...overrides,
 	}
 }
+
+describe("effectiveGroup", () => {
+	it("returns undefined when ungrouped and defaultGroup is none", () => {
+		expect(effectiveGroup(snippet({ meta: {} }), resolveConfig({}))).toBeUndefined()
+	})
+
+	it("returns the file path as the group when defaultGroup is file", () => {
+		expect(effectiveGroup(snippet({ meta: {} }), resolveConfig({ defaultGroup: "file" }))).toBe("docs/intro.md")
+	})
+
+	it("lets an explicit group= win over defaultGroup", () => {
+		expect(effectiveGroup(snippet({ meta: { group: "q" } }), resolveConfig({ defaultGroup: "file" }))).toBe("q")
+	})
+
+	it("treats group=none as detached even when defaultGroup is file", () => {
+		expect(
+			effectiveGroup(snippet({ meta: { group: "none" } }), resolveConfig({ defaultGroup: "file" }))
+		).toBeUndefined()
+	})
+
+	it("applies a per-glob override (last match wins)", () => {
+		const resolved = resolveConfig({
+			defaultGroup: "file",
+			overrides: [{ include: ["docs/**"], defaultGroup: "none" }],
+		})
+		expect(effectiveGroup(snippet({ meta: {} }), resolved)).toBeUndefined()
+	})
+})
 
 describe("virtualFileName", () => {
 	it("derives a stable filename from the markdown path, index, and language", () => {

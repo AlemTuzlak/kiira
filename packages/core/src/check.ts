@@ -8,7 +8,7 @@ import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { extractSnippetsFromContent } from "./extract"
 import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, KiiraLanguage, VirtualFile } from "./types"
-import { createVirtualFiles, isCheckable, mapVirtualLine } from "./virtual"
+import { createVirtualFiles, effectiveGroup, isCheckable, mapVirtualLine } from "./virtual"
 import { buildWorkspaceResolution } from "./workspace"
 
 /** TS codes meaning "cannot find name X" — the signature of a continuation snippet. */
@@ -285,7 +285,9 @@ function convertOverrideOptions(
 	cwd: string,
 	override: ReturnType<typeof resolveConfig>["overrides"][number]
 ): ts.CompilerOptions {
-	const { include: _include, ...compilerOptions } = override
+	// `include` (the glob) and `defaultGroup` (a Kiira grouping concept) are not
+	// tsconfig options; strip them so only real compiler options are converted.
+	const { include: _include, defaultGroup: _defaultGroup, ...compilerOptions } = override
 	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, cwd)
 	if (errors.length > 0) {
 		const messages = errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, "\n")).join("; ")
@@ -556,8 +558,10 @@ async function suggestGrouping(input: SuggestGroupingInput): Promise<KiiraDiagno
 		const checkable = snippets
 			.filter((s) => s.markdownFile === file && isCheckable(s, resolved))
 			.sort((a, b) => a.markdownRange.start.line - b.markdownRange.start.line)
-		// Only attempt on docs the author hasn't already grouped.
-		if (checkable.length < 2 || checkable.some((s) => s.meta.group)) {
+		// Only attempt on docs that aren't already grouped — by an explicit `group=`
+		// or by an effective `defaultGroup: "file"`. (When file-grouping is on, every
+		// fence is grouped, so there is nothing to suggest.)
+		if (checkable.length < 2 || checkable.some((s) => effectiveGroup(s, resolved) !== undefined)) {
 			continue
 		}
 		const docErrors = diagnostics.filter((d) => d.markdownFile === file && d.severity === "error")

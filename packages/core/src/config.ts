@@ -38,13 +38,14 @@ export function defineConfig(config: KiiraConfig): KiiraConfig {
 export function resolveConfig(config: Partial<KiiraConfig> = {}): ResolvedKiiraConfig {
 	const languages = config.languages ?? DEFAULT_LANGUAGES
 	return {
-		include: config.include ?? ["**/*.md"],
+		include: config.include ?? ["**/*.{md,mdx}"],
 		exclude: config.exclude ?? [],
 		tsconfig: config.tsconfig,
 		overrides: config.overrides ?? [],
 		packageMode: config.packageMode ?? "workspace",
 		defaultValidate: config.defaultValidate ?? "type",
 		defaultFixture: config.defaultFixture,
+		defaultGroup: config.defaultGroup ?? "none",
 		checkUnusedSymbols: config.checkUnusedSymbols ?? false,
 		checkRelativeImports: config.checkRelativeImports ?? false,
 		fixtures: config.fixtures ?? {},
@@ -92,7 +93,7 @@ export async function loadConfigFile(filepath: string): Promise<KiiraConfig> {
 export async function loadConfig(cwd: string): Promise<KiiraConfig> {
 	const filepath = findConfigFile(cwd)
 	if (!filepath) {
-		return { include: ["**/*.md"] }
+		return { include: ["**/*.{md,mdx}"] }
 	}
 	return loadConfigFile(filepath)
 }

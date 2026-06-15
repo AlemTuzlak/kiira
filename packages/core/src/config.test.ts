@@ -16,13 +16,14 @@ describe("resolveConfig", () => {
 	it("applies defaults to an empty config", () => {
 		const resolved = resolveConfig()
 		expect(resolved).toEqual({
-			include: ["**/*.md"],
+			include: ["**/*.{md,mdx}"],
 			exclude: [],
 			tsconfig: undefined,
 			overrides: [],
 			packageMode: "workspace",
 			defaultValidate: "type",
 			defaultFixture: undefined,
+			defaultGroup: "none",
 			checkUnusedSymbols: false,
 			checkRelativeImports: false,
 			fixtures: {},
@@ -56,6 +57,18 @@ describe("resolveConfig", () => {
 		// codeFenceLanguages defaults to the configured languages plus their aliases.
 		expect(resolved.markdown.codeFenceLanguages).toEqual(["ts", "typescript"])
 	})
+
+	it("defaults include to cover .md and .mdx", () => {
+		expect(resolveConfig({}).include).toEqual(["**/*.{md,mdx}"])
+	})
+
+	it("defaults defaultGroup to none", () => {
+		expect(resolveConfig({}).defaultGroup).toBe("none")
+	})
+
+	it("passes through an explicit defaultGroup", () => {
+		expect(resolveConfig({ defaultGroup: "file" }).defaultGroup).toBe("file")
+	})
 })
 
 describe("findConfigFile", () => {
@@ -84,7 +97,7 @@ describe("loadConfig", () => {
 
 	it("returns a default config when none is found", async () => {
 		const config = await loadConfig(resolve(fixtures, "config-none"))
-		expect(config.include).toEqual(["**/*.md"])
+		expect(config.include).toEqual(["**/*.{md,mdx}"])
 	})
 })
 
