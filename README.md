@@ -35,6 +35,17 @@ feature, configuration, CI recipes, and the VS Code extension. Run it locally wi
 `pnpm install && pnpm run dev` from inside `docs/`, or deploy it (Docker / Fly.io configs are
 included).
 
+## Using an AI agent?
+
+Kiira ships [TanStack Intent](https://www.npmjs.com/package/@tanstack/intent) skills with
+the `kiira` package — focused guidance your coding agent loads when it works with Kiira
+(setup, authoring/debugging fences, monorepos & frameworks, CI, the VS Code extension).
+Run once in your project:
+
+```bash
+npx @tanstack/intent@latest install
+```
+
 ## Why
 
 Docs are increasingly written and updated by agents, and agents hallucinate APIs. Kiira

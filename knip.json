@@ -1,7 +1,7 @@
 {
 	"$schema": "https://unpkg.com/knip@5/schema.json",
 	"ignoreBinaries": ["pkg-pr-new", "gh"],
-	"ignoreDependencies": ["@changesets/cli", "lefthook"],
+	"ignoreDependencies": ["@changesets/cli", "lefthook", "@tanstack/intent"],
 	"ignoreWorkspaces": ["examples/**", "packages/vscode"],
 	"ignore": ["**/tests/fixtures/**", "docs/**"]
 }
