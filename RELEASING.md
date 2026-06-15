@@ -24,24 +24,22 @@ Kiira ships three artifacts from this monorepo:
 The VS Code extension is `private: true`, so Changesets version-bumps it but never
 publishes it to npm — only the Marketplace workflow ships it.
 
-> [!IMPORTANT]
-> **Merge the "Version Packages" PR with a *merge commit* — not a squash.**
+> [!NOTE]
+> **Just approve and merge the "Version Packages" PR — any merge method works.**
 > Changesets opens that PR as `github-actions[bot]`, and GitHub will not trigger
-> workflows from a bot-authored push (anti-recursion, because CI uses the default
-> `GITHUB_TOKEN`). A **merge commit** is authored by *you* (the human clicking
-> merge), so it triggers the **Release** workflow and everything downstream
-> publishes automatically. A **squash** rewrites the tip into a single
-> bot-authored commit, which does **not** trigger anything — so the version bump
-> lands on `main` but nothing publishes.
+> `push` workflows from a bot-authored push (anti-recursion, because CI uses the
+> default `GITHUB_TOKEN`) — so the merge's *push* to `main` does not fire the
+> release. Instead, both the **Release** and **Publish VS Code Extension**
+> workflows also listen for `pull_request: closed`, gated to the
+> `changeset-release/main` PR being **merged**. Merging a PR is a human action, so
+> that event fires regardless of merge method (squash, merge commit, or rebase),
+> and the publish runs automatically.
 >
-> If you do squash it by accident (or the publish otherwise doesn't fire), the
-> recovery is one click: run the **Release** workflow manually via
-> *workflow_dispatch* (Actions → Release → Run workflow). `changeset publish` is
-> idempotent — it only publishes versions not already on npm, and the VS Code and
-> docs jobs self-gate the same way, so a manual run is always safe.
->
-> Normal feature PRs can be squashed freely; this only matters for the
-> Changesets-authored "Version Packages" PR.
+> If a publish ever doesn't fire, the recovery is one click: run the **Release**
+> workflow via *workflow_dispatch* (Actions → Release → Run workflow).
+> `changeset publish` is idempotent — it only publishes versions not already on
+> npm, and the VS Code and docs jobs self-gate the same way, so a manual run is
+> always safe.
 
 ## One-time setup (required before the first publish)
 

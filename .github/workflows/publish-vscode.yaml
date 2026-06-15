@@ -14,6 +14,13 @@ name: Release / Publish VS Code Extension
 on:
   push:
     branches: [main]
+  # Also fire when the Changesets "Version Packages" PR is merged. The merge's
+  # push to main is bot-authored and so suppressed by GitHub's anti-recursion, but
+  # merging a PR is a human action and does deliver `pull_request: closed` — gated
+  # (below) to that PR. Self-gating against the Marketplace keeps it idempotent.
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -22,7 +29,7 @@ on:
         default: true
 
 concurrency:
-  group: publish-vscode-${{ github.ref }}
+  group: publish-vscode
   cancel-in-progress: false
 
 permissions: {}
@@ -30,7 +37,18 @@ permissions: {}
 jobs:
   publish:
     name: Publish extension
-    if: github.repository_owner == 'AlemTuzlak'
+    # Source repo only; for `pull_request` events, only when the bot's "Version
+    # Packages" PR was actually merged (not a normal PR close, not a fork).
+    if: >-
+      github.repository_owner == 'AlemTuzlak' &&
+      (
+        github.event_name != 'pull_request' ||
+        (
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.head.ref == 'changeset-release/main' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -38,8 +56,11 @@ jobs:
     steps:
       - name: Checkout
         # persist-credentials is required: the final step pushes a git tag.
+        # `ref: main` pins the post-merge tip so the `pull_request: closed` run
+        # reads the bumped version (not the PR merge ref).
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3 # zizmor: ignore[artipacked]
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Read extension version
