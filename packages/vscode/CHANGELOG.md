@@ -1,5 +1,12 @@
 # kiira-vscode
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [4f7f678]
+  - kiira-core@0.5.0
+
 ## 0.3.1
 
 ### Patch Changes
