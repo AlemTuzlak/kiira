@@ -141,6 +141,23 @@ describe("ensureExternalPackages", () => {
 		expect(second.calls).toHaveLength(1)
 	})
 
+	it("retries a failed install on the next run instead of skipping", async () => {
+		const cwd = tempDir()
+		// First install succeeds: leaves a manifest and a node_modules behind.
+		await ensureExternalPackages(cwd, { zod: "^3" }, { runInstall: fakeRunner([{ ok: true }]).runInstall })
+
+		// Change the deps; this install fails (the prior node_modules still exists).
+		const failed = fakeRunner([{ ok: false }])
+		await ensureExternalPackages(cwd, { valibot: "^1" }, { runInstall: failed.runInstall })
+		expect(failed.calls).toHaveLength(1)
+
+		// Same deps again must RETRY (not be treated as up-to-date), because the
+		// failed attempt left no valid manifest.
+		const retry = fakeRunner([{ ok: true }])
+		await ensureExternalPackages(cwd, { valibot: "^1" }, { runInstall: retry.runInstall })
+		expect(retry.calls).toHaveLength(1)
+	})
+
 	it("falls back to npm when the detected PM fails", async () => {
 		const cwd = tempDir()
 		writeFileSync(join(cwd, "pnpm-lock.yaml"), "")

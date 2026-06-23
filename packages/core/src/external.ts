@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join, sep } from "node:path"
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun"
@@ -165,6 +165,15 @@ export async function ensureExternalPackages(
 	}
 
 	if (!result.ok) {
+		// Remove the manifest we wrote up-front so a failed install is retried on the
+		// next run. Otherwise its deps would deep-equal the request while a prior
+		// successful `node_modules` still exists, making the failure look up-to-date
+		// and silently skipping the retry forever.
+		try {
+			rmSync(pkgJsonPath, { force: true })
+		} catch {
+			// best-effort; a leftover manifest only costs an extra (correct) reinstall
+		}
 		warn(
 			`Kiira failed to install external packages into ${cacheDir} (\`${label}\` failed). Imports of these packages will not resolve.\n${result.output}`.trim()
 		)
