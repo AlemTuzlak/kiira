@@ -1,6 +1,10 @@
-import { dirname, resolve } from "node:path"
+import { mkdirSync, mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { checkMarkdownFiles, optionsForFile } from "./check"
+import { buildBaseOptions, checkMarkdownFiles, optionsForFile } from "./check"
+import { resolveConfig } from "./config"
+import { externalCacheDir } from "./external"
 import type { KiiraDiagnostic } from "./types"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -85,5 +89,33 @@ describe("checkMarkdownFiles", () => {
 		expect(() =>
 			optionsForFile(fixtures, {}, [{ include: ["**/*.md"], defaultGroup: "none" }], "docs.md")
 		).not.toThrow()
+	})
+})
+
+function extTempDir(): string {
+	return mkdtempSync(join(tmpdir(), "kiira-check-ext-"))
+}
+
+describe("buildBaseOptions external packages", () => {
+	it("appends the external cache to paths['*'] and typeRoots when declared and installed", async () => {
+		const cwd = extTempDir()
+		const nm = join(externalCacheDir(cwd), "node_modules")
+		mkdirSync(join(nm, "@types"), { recursive: true })
+
+		const options = await buildBaseOptions(
+			cwd,
+			resolveConfig({ externalPackages: { zod: "^3" }, packageMode: "packed" })
+		)
+
+		const star = options.paths?.["*"] ?? []
+		expect(star.some((p) => p.includes("/.kiira/node_modules/*"))).toBe(true)
+		expect((options.typeRoots ?? []).some((r) => r.endsWith("/.kiira/node_modules/@types"))).toBe(true)
+	})
+
+	it("adds nothing when externalPackages is empty", async () => {
+		const cwd = extTempDir()
+		const options = await buildBaseOptions(cwd, resolveConfig({ packageMode: "packed" }))
+		const star = options.paths?.["*"] ?? []
+		expect(star.some((p) => p.includes("/.kiira/"))).toBe(false)
 	})
 })

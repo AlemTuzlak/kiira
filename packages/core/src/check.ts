@@ -6,6 +6,7 @@ import ts from "typescript"
 import { analyzeSnippet } from "./analyze"
 import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
+import { collectExternalPackages, externalResolution } from "./external"
 import { extractSnippetsFromContent } from "./extract"
 import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, KiiraLanguage, VirtualFile } from "./types"
 import { createVirtualFiles, effectiveGroup, isCheckable, mapVirtualLine } from "./virtual"
@@ -241,6 +242,21 @@ export async function buildBaseOptions(
 			}
 		}
 	}
+
+	// External packages (doc-only deps installed into node_modules/.kiira) resolve
+	// in both workspace and packed modes. Append after workspace fallbacks so real
+	// workspace packages and user paths still win. Pure: never installs here — the
+	// CLI populates the cache via ensureExternalPackages before checking.
+	const externalPackages = collectExternalPackages(resolved)
+	const external = externalResolution(cwd, externalPackages)
+	if (external) {
+		options.baseUrl = options.baseUrl ?? cwd
+		const existingStar = options.paths?.["*"] ?? []
+		options.paths = { ...(options.paths ?? {}), "*": [...existingStar, external.nodeModulesGlob] }
+		if (external.typeRoots.length > 0) {
+			options.typeRoots = [...new Set([...(options.typeRoots ?? []), ...external.typeRoots])]
+		}
+	}
 	return options
 }
 
@@ -285,9 +301,15 @@ function convertOverrideOptions(
 	cwd: string,
 	override: ReturnType<typeof resolveConfig>["overrides"][number]
 ): ts.CompilerOptions {
-	// `include` (the glob) and `defaultGroup` (a Kiira grouping concept) are not
-	// tsconfig options; strip them so only real compiler options are converted.
-	const { include: _include, defaultGroup: _defaultGroup, ...compilerOptions } = override
+	// `include` (the glob), `defaultGroup` (a Kiira grouping concept) and
+	// `externalPackages` (doc-only deps) are not tsconfig options; strip them so
+	// only real compiler options are converted.
+	const {
+		include: _include,
+		defaultGroup: _defaultGroup,
+		externalPackages: _externalPackages,
+		...compilerOptions
+	} = override
 	const { options, errors } = ts.convertCompilerOptionsFromJson(compilerOptions, cwd)
 	if (errors.length > 0) {
 		const messages = errors.map((e) => ts.flattenDiagnosticMessageText(e.messageText, "\n")).join("; ")
