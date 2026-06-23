@@ -89,9 +89,12 @@ const INSTALL_COMMANDS: Record<PackageManager, { cmd: string; args: string[] }> 
 }
 
 // ponytail: shell:true because npm/pnpm/yarn are .cmd shims on Windows that
-// spawnSync can't exec directly otherwise.
+// spawnSync can't exec directly otherwise. Pass the full command as one string
+// (not cmd+args[]) — that's the correct shell:true form and avoids Node's
+// DEP0190 warning. Injection is a non-issue: the config that supplies these
+// values is itself executable code (loaded via jiti).
 const defaultRunInstall: InstallRunner = (cmd, args, cwd) => {
-	const result = spawnSync(cmd, args, { cwd, encoding: "utf8", shell: true })
+	const result = spawnSync([cmd, ...args].join(" "), { cwd, encoding: "utf8", shell: true })
 	return { ok: result.status === 0, output: `${result.stdout ?? ""}${result.stderr ?? ""}` }
 }
 
