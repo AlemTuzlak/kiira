@@ -26,6 +26,7 @@ describe("resolveConfig", () => {
 			defaultGroup: "none",
 			checkUnusedSymbols: false,
 			checkRelativeImports: false,
+			externalPackages: {},
 			fixtures: {},
 			languages: ["ts", "tsx", "js", "jsx"],
 			markdown: {
@@ -43,6 +44,11 @@ describe("resolveConfig", () => {
 				],
 			},
 		})
+	})
+
+	it("preserves externalPackages and defaults it to an empty object", () => {
+		expect(resolveConfig({ externalPackages: { zod: "^3" } }).externalPackages).toEqual({ zod: "^3" })
+		expect(resolveConfig().externalPackages).toEqual({})
 	})
 
 	it("preserves provided values", () => {

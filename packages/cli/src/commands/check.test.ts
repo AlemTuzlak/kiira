@@ -1,7 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { externalCacheDir } from "kiira-core"
 import { runCheck } from "./check"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -65,6 +66,43 @@ describe("runCheck", () => {
 
 			expect(readFileSync(join(dir, "comp.md"), "utf8").split("\n")[2]).toBe("```tsx")
 			expect(io.logs.join("\n")).toContain("Fixed 1 fence")
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("resolves imports of declared externalPackages from the isolated cache", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-ext-cli-"))
+		try {
+			// Pre-populate the isolated cache with a fake typed package so the
+			// idempotent install is a no-op (deps unchanged + node_modules exists)
+			// and no real package manager is spawned.
+			const cache = externalCacheDir(dir)
+			const pkgDir = join(cache, "node_modules", "faux-lib")
+			mkdirSync(pkgDir, { recursive: true })
+			writeFileSync(
+				join(pkgDir, "package.json"),
+				JSON.stringify({ name: "faux-lib", version: "1.0.0", types: "index.d.ts" })
+			)
+			writeFileSync(join(pkgDir, "index.d.ts"), "export const hello: (name: string) => string\n")
+			writeFileSync(
+				join(cache, "package.json"),
+				JSON.stringify({ name: ".kiira", private: true, version: "0.0.0", dependencies: { "faux-lib": "^1" } })
+			)
+
+			writeFileSync(
+				join(dir, "kiira.config.json"),
+				JSON.stringify({ include: ["**/*.md"], externalPackages: { "faux-lib": "^1" } })
+			)
+			writeFileSync(join(dir, "doc.md"), '```ts\nimport { hello } from "faux-lib"\nhello("world")\n```\n')
+
+			const io = capture()
+			const code = await runCheck({ cwd: dir, files: [], reporter: "json", ...io })
+
+			expect(io.errors).toEqual([])
+			expect(code).toBe(0)
+			const report = JSON.parse(io.logs.join("\n"))
+			expect(report.stats.errors).toBe(0)
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}

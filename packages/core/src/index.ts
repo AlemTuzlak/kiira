@@ -61,3 +61,15 @@ export {
 	type WorkspacePackage,
 	type WorkspaceResolution,
 } from "./workspace"
+export {
+	collectExternalPackages,
+	detectPackageManager,
+	type EnsureExternalOptions,
+	ensureExternalPackages,
+	EXTERNAL_CACHE_DIRNAME,
+	externalCacheDir,
+	type ExternalResolution,
+	externalResolution,
+	type InstallRunner,
+	type PackageManager,
+} from "./external"

@@ -58,6 +58,8 @@ export interface KiiraOverride {
 	include: string[]
 	/** Per-glob default grouping (overrides the top-level `defaultGroup`). */
 	defaultGroup?: "none" | "file"
+	/** Per-glob external packages, merged into the single global install (see {@link KiiraConfig.externalPackages}). */
+	externalPackages?: Record<string, string>
 	[option: string]: unknown
 }
 
@@ -81,6 +83,14 @@ export interface KiiraConfig {
 	 * (`@scope/pkg`, `react`) are always checked. Set true to enforce.
 	 */
 	checkRelativeImports?: boolean
+	/**
+	 * Packages to install into an isolated, hidden cache (`node_modules/.kiira`)
+	 * purely so doc fences that import them type-check — without adding them to
+	 * the project's real dependencies. Keyed by package name → version range.
+	 * Declarations here and on `overrides` are merged into one install and
+	 * resolve globally.
+	 */
+	externalPackages?: Record<string, string>
 	/**
 	 * Implicitly group all checkable fences in a file (concatenated in document
 	 * order) so later fences see earlier declarations. `"none"` (default) keeps
@@ -111,6 +121,7 @@ export interface ResolvedKiiraConfig {
 	defaultGroup: "none" | "file"
 	checkUnusedSymbols: boolean
 	checkRelativeImports: boolean
+	externalPackages: Record<string, string>
 	fixtures: Record<string, KiiraFixture>
 	languages: KiiraLanguage[]
 	markdown: {
