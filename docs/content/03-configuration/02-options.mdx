@@ -1,7 +1,7 @@
 ---
 title: "Options reference"
 summary: "Every Kiira config option with its default"
-description: "Complete reference for Kiira config options: include, exclude, tsconfig, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, overrides, fixtures, defaultFixture, and languages."
+description: "Complete reference for Kiira config options: include, exclude, tsconfig, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, overrides, externalPackages, fixtures, defaultFixture, and languages."
 ---
 
 ## Options at a glance
@@ -17,6 +17,7 @@ description: "Complete reference for Kiira config options: include, exclude, tsc
 | `checkUnusedSymbols` | `boolean` | `false` | Report unused symbols (TS6133). |
 | `checkRelativeImports` | `boolean` | `false` | Report unresolved relative imports. |
 | `overrides` | `Override[]` | `[]` | Per-glob compiler option overrides. |
+| `externalPackages` | `Record<string, string>` | `{}` | Doc-only packages to install into a hidden, isolated cache so fences that import them type-check. |
 | `fixtures` | `Record<string, Fixture>` | `{}` | Named prepend/wrap code applied to fences. |
 | `defaultFixture` | `string` | — | Fixture applied to every fence by default. |
 | `languages` | `string[]` | `["ts","tsx","js","jsx"]` | Fence languages Kiira checks. |
@@ -117,6 +118,23 @@ overrides: [
   },
 ]
 ```
+
+## `externalPackages`
+
+Packages your docs **import** but your project does **not** depend on — a competitor library shown in a comparison, or a third-party tool shown in an integration example. Without them installed, those imports fail to resolve and the fence reports `TS2307: Cannot find module`.
+
+`externalPackages` is a `Record<string, string>` of package name → version range. Kiira installs them into a hidden, isolated cache (`node_modules/.kiira`) purely for type-checking — your real `package.json` and `node_modules` are never touched.
+
+```ts
+externalPackages: {
+  langchain: "^0.3.0",
+  zod: "^3",
+}
+```
+
+- The install runs on `kiira check` with your project's package manager (detected from the lockfile), and **re-installs only when the list changes** — otherwise it's a no-op.
+- Declarations on [`overrides`](/latest/projects/per-glob-overrides) (`overrides[].externalPackages`) are merged into the same install and resolve globally (one version per package name).
+- Remove the cache any time with `rm -rf node_modules/.kiira`.
 
 ## `fixtures`
 
