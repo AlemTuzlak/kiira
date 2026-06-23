@@ -146,20 +146,24 @@ export async function ensureExternalPackages(
 		`${JSON.stringify({ name: ".kiira", private: true, version: "0.0.0", dependencies: packages }, null, 2)}\n`
 	)
 
+	const attempt = (cmd: string, args: string[]) => ({
+		result: runInstall(cmd, args, cacheDir),
+		label: `${cmd} ${args.join(" ")}`,
+	})
+
 	const pm = detectPackageManager(cwd)
 	log(`Installing ${Object.keys(packages).length} external package(s) with ${pm}…`)
 	const primary = INSTALL_COMMANDS[pm]
-	let result = runInstall(primary.cmd, primary.args, cacheDir)
+	let { result, label } = attempt(primary.cmd, primary.args)
 
 	if (!result.ok && pm !== "npm") {
 		log(`${pm} install failed; retrying with npm…`)
-		const fallback = INSTALL_COMMANDS.npm
-		result = runInstall(fallback.cmd, fallback.args, cacheDir)
+		;({ result, label } = attempt(INSTALL_COMMANDS.npm.cmd, INSTALL_COMMANDS.npm.args))
 	}
 
 	if (!result.ok) {
 		warn(
-			`Kiira failed to install external packages into ${cacheDir}. Imports of these packages will not resolve.\n${result.output}`.trim()
+			`Kiira failed to install external packages into ${cacheDir} (\`${label}\` failed). Imports of these packages will not resolve.\n${result.output}`.trim()
 		)
 	}
 }

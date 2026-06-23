@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from "node:fs"
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -117,5 +117,27 @@ describe("buildBaseOptions external packages", () => {
 		const options = await buildBaseOptions(cwd, resolveConfig({ packageMode: "packed" }))
 		const star = options.paths?.["*"] ?? []
 		expect(star.some((p) => p.includes("/.kiira/"))).toBe(false)
+	})
+
+	it("appends the external cache AFTER workspace fallbacks in workspace mode", async () => {
+		const cwd = extTempDir()
+		// Minimal pnpm workspace so buildWorkspaceResolution contributes a node_modules
+		// fallback to paths['*'] that the external cache must be appended after.
+		writeFileSync(join(cwd, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
+		mkdirSync(join(cwd, "node_modules"), { recursive: true })
+		mkdirSync(join(cwd, "packages", "foo"), { recursive: true })
+		writeFileSync(join(cwd, "packages", "foo", "package.json"), JSON.stringify({ name: "foo", version: "0.0.0" }))
+		mkdirSync(join(externalCacheDir(cwd), "node_modules"), { recursive: true })
+
+		const options = await buildBaseOptions(
+			cwd,
+			resolveConfig({ externalPackages: { zod: "^3" }, packageMode: "workspace" })
+		)
+
+		const star = options.paths?.["*"] ?? []
+		// A workspace node_modules fallback exists and the external cache is last.
+		expect(star.length).toBeGreaterThanOrEqual(2)
+		expect(star[star.length - 1].includes("/.kiira/node_modules/*")).toBe(true)
+		expect(star.slice(0, -1).some((p) => p.includes("/.kiira/"))).toBe(false)
 	})
 })
