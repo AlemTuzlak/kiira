@@ -48,6 +48,7 @@ export function resolveConfig(config: Partial<KiiraConfig> = {}): ResolvedKiiraC
 		defaultGroup: config.defaultGroup ?? "none",
 		checkUnusedSymbols: config.checkUnusedSymbols ?? false,
 		checkRelativeImports: config.checkRelativeImports ?? false,
+		externalPackages: config.externalPackages ?? {},
 		fixtures: config.fixtures ?? {},
 		languages,
 		markdown: {
