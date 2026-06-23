@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
-import { type KiiraConfig, checkMarkdownFiles, findConfigFile, loadConfig, loadConfigFile } from "kiira-core"
+import {
+	type KiiraConfig,
+	checkMarkdownFiles,
+	collectExternalPackages,
+	ensureExternalPackages,
+	findConfigFile,
+	loadConfig,
+	loadConfigFile,
+} from "kiira-core"
 import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"
@@ -57,6 +65,16 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	const include = entries.length > 0 ? toIncludeGlobs(cwd, entries) : loaded.include
 	const exclude = [...(loaded.exclude ?? []), ...toIgnoreGlobs(cwd, options.ignore ?? [])]
 	const config: KiiraConfig = { ...loaded, include, exclude }
+
+	// Install any declared doc-only packages into the isolated cache so their
+	// imports resolve during the check. Idempotent: a no-op when already current.
+	const externalPackages = collectExternalPackages(config)
+	if (Object.keys(externalPackages).length > 0) {
+		await ensureExternalPackages(cwd, externalPackages, {
+			warn: options.error,
+			log: options.verbose ? options.log : undefined,
+		})
+	}
 
 	// Run the (slow) checking under a spinner, deferring all output until it stops
 	// so the spinner line and the report never interleave.
