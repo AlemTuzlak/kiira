@@ -63,10 +63,25 @@ export interface KiiraOverride {
 	[option: string]: unknown
 }
 
+/**
+ * Which TypeScript engine type-checks the doc snippets.
+ * - `"classic"` — kiira's bundled TypeScript (`ts.createProgram`), in-process.
+ * - `"native"`  — the consuming project's TypeScript 7 native compiler (the Go
+ *   port, via its `unstable/sync` API). Requires `typescript@>=7` in the project.
+ * - `"auto"` (default) — use `"native"` when the project has TypeScript 7
+ *   installed, otherwise `"classic"`.
+ *
+ * Diagnostics are the same either way; editor code-fixes always use the bundled
+ * TypeScript (the native compiler has no code-fix API yet).
+ */
+export type KiiraEngine = "auto" | "classic" | "native"
+
 export interface KiiraConfig {
 	include: string[]
 	exclude?: string[]
 	tsconfig?: string
+	/** Type-checking engine. See {@link KiiraEngine}. Defaults to `"auto"`. */
+	engine?: KiiraEngine
 	overrides?: KiiraOverride[]
 	packageMode?: "workspace" | "packed"
 	defaultValidate?: "type" | "runtime" | "none"
@@ -114,6 +129,7 @@ export interface ResolvedKiiraConfig {
 	include: string[]
 	exclude: string[]
 	tsconfig?: string
+	engine: KiiraEngine
 	overrides: KiiraOverride[]
 	packageMode: "workspace" | "packed"
 	defaultValidate: "type" | "runtime" | "none"

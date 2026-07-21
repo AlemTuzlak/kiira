@@ -41,6 +41,7 @@ export function resolveConfig(config: Partial<KiiraConfig> = {}): ResolvedKiiraC
 		include: config.include ?? ["**/*.{md,mdx}"],
 		exclude: config.exclude ?? [],
 		tsconfig: config.tsconfig,
+		engine: config.engine ?? "auto",
 		overrides: config.overrides ?? [],
 		packageMode: config.packageMode ?? "workspace",
 		defaultValidate: config.defaultValidate ?? "type",

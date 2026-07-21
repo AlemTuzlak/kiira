@@ -116,7 +116,10 @@ describe("ensureExternalPackages", () => {
 		expect(pkg.private).toBe(true)
 		expect(calls).toHaveLength(1)
 		expect(calls[0].cmd).toBe("pnpm")
-		expect(calls[0].args).toEqual(["install", "--ignore-workspace"])
+		// --ignore-scripts is load-bearing: without it pnpm exits non-zero on
+		// ERR_PNPM_IGNORED_BUILDS even when the install succeeded (kiira only
+		// type-checks against types/source, never needs a dep's build output).
+		expect(calls[0].args).toEqual(["install", "--ignore-workspace", "--ignore-scripts"])
 		expect(calls[0].cwd).toBe(externalCacheDir(cwd))
 	})
 
@@ -168,6 +171,8 @@ describe("ensureExternalPackages", () => {
 		expect(calls).toHaveLength(2)
 		expect(calls[0].cmd).toBe("pnpm")
 		expect(calls[1].cmd).toBe("npm")
+		// The npm fallback also skips scripts, so it can't fail on a dep build either.
+		expect(calls[1].args).toContain("--ignore-scripts")
 	})
 
 	it("warns and does not throw when every install attempt fails", async () => {
