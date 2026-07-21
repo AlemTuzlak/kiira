@@ -73,6 +73,14 @@ jobs:
         id: deploy
         uses: forge-42/fly-deploy@0b6f801f7e8c34efec5ffaf84ed006761781c0df # v1.0.0-rc.2
         env:
+          # This job only runs on real publishes (push to main / merged
+          # changeset-release PR), always a production deploy. When the Release
+          # workflow is triggered by the merged Version Packages `pull_request`,
+          # this reusable workflow inherits that event, and fly-deploy switches to
+          # PR-preview mode (which rejects the static `kiira-docs` app_name because
+          # it expects the PR number). Force production mode by overriding the event
+          # name the action reads (`github.context.eventName` === $GITHUB_EVENT_NAME).
+          GITHUB_EVENT_NAME: push
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
           FLY_ORG: ${{ vars.FLY_ORG }}
           FLY_REGION: ${{ vars.FLY_REGION }}
