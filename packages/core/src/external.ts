@@ -79,13 +79,20 @@ export interface EnsureExternalOptions {
 }
 
 // Install command per package manager. npm is also the universal fallback.
-// ponytail: bare install args, no per-PM isolation matrix; --ignore-workspace
-// is the one flag needed to stop pnpm inheriting the parent monorepo.
+// ponytail: bare install args, no per-PM isolation matrix.
+//
+// `--ignore-scripts` everywhere: kiira only reads types/source off disk to
+// type-check — it never needs a dependency's build output. Skipping scripts is
+// (1) correct: pnpm 10+ *exits non-zero* on `ERR_PNPM_IGNORED_BUILDS` when a dep
+// wants to run a build script but isn't allow-listed, which made kiira misread a
+// fully-successful install as a failure; with scripts off there is nothing to
+// approve. (2) safer: doc-only third-party deps never get to run postinstall
+// code. (3) faster. `--ignore-workspace` stops pnpm inheriting the parent monorepo.
 const INSTALL_COMMANDS: Record<PackageManager, { cmd: string; args: string[] }> = {
-	npm: { cmd: "npm", args: ["install", "--no-audit", "--no-fund"] },
-	pnpm: { cmd: "pnpm", args: ["install", "--ignore-workspace"] },
-	yarn: { cmd: "yarn", args: ["install"] },
-	bun: { cmd: "bun", args: ["install"] },
+	npm: { cmd: "npm", args: ["install", "--no-audit", "--no-fund", "--ignore-scripts"] },
+	pnpm: { cmd: "pnpm", args: ["install", "--ignore-workspace", "--ignore-scripts"] },
+	yarn: { cmd: "yarn", args: ["install", "--ignore-scripts"] },
+	bun: { cmd: "bun", args: ["install", "--ignore-scripts"] },
 }
 
 // ponytail: shell:true because npm/pnpm/yarn are .cmd shims on Windows that
@@ -157,14 +164,17 @@ export async function ensureExternalPackages(
 	const pm = detectPackageManager(cwd)
 	log(`Installing ${Object.keys(packages).length} external package(s) with ${pm}…`)
 	const primary = INSTALL_COMMANDS[pm]
+	const failures: Array<{ label: string; output: string }> = []
 	let { result, label } = attempt(primary.cmd, primary.args)
 
 	if (!result.ok && pm !== "npm") {
+		failures.push({ label, output: result.output })
 		log(`${pm} install failed; retrying with npm…`)
 		;({ result, label } = attempt(INSTALL_COMMANDS.npm.cmd, INSTALL_COMMANDS.npm.args))
 	}
 
 	if (!result.ok) {
+		failures.push({ label, output: result.output })
 		// Remove the manifest we wrote up-front so a failed install is retried on the
 		// next run. Otherwise its deps would deep-equal the request while a prior
 		// successful `node_modules` still exists, making the failure look up-to-date
@@ -174,8 +184,12 @@ export async function ensureExternalPackages(
 		} catch {
 			// best-effort; a leftover manifest only costs an extra (correct) reinstall
 		}
+		// Report every attempt's output, not just the last — when the primary PM
+		// fails and the npm fallback also fails, showing only npm's error hides the
+		// real cause (e.g. the primary's failure was the actual problem).
+		const detail = failures.map(({ label: l, output }) => `$ ${l}\n${output.trim()}`).join("\n\n")
 		warn(
-			`Kiira failed to install external packages into ${cacheDir} (\`${label}\` failed). Imports of these packages will not resolve.\n${result.output}`.trim()
+			`Kiira failed to install external packages into ${cacheDir}. Imports of these packages will not resolve.\n${detail}`.trim()
 		)
 	}
 }

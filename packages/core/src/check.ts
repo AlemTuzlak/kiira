@@ -6,39 +6,20 @@ import ts from "typescript"
 import { analyzeSnippet } from "./analyze"
 import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
+import { type RawDiagnostic, resolveEngine } from "./engine"
 import { collectExternalPackages, externalResolution } from "./external"
 import { extractSnippetsFromContent } from "./extract"
-import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, KiiraLanguage, VirtualFile } from "./types"
+import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, VirtualFile } from "./types"
 import { createVirtualFiles, effectiveGroup, isCheckable, mapVirtualLine } from "./virtual"
 import { buildWorkspaceResolution } from "./workspace"
 
+// The lib-dir override and the classic overlay host live in `engine.ts` alongside
+// the classic engine; re-export the host-facing hooks so consumers (index, vscode)
+// keep importing them from `check`.
+export { applyLibDirOverride, setTypescriptLibDir } from "./engine"
+
 /** TS codes meaning "cannot find name X" — the signature of a continuation snippet. */
 const CANNOT_FIND_NAME = new Set([2304, 2552])
-
-// Directory holding TypeScript's `lib.*.d.ts` files. When TypeScript is bundled
-// into a host (the VS Code extension), `ts.sys.getExecutingFilePath()` no longer
-// points next to the real lib files, so the default-lib location is wrong and every
-// global (`JSON`, `Date`, DOM types) is reported as undefined. A host that bundles
-// TypeScript ships the lib files and calls `setTypescriptLibDir` to point here.
-let typescriptLibDir: string | undefined
-
-/** Override where TypeScript loads its default `lib.*.d.ts` from (for bundled hosts). */
-export function setTypescriptLibDir(dir: string | undefined): void {
-	typescriptLibDir = dir
-}
-
-/** Apply the configured lib-directory override to a compiler/language-service host. */
-export function applyLibDirOverride(host: {
-	getDefaultLibLocation?: () => string
-	getDefaultLibFileName: (options: ts.CompilerOptions) => string
-}): void {
-	if (!typescriptLibDir) {
-		return
-	}
-	const dir = typescriptLibDir
-	host.getDefaultLibLocation = () => dir
-	host.getDefaultLibFileName = (options) => join(dir, ts.getDefaultLibFileName(options))
-}
 
 function groupSlug(markdownFile: string): string {
 	const base = (markdownFile.split(/[\\/]/).pop() ?? markdownFile).replace(/\.[^.]+$/, "")
@@ -97,72 +78,13 @@ function loadCompilerOptions(tsconfigPath: string | undefined): ts.CompilerOptio
 	return { ...parsed.options, noEmit: true, skipLibCheck: parsed.options.skipLibCheck ?? true }
 }
 
-function scriptKindFor(lang: KiiraLanguage): ts.ScriptKind {
-	switch (lang) {
-		case "tsx":
-			return ts.ScriptKind.TSX
-		case "jsx":
-			return ts.ScriptKind.JSX
-		case "js":
-			return ts.ScriptKind.JS
-		default:
-			return ts.ScriptKind.TS
-	}
-}
-
-function categoryToSeverity(category: ts.DiagnosticCategory): KiiraDiagnostic["severity"] {
-	switch (category) {
-		case ts.DiagnosticCategory.Error:
-			return "error"
-		case ts.DiagnosticCategory.Warning:
-			return "warning"
-		default:
-			return "info"
-	}
-}
-
-/** Build a TS compiler host that overlays in-memory virtual files on the real filesystem. */
-function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFile[]): ts.CompilerHost {
-	const host = ts.createCompilerHost(options, true)
-	const caseSensitive = host.useCaseSensitiveFileNames()
-	const normalize = (file: string): string => {
-		const slashed = file.replace(/\\/g, "/")
-		return caseSensitive ? slashed : slashed.toLowerCase()
-	}
-
-	const overlay = new Map<string, VirtualFile>()
-	for (const vf of virtualFiles) {
-		overlay.set(normalize(vf.fileName), vf)
-	}
-
-	const originalGetSourceFile = host.getSourceFile.bind(host)
-	host.getSourceFile = (fileName, languageVersionOrOptions, onError, shouldCreate) => {
-		const vf = overlay.get(normalize(fileName))
-		if (vf) {
-			return ts.createSourceFile(fileName, vf.content, languageVersionOrOptions, true, scriptKindFor(vf.lang))
-		}
-		return originalGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreate)
-	}
-
-	const originalFileExists = host.fileExists.bind(host)
-	host.fileExists = (fileName) => overlay.has(normalize(fileName)) || originalFileExists(fileName)
-
-	const originalReadFile = host.readFile.bind(host)
-	host.readFile = (fileName) => {
-		const vf = overlay.get(normalize(fileName))
-		return vf ? vf.content : originalReadFile(fileName)
-	}
-
-	applyLibDirOverride(host)
-	return host
-}
-
-function mapTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): KiiraDiagnostic {
+/** Map an engine's virtual-coordinate diagnostic to Markdown coordinates. */
+function mapRawDiagnostic(raw: RawDiagnostic, vf: VirtualFile): KiiraDiagnostic {
 	const { snippet } = vf
 	const base: KiiraDiagnostic = {
-		severity: categoryToSeverity(diagnostic.category),
-		code: typeof diagnostic.code === "number" ? diagnostic.code : undefined,
-		message: ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+		severity: raw.severity,
+		code: raw.code,
+		message: raw.message,
 		source: "typescript",
 		markdownFile: snippet.markdownFile,
 		// Fallback: anchor to the opening fence when there is no usable position.
@@ -170,12 +92,12 @@ function mapTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): KiiraDiagn
 		virtualFile: vf.fileName,
 	}
 
-	if (!diagnostic.file || typeof diagnostic.start !== "number") {
+	if (!raw.start) {
 		return base
 	}
 
-	const startLC = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
-	const endLC = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start + (diagnostic.length ?? 0))
+	const startLC = raw.start
+	const endLC = raw.end ?? raw.start
 	base.virtualRange = {
 		start: { line: startLC.line, character: startLC.character },
 		end: { line: endLC.line, character: endLC.character },
@@ -278,9 +200,19 @@ export async function checkVirtualFiles({
 	// `jsxImportSource: "solid-js"` while React docs use React's JSX.
 	const partitions = partitionByOverrides(cwd, virtualFiles, options, resolved.overrides)
 
+	// Pick the checker engine once (classic bundled TS, or the project's native
+	// TypeScript 7), then collect each partition's diagnostics through it.
+	const engine = await resolveEngine(cwd, resolved.engine)
+	const vfByName = new Map(virtualFiles.map((vf) => [vf.fileName, vf]))
+
 	const diagnostics: KiiraDiagnostic[] = []
 	for (const partition of partitions) {
-		diagnostics.push(...collectProgramDiagnostics(partition.virtualFiles, partition.options))
+		for (const raw of await engine.collect(partition.virtualFiles, partition.options)) {
+			const vf = vfByName.get(raw.virtualFile)
+			if (vf) {
+				diagnostics.push(mapRawDiagnostic(raw, vf))
+			}
+		}
 	}
 
 	// Unresolved relative imports usually point at an imaginary sibling-snippet
@@ -367,26 +299,6 @@ function partitionByOverrides(
 		partition.virtualFiles.push(vf)
 	}
 	return [...partitions.values()]
-}
-
-function collectProgramDiagnostics(virtualFiles: VirtualFile[], options: ts.CompilerOptions): KiiraDiagnostic[] {
-	const host = createOverlayHost(options, virtualFiles)
-	const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
-
-	const diagnostics: KiiraDiagnostic[] = []
-	for (const vf of virtualFiles) {
-		const sourceFile = program.getSourceFile(vf.fileName)
-		if (!sourceFile) {
-			continue
-		}
-		for (const diagnostic of [
-			...program.getSyntacticDiagnostics(sourceFile),
-			...program.getSemanticDiagnostics(sourceFile),
-		]) {
-			diagnostics.push(mapTsDiagnostic(diagnostic, vf))
-		}
-	}
-	return diagnostics
 }
 
 // JSX frameworks whose snippets need a non-default `jsxImportSource`, matched by

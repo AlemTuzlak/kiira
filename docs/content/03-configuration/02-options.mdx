@@ -1,7 +1,7 @@
 ---
 title: "Options reference"
 summary: "Every Kiira config option with its default"
-description: "Complete reference for Kiira config options: include, exclude, tsconfig, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, overrides, externalPackages, fixtures, defaultFixture, and languages."
+description: "Complete reference for Kiira config options: include, exclude, tsconfig, engine, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, overrides, externalPackages, fixtures, defaultFixture, and languages."
 ---
 
 ## Options at a glance
@@ -11,6 +11,7 @@ description: "Complete reference for Kiira config options: include, exclude, tsc
 | `include` | `string[]` | **required** | Glob patterns for the Markdown files to check. |
 | `exclude` | `string[]` | `[]` | Glob patterns to exclude from `include`. |
 | `tsconfig` | `string` | auto | Path to the tsconfig used to compile snippets. Auto-resolves `tsconfig.docs.json`, then `tsconfig.json`. |
+| `engine` | `"auto" \| "classic" \| "native"` | `"auto"` | Which TypeScript engine type-checks snippets. `"auto"` uses TypeScript 7's native compiler when your project has it, else the bundled one. |
 | `packageMode` | `"workspace" \| "packed"` | `"workspace"` | How package imports are resolved. |
 | `defaultValidate` | `"type" \| "runtime" \| "none"` | `"type"` | Default validation level for fences. |
 | `defaultGroup` | `"none" \| "file"` | `"none"` | Implicitly group every checkable fence in a file so later fences see earlier declarations. |
@@ -49,6 +50,32 @@ Path to the TypeScript config used when compiling your snippets. When omitted, K
 ```ts
 tsconfig: "tsconfig.docs.json"
 ```
+
+## `engine`
+
+Which TypeScript engine type-checks your snippets:
+
+- `"auto"` (default) — use the **TypeScript 7 native compiler** (the Go port) when your
+  project has `typescript@>=7` installed; otherwise fall back to Kiira's bundled
+  TypeScript. A missing or older TypeScript never breaks a check.
+- `"classic"` — always use Kiira's bundled TypeScript, in-process. Pin this if you want
+  checks to stay independent of the TypeScript version installed in your project.
+- `"native"` — always use the project's TypeScript 7 native compiler. Errors if the
+  project has no `typescript@>=7`.
+
+```ts
+engine: "auto"
+```
+
+The diagnostics are the same either way. Two things to know about `"native"`:
+
+- It loads TypeScript from **your project** (Kiira bundles a v5 for the classic path),
+  so `typescript@>=7` must be installed alongside Kiira.
+- The native compiler runs as a subprocess, which adds start-up overhead per check. For
+  the small snippets in docs the classic in-process engine is usually faster, so `"auto"`
+  only switches to native when your project is already on TypeScript 7.
+- Editor **code-fixes** (the VS Code lightbulb) always use the bundled TypeScript — the
+  native compiler has no code-fix API yet. Diagnostics are unaffected.
 
 ## `packageMode`
 
@@ -133,6 +160,7 @@ externalPackages: {
 ```
 
 - The install runs on `kiira check` with your project's package manager (detected from the lockfile), and **re-installs only when the list changes** — otherwise it's a no-op.
+- The install runs with **`--ignore-scripts`**: Kiira only needs types on disk to type-check, so dependency build/postinstall scripts are never executed. This keeps doc-only packages from running install-time code, and avoids package managers that gate build scripts (e.g. pnpm) failing the install.
 - Declarations on [`overrides`](/latest/projects/per-glob-overrides) (`overrides[].externalPackages`) are merged into the same install and resolve globally (one version per package name).
 - Remove the cache any time with `rm -rf node_modules/.kiira`.
 
