@@ -4,13 +4,14 @@ import { WorkspaceFolderCheckLifecycle } from "./workspace-folders"
 describe("WorkspaceFolderCheckLifecycle", () => {
 	it("discards a check resumed after removal and closes after the check drains", async () => {
 		const lifecycle = new WorkspaceFolderCheckLifecycle()
+		lifecycle.setWorkspaceFolders([{ uri: { fsPath: "/workspace/one" } }])
 		let resumeConfig!: () => void
 		const config = new Promise<void>((resolve) => {
 			resumeConfig = resolve
 		})
 		const events: string[] = []
 
-		const check = lifecycle.run("/workspace/one", async (isCurrent) => {
+		const check = lifecycle.runIfPresent("/workspace/one", async (isCurrent) => {
 			events.push("config:start")
 			await config
 			events.push("config:resume")
@@ -31,5 +32,50 @@ describe("WorkspaceFolderCheckLifecycle", () => {
 
 		expect(events).toEqual(["config:start", "config:resume", "close:/workspace/one"])
 		expect(closeSession).toHaveBeenCalledExactlyOnceWith("/workspace/one")
+	})
+
+	it("skips a removed folder queued behind a deferred workspace check", async () => {
+		const lifecycle = new WorkspaceFolderCheckLifecycle()
+		const first = "/workspace/one"
+		const removed = "/workspace/two"
+		lifecycle.setWorkspaceFolders([{ uri: { fsPath: first } }, { uri: { fsPath: removed } }])
+		let resumeConfig!: () => void
+		let configStarted!: () => void
+		const config = new Promise<void>((resolve) => {
+			resumeConfig = resolve
+		})
+		const started = new Promise<void>((resolve) => {
+			configStarted = resolve
+		})
+		const events: string[] = []
+
+		const checkWorkspace = async () => {
+			for (const cwd of [first, removed]) {
+				await lifecycle.runIfPresent(cwd, async (isCurrent) => {
+					events.push(`config:${cwd}`)
+					if (cwd === first) {
+						configStarted()
+						await config
+					}
+					if (!isCurrent()) {
+						return
+					}
+					events.push(`publish:${cwd}`)
+				})
+			}
+		}
+
+		const running = checkWorkspace()
+		await started
+		lifecycle.setWorkspaceFolders([{ uri: { fsPath: first } }])
+		const closeSession = vi.fn(async (cwd: string) => {
+			events.push(`close:${cwd}`)
+		})
+		await lifecycle.closeRemoved([{ uri: { fsPath: removed } }], closeSession)
+		resumeConfig()
+		await running
+
+		expect(events).toEqual([`config:${first}`, `close:${removed}`, `publish:${first}`])
+		expect(closeSession).toHaveBeenCalledExactlyOnceWith(removed)
 	})
 })
