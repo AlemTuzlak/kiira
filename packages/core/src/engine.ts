@@ -76,6 +76,65 @@ let typescriptLibDir: string | undefined
 /** Override where TypeScript loads its default `lib.*.d.ts` from (for bundled hosts). */
 export function setTypescriptLibDir(dir: string | undefined): void {
 	typescriptLibDir = dir
+	resetClassicEngineCache()
+}
+
+// --- cross-check reuse ---
+//
+// Building a program from scratch parses every lib and `node_modules` declaration
+// file it reaches; that is most of a check's cost and none of it changes between
+// checks. Real (on-disk) source files are cached here and served to every later
+// program; the virtual files are tiny and always parsed fresh. Each hit is
+// validated against the file's current mtime, so an edited declaration file or a
+// changed install is picked up on the next check without any explicit invalidation.
+// The previous program is also handed back to `createProgram` as `oldProgram`, which
+// lets TypeScript keep module resolutions and bound files it already has.
+
+interface CachedSourceFile {
+	sourceFile: ts.SourceFile
+	/** The file's modification time when it was parsed, in ms; `undefined` when unknown. */
+	mtime: number | undefined
+}
+
+const sourceFileCache = new Map<string, CachedSourceFile>()
+let oldProgram: ts.Program | undefined
+/** The TypeScript module the cached files were parsed with; a different one (a project's own) invalidates them. */
+let cacheOwner: unknown
+
+/** Make sure the cache belongs to the TypeScript module in use. */
+function ensureCacheOwner(ts: unknown): void {
+	if (cacheOwner !== ts) {
+		resetClassicEngineCache()
+		cacheOwner = ts
+	}
+}
+
+/**
+ * Drop every cached source file and the previous program. Call when the TypeScript
+ * module or lib directory changes (a cached `SourceFile` belongs to the TypeScript
+ * that parsed it) or to release memory in a long-lived host.
+ */
+export function resetClassicEngineCache(): void {
+	sourceFileCache.clear()
+	oldProgram = undefined
+}
+
+/** Number of real source files currently held by the classic engine's cache. */
+export function classicEngineCacheSize(): number {
+	return sourceFileCache.size
+}
+
+/** The parts of `getSourceFile`'s second argument that change how a file parses. */
+function parseKey(languageVersionOrOptions: ts.ScriptTarget | ts.CreateSourceFileOptions): string {
+	if (typeof languageVersionOrOptions === "number") {
+		return String(languageVersionOrOptions)
+	}
+	const { languageVersion, impliedNodeFormat, jsDocParsingMode } = languageVersionOrOptions
+	return `${languageVersion}|${impliedNodeFormat ?? ""}|${jsDocParsingMode ?? ""}`
+}
+
+function modifiedTime(fileName: string): number | undefined {
+	return getTypescript().sys.getModifiedTime?.(fileName)?.getTime()
 }
 
 /** Apply the configured lib-directory override to a compiler/language-service host. */
@@ -107,13 +166,28 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 		overlay.set(normalize(vf.fileName), vf)
 	}
 
+	// `moduleDetection` drives `setExternalModuleIndicator`, which the host bakes into
+	// the parse, so files parsed under a different setting are not interchangeable.
+	const optionsKey = `${options.moduleDetection ?? ""}`
 	const originalGetSourceFile = host.getSourceFile.bind(host)
 	host.getSourceFile = (fileName, languageVersionOrOptions, onError, shouldCreate) => {
 		const vf = overlay.get(normalize(fileName))
 		if (vf) {
 			return ts.createSourceFile(fileName, vf.content, languageVersionOrOptions, true, scriptKindFor(vf.lang))
 		}
-		return originalGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreate)
+		const key = `${normalize(fileName)}|${parseKey(languageVersionOrOptions)}|${optionsKey}`
+		const mtime = modifiedTime(fileName)
+		const cached = sourceFileCache.get(key)
+		if (cached && cached.mtime !== undefined && cached.mtime === mtime) {
+			return cached.sourceFile
+		}
+		const sourceFile = originalGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreate)
+		if (sourceFile && mtime !== undefined) {
+			sourceFileCache.set(key, { sourceFile, mtime })
+		} else {
+			sourceFileCache.delete(key)
+		}
+		return sourceFile
 	}
 
 	const originalFileExists = host.fileExists.bind(host)
@@ -133,8 +207,10 @@ export const classicEngine: CheckerEngine = {
 	name: "classic",
 	collect(virtualFiles, options, onProgram) {
 		const ts = getTypescript()
+		ensureCacheOwner(ts)
 		const host = createOverlayHost(options, virtualFiles)
-		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
+		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host, oldProgram })
+		oldProgram = program
 		onProgram?.(program)
 
 		const diagnostics: RawDiagnostic[] = []
