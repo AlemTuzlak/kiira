@@ -2,7 +2,7 @@
 // importing kiira-core must not load `typescript` (an optional peer, resolved lazily).
 // Runs against the built `dist`, so it hangs off the `test:publint` target (which builds first).
 import { spawnSync } from "node:child_process"
-import { existsSync, readdirSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -44,6 +44,35 @@ for (const { entry, type, code } of probes) {
 	const offenders = JSON.parse(result.stdout || "[]")
 	if (offenders.length > 0) {
 		failures.push(`importing ${entry} loaded optional peers: ${offenders.slice(0, 3).join(", ")}`)
+	}
+}
+
+// The MDX parser (acorn et al.) is only for `.mdx` files and must stay in lazily loaded
+// chunks. Those packages are ESM-only and bundled, so they never show up in `require.cache`;
+// instead, follow each entry's static chunk imports (dynamic `import()` is not followed)
+// and fail if any of them contains the parser.
+const staticChunkImport =
+	/^(?:import\b[^\n]*?\bfrom\s*|import\s*|(?:const|var|let)\s[^\n=]*=\s*require\()["'](\.\/[^"']+)["']/gm
+const mdxChunk = /micromark-extension-mdxjs/
+const acornSource = /acorn/i
+
+for (const entry of ["index.mjs", "index.cjs"]) {
+	const seen = new Set()
+	const queue = [entry]
+	while (queue.length > 0) {
+		const file = queue.pop()
+		if (seen.has(file)) {
+			continue
+		}
+		seen.add(file)
+		const source = readFileSync(join(dist, file), "utf8")
+		if (mdxChunk.test(file) || acornSource.test(source)) {
+			failures.push(`dist/${entry} statically loads the MDX parser via dist/${file}`)
+			break
+		}
+		for (const match of source.matchAll(staticChunkImport)) {
+			queue.push(match[1].slice(2))
+		}
 	}
 }
 

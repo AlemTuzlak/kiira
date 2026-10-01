@@ -6,6 +6,7 @@ import {
 	collectSuggestions,
 	createVirtualFiles,
 	extractSnippetsFromContent,
+	loadMdxSupport,
 	resolveConfig,
 } from "kiira-core"
 
@@ -31,6 +32,9 @@ export interface CheckDocumentResult {
  */
 export async function checkDocument(input: CheckDocumentInput): Promise<CheckDocumentResult> {
 	const resolved = resolveConfig(input.config)
+	if (/\.mdx$/i.test(input.markdownFile)) {
+		await loadMdxSupport()
+	}
 	const extraction = extractSnippetsFromContent({
 		markdownFile: input.markdownFile,
 		content: input.text,

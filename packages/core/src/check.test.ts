@@ -15,6 +15,20 @@ function errors(diagnostics: KiiraDiagnostic[]): KiiraDiagnostic[] {
 }
 
 describe("checkMarkdownFiles", () => {
+	it("checks .mdx files without the caller loading the MDX parser", async () => {
+		vi.resetModules()
+		const { checkMarkdownFiles: freshCheck } = await import("./check")
+		const cwd = mkdtempSync(join(tmpdir(), "kiira-check-mdx-"))
+		writeFileSync(
+			join(cwd, "page.mdx"),
+			["<Callout>", "", "```ts", 'const n: number = "x"', "```", "", "</Callout>", ""].join("\n")
+		)
+		const result = await freshCheck({ cwd, files: ["page.mdx"], config: { include: ["**/*.mdx"] } })
+		expect(result.snippets).toHaveLength(1)
+		expect(errors(result.diagnostics).some((d) => d.code === 2322)).toBe(true)
+		expect(result.diagnostics.some((d) => d.message.includes("not loaded"))).toBe(false)
+	})
+
 	it("reports a missing export as TS2305 mapped to the Markdown source range", async () => {
 		const result = await checkMarkdownFiles({
 			cwd: fixtures,

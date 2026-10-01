@@ -20,6 +20,7 @@ export {
 	type ExtractInput,
 	extractMarkdownSnippets,
 	extractSnippetsFromContent,
+	loadMdxSupport,
 	type SnippetExtraction,
 } from "./extract"
 export {

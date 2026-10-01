@@ -8,7 +8,7 @@ import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { type RawDiagnostic, resolveEngine } from "./engine"
 import { collectExternalPackages, externalResolution } from "./external"
-import { extractSnippetsFromContent } from "./extract"
+import { extractSnippetsFromContent, loadMdxSupportFor } from "./extract"
 import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, VirtualFile } from "./types"
 import { getTypescript, selectTypescript } from "./typescript"
 import { createVirtualFiles, effectiveGroup, isCheckable, mapVirtualLine } from "./virtual"
@@ -597,6 +597,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	const snippets: KiiraCheckResult["snippets"] = []
 	const diagnostics: KiiraDiagnostic[] = []
 
+	await loadMdxSupportFor(files)
 	for (const file of files) {
 		const content = await readFile(join(cwd, file), "utf8")
 		const extraction = extractSnippetsFromContent({ markdownFile: file, content, config: resolved })

@@ -1,7 +1,9 @@
-import { dirname, resolve } from "node:path"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { resolveConfig } from "./config"
-import { extractMarkdownSnippets, extractSnippetsFromContent } from "./extract"
+import { extractMarkdownSnippets, extractSnippetsFromContent, loadMdxSupport } from "./extract"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = resolve(here, "../tests/fixtures/markdown")
@@ -86,7 +88,8 @@ describe("extractMarkdownSnippets", () => {
 		expect(snippets.map((s) => s.lang)).toEqual(["ts", "ts"])
 	})
 
-	it("extracts a fence nested in a JSX element from .mdx (no blank line)", () => {
+	it("extracts a fence nested in a JSX element from .mdx (no blank line)", async () => {
+		await loadMdxSupport()
 		const content = ["<Callout>", "```ts", "const x = 1", "```", "</Callout>", ""].join("\n")
 		const { snippets } = extractSnippetsFromContent({
 			markdownFile: "docs/page.mdx",
@@ -97,7 +100,8 @@ describe("extractMarkdownSnippets", () => {
 		expect(snippets[0]?.code).toBe("const x = 1")
 	})
 
-	it("extracts fences from .mdx with top-level ESM imports/exports", () => {
+	it("extracts fences from .mdx with top-level ESM imports/exports", async () => {
+		await loadMdxSupport()
 		const content = ["import { Tabs } from './t'", "export const a = 1", "", "```ts", "const y = 2", "```", ""].join(
 			"\n"
 		)
@@ -110,7 +114,8 @@ describe("extractMarkdownSnippets", () => {
 		expect(snippets[0]?.code).toBe("const y = 2")
 	})
 
-	it("reports malformed .mdx as a diagnostic instead of throwing", () => {
+	it("reports malformed .mdx as a diagnostic instead of throwing", async () => {
+		await loadMdxSupport()
 		// An unclosed JSX tag makes the MDX parser throw; it must degrade to a
 		// Kiira diagnostic so other files still get checked.
 		const content = ["<Callout>", "", "Some text with no closing tag."].join("\n")
@@ -132,5 +137,65 @@ describe("extractMarkdownSnippets", () => {
 		})
 		expect(snippets).toHaveLength(1)
 		expect(snippets[0]?.code).toBe("const z = 3")
+	})
+})
+
+describe("lazy MDX support", () => {
+	const notLoaded =
+		"Failed to parse MDX: the MDX parser is not loaded. Await loadMdxSupport() before calling extractSnippetsFromContent on .mdx files."
+
+	it("returns a diagnostic for .mdx until loadMdxSupport() has run", async () => {
+		// The cache is module state, so use a fresh copy of the module.
+		vi.resetModules()
+		const fresh = await import("./extract")
+		const input = {
+			markdownFile: "docs/page.mdx",
+			content: ["```ts", "const a = 1", "```", ""].join("\n"),
+			config: resolveConfig({}),
+		}
+
+		const before = fresh.extractSnippetsFromContent(input)
+		expect(before.snippets).toEqual([])
+		expect(before.diagnostics).toEqual([
+			{
+				severity: "error",
+				source: "kiira",
+				message: notLoaded,
+				markdownFile: "docs/page.mdx",
+				markdownRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+			},
+		])
+
+		await fresh.loadMdxSupport()
+		expect(fresh.extractSnippetsFromContent(input).snippets).toHaveLength(1)
+	})
+
+	it("shares one load between concurrent and repeated calls", async () => {
+		vi.resetModules()
+		const fresh = await import("./extract")
+		const first = fresh.loadMdxSupport()
+		await Promise.all([first, fresh.loadMdxSupport()])
+		await expect(fresh.loadMdxSupport()).resolves.toBeUndefined()
+	})
+
+	it("never needs loading for .md", async () => {
+		vi.resetModules()
+		const fresh = await import("./extract")
+		const { snippets, diagnostics } = fresh.extractSnippetsFromContent({
+			markdownFile: "docs/page.md",
+			content: ["```ts", "const a = 1", "```", ""].join("\n"),
+			config: resolveConfig({}),
+		})
+		expect(snippets).toHaveLength(1)
+		expect(diagnostics).toEqual([])
+	})
+
+	it("extractMarkdownSnippets loads the parser itself for .mdx files", async () => {
+		vi.resetModules()
+		const fresh = await import("./extract")
+		const cwd = mkdtempSync(join(tmpdir(), "kiira-extract-mdx-"))
+		writeFileSync(join(cwd, "page.mdx"), ["<Callout>", "```ts", "const a = 1", "```", "</Callout>", ""].join("\n"))
+		const snippets = await fresh.extractMarkdownSnippets({ cwd, files: ["page.mdx"], config: {} })
+		expect(snippets.map((s) => s.code)).toEqual(["const a = 1"])
 	})
 })

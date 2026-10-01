@@ -2,8 +2,6 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { Code, Nodes, Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
-import { mdxFromMarkdown } from "mdast-util-mdx"
-import { mdxjs } from "micromark-extension-mdxjs"
 import { FENCE_ALIASES, resolveConfig } from "./config"
 import { parseFenceMeta } from "./meta"
 import type { ExtractedSnippet, KiiraConfig, KiiraDiagnostic, KiiraLanguage, ResolvedKiiraConfig } from "./types"
@@ -24,6 +22,42 @@ export interface ExtractContentInput {
 export interface SnippetExtraction {
 	snippets: ExtractedSnippet[]
 	diagnostics: KiiraDiagnostic[]
+}
+
+interface MdxSupport {
+	mdxjs: typeof import("micromark-extension-mdxjs").mdxjs
+	mdxFromMarkdown: typeof import("mdast-util-mdx").mdxFromMarkdown
+}
+
+// The MDX parser pulls in acorn (about half of the bundle) and only `.mdx` files
+// need it, so it is imported on demand and cached here for the synchronous parse.
+let mdxSupport: MdxSupport | undefined
+let mdxLoading: Promise<void> | undefined
+
+/**
+ * Load the MDX parser. `extractSnippetsFromContent` is synchronous, so call (and
+ * await) this once before extracting from `.mdx` content. Idempotent; concurrent
+ * calls share one import. `checkMarkdownFiles` and `extractMarkdownSnippets` do it
+ * for you.
+ */
+export async function loadMdxSupport(): Promise<void> {
+	mdxLoading ??= Promise.all([import("mdast-util-mdx"), import("micromark-extension-mdxjs")]).then(
+		([mdast, micromark]) => {
+			mdxSupport = { mdxjs: micromark.mdxjs, mdxFromMarkdown: mdast.mdxFromMarkdown }
+		},
+		(error: unknown) => {
+			mdxLoading = undefined
+			throw error
+		}
+	)
+	await mdxLoading
+}
+
+/** Preload the MDX parser when any of `files` is an `.mdx` file. */
+export async function loadMdxSupportFor(files: readonly string[]): Promise<void> {
+	if (files.some((file) => /\.mdx$/i.test(file))) {
+		await loadMdxSupport()
+	}
 }
 
 // Invert FENCE_ALIASES once: any recognized identifier -> its KiiraLanguage.
@@ -47,9 +81,14 @@ function normalizeLang(raw: string): KiiraLanguage | undefined {
  */
 function parseMarkdown(markdownFile: string, content: string): Root {
 	if (/\.mdx$/i.test(markdownFile)) {
+		if (!mdxSupport) {
+			throw new Error(
+				"the MDX parser is not loaded. Await loadMdxSupport() before calling extractSnippetsFromContent on .mdx files."
+			)
+		}
 		return fromMarkdown(content, {
-			extensions: [mdxjs()],
-			mdastExtensions: [mdxFromMarkdown()],
+			extensions: [mdxSupport.mdxjs()],
+			mdastExtensions: [mdxSupport.mdxFromMarkdown()],
 		}) as Root
 	}
 	return fromMarkdown(content) as Root
@@ -179,6 +218,7 @@ export function extractSnippetsFromContent({
 export async function extractMarkdownSnippets(input: ExtractInput): Promise<ExtractedSnippet[]> {
 	const config = resolveConfig(input.config)
 	const all: ExtractedSnippet[] = []
+	await loadMdxSupportFor(input.files)
 	for (const file of input.files) {
 		const content = await readFile(join(input.cwd, file), "utf8")
 		const { snippets } = extractSnippetsFromContent({ markdownFile: file, content, config })
