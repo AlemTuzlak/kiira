@@ -128,23 +128,6 @@ function rememberResolutionFile(cache: ClassicResolutionCache, path: string): vo
 	}
 }
 
-function isWithinPath(path: string, root: string): boolean {
-	return path === root || path.startsWith(root.endsWith("/") ? root : `${root}/`)
-}
-
-function shouldTrackResolutionDirectory(path: string, cwd: string, options: ts.CompilerOptions): boolean {
-	const candidate = resolutionPath(path)
-	if (isWithinPath(candidate, resolutionPath(cwd)) || candidate.split("/").includes("node_modules")) {
-		return true
-	}
-	const pathsBasePath =
-		"pathsBasePath" in options && typeof options.pathsBasePath === "string" ? options.pathsBasePath : undefined
-	const roots = [options.baseUrl, pathsBasePath, ...(options.rootDirs ?? [])].filter(
-		(root): root is string => typeof root === "string"
-	)
-	return roots.some((root) => isWithinPath(candidate, resolutionPath(resolve(cwd, root))))
-}
-
 function hasChangedResolutionInputs(cache: ClassicResolutionCache): boolean {
 	for (const [path, fingerprint] of cache.directories) {
 		if (fileSystemFingerprint(path) !== fingerprint) {
@@ -296,11 +279,7 @@ function createOverlayHost(cwd: string, options: ts.CompilerOptions, virtualFile
 	const originalFileExists = host.fileExists.bind(host)
 	let resolvingModule = false
 	host.fileExists = (fileName) => {
-		if (
-			resolvingModule &&
-			!overlay.has(normalize(fileName)) &&
-			shouldTrackResolutionDirectory(dirname(fileName), cwd, options)
-		) {
+		if (resolvingModule && !overlay.has(normalize(fileName))) {
 			rememberResolutionDirectory(resolutionCache, dirname(fileName))
 		}
 		return overlay.has(normalize(fileName)) || originalFileExists(fileName)
@@ -343,9 +322,6 @@ function createOverlayHost(cwd: string, options: ts.CompilerOptions, virtualFile
 
 	const originalDirectoryExists = host.directoryExists?.bind(host) ?? ts.sys.directoryExists?.bind(ts.sys)
 	host.directoryExists = (directoryName) => {
-		if (resolvingModule && shouldTrackResolutionDirectory(directoryName, cwd, options)) {
-			rememberResolutionDirectory(resolutionCache, directoryName)
-		}
 		return overlayDirectories.has(normalize(directoryName)) || (originalDirectoryExists?.(directoryName) ?? false)
 	}
 

@@ -200,6 +200,49 @@ describe("classic module resolution cache", () => {
 		}
 	})
 
+	it("invalidates a missing alias target created outside the tracked roots", async () => {
+		const workspace = mkdtempSync(join(tmpdir(), "kiira-resolution-alias-"))
+		const project = join(workspace, "project")
+		const shared = join(workspace, "shared")
+		mkdirSync(project)
+		mkdirSync(shared)
+		const virtual = virtualFile(
+			project,
+			"entry.ts",
+			'import { value } from "shared-dep"\nconst expected: "ok" = value\n'
+		)
+		const options: ts.CompilerOptions = {
+			...OPTIONS,
+			baseUrl: project,
+			paths: { "shared-dep": ["../shared/dep"] },
+		}
+		const collectErrors = async (file: VirtualFile) =>
+			(await classicEngine.collect([file], options)).filter((diagnostic) => diagnostic.severity === "error")
+
+		try {
+			expect((await collectErrors(virtual)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+			const cache = getClassicResolutionCache(project, options)
+			expect(cache).toBeDefined()
+			if (!cache) {
+				throw new Error("Expected classic module resolution cache")
+			}
+			const clearSpy = vi.spyOn(cache, "clear")
+			try {
+				const edited = { ...virtual, content: `// changed text\n${virtual.content}` }
+				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+				expect(clearSpy).not.toHaveBeenCalled()
+
+				writeFileSync(join(shared, "dep.d.ts"), 'export declare const value: "ok"\n')
+				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(false)
+				expect(clearSpy).toHaveBeenCalledTimes(1)
+			} finally {
+				clearSpy.mockRestore()
+			}
+		} finally {
+			rmSync(workspace, { recursive: true, force: true })
+		}
+	})
+
 	it("isolates options and cwd, preserves import and require modes, and invalidates removed overlays", async () => {
 		const firstRoot = mkdtempSync(join(tmpdir(), "kiira-resolution-one-"))
 		const secondRoot = mkdtempSync(join(tmpdir(), "kiira-resolution-two-"))
