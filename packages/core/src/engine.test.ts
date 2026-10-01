@@ -232,6 +232,10 @@ describe("classic module resolution cache", () => {
 				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
 				expect(clearSpy).not.toHaveBeenCalled()
 
+				writeFileSync(join(shared, "unrelated.d.ts"), "export declare const unrelated: true\n")
+				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+				expect(clearSpy).not.toHaveBeenCalled()
+
 				writeFileSync(join(shared, "dep.d.ts"), 'export declare const value: "ok"\n')
 				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(false)
 				expect(clearSpy).toHaveBeenCalledTimes(1)
