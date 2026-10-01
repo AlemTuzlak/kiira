@@ -37,8 +37,46 @@ Built-in rule ids have no prefix. They run first, in this order, followed by plu
 | `jsx-framework` | `document` | `warn` | JSX that fails because of the wrong runtime types, in a file whose path names a framework. Suggests a `jsxImportSource` override, with a fix. |
 | `unused-symbols` | `document` | `off` | Turns on TypeScript's unused local and parameter checks. At `warn`, those diagnostics are warnings. |
 | `relative-imports` | `document` | `off` | Keeps `Cannot find module` errors for relative imports, which are dropped by default. At `warn`, they are warnings. |
+| `broken-link` | `document` | `off` | A relative link, image, or definition whose target file does not exist. Option `anchors` (boolean, default `false`) also checks `#heading` anchors. |
+| `max-lines` | `document` | `off` | A file with more lines than the required option `max` (a positive integer). |
+| `deprecated-import` | `program` | `off` | An imported binding whose declaration has a `@deprecated` JSDoc tag. Option `packages` (string array) limits it to those packages and their subpaths. |
 
 `unused-symbols` and `relative-imports` report nothing themselves. Their level controls the TypeScript diagnostics they own, which keep their `TS` codes. The [`checkUnusedSymbols`](/latest/configuration/options#checkunusedsymbols) and [`checkRelativeImports`](/latest/configuration/options#checkrelativeimports) options still work as aliases.
+
+### Optional rules
+
+The last three rules are off until you turn them on. Nothing in them changes Kiira's output unless you do.
+
+```ts
+import { defineConfig } from "kiira-core"
+
+export default defineConfig({
+  rules: {
+    "broken-link": ["error", { anchors: true }],
+    "max-lines": ["warn", { max: 400 }],
+    "deprecated-import": ["warn", { packages: ["@acme/ui"] }],
+  },
+})
+```
+
+`broken-link` checks Markdown links, images, and link definitions (`[ref]: ./file.md`), in `.md` and `.mdx` files. It skips anything with a scheme (`https:`, `mailto:`), protocol-relative `//` URLs, and `#anchors` unless `anchors` is on. The `?query` and `#hash` are removed before the file is looked up. A relative target resolves from the document's folder, and a leading `/` resolves from the folder Kiira runs in. With `anchors`, a `file.md#heading` or `#heading` link must match a heading in the target file, using GitHub's anchors: lowercase, punctuation removed, spaces turned into hyphens, and repeated headings suffixed `-1`, `-2`. Links written as MDX JSX elements are not checked.
+
+`max-lines` has no default for `max`, so `"max-lines": "error"` without options fails when the config is resolved. It counts lines the way `text.split(/\r?\n/)` does, so a trailing newline counts as an extra empty line. It reports once, on the first line past the limit.
+
+`deprecated-import` follows `import { a, b as c }`, default imports, and re-exports back to the declaration, and reports the local name with the tag's text (`'oldFn' is deprecated: use newFn`). Namespace imports are not checked. It works in `js` and `jsx` fences too, and runs only on the classic engine like any other program rule.
+
+### Presets
+
+| Preset | Rules |
+| --- | --- |
+| `recommended` | `broken-link` at `error` and `deprecated-import` at `warn`. |
+
+```ts
+export default defineConfig({
+  presets: ["recommended"],
+  rules: { "broken-link": ["error", { anchors: true }] },
+})
+```
 
 ## Write a rule
 

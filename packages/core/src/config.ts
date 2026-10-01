@@ -143,6 +143,14 @@ function resolvePresets(
 	return out
 }
 
+/** Reject `options` the rule's `validate` refuses. A rule that needs options sees `undefined` when none were given. */
+function checkOptions(id: string, options: unknown, registry: Record<string, KiiraRule>, where: string): void {
+	const problem = registry[id]?.meta.options?.validate?.(options)
+	if (problem) {
+		throw new Error(`Invalid options for rule "${id}" in ${where}: ${problem}`)
+	}
+}
+
 /** Validate one `rules` entry against the registry. A level without options carries `options: undefined`. */
 function normalizeRuleSetting(
 	id: string,
@@ -163,9 +171,8 @@ function normalizeRuleSetting(
 	if (Array.isArray(setting) && setting.length !== 2) {
 		throw new Error(`Rule "${id}" in ${where} must be a level or a [level, options] pair.`)
 	}
-	const problem = Array.isArray(setting) ? rule.meta.options?.validate?.(options) : undefined
-	if (problem) {
-		throw new Error(`Invalid options for rule "${id}" in ${where}: ${problem}`)
+	if (Array.isArray(setting)) {
+		checkOptions(id, options, registry, where)
 	}
 	return { severity, options }
 }
@@ -183,7 +190,15 @@ function applyRules(
 	const next = { ...base }
 	for (const [id, setting] of Object.entries(rules)) {
 		const normalized = normalizeRuleSetting(id, setting, registry, where)
-		next[id] = Array.isArray(setting) ? normalized : { severity: normalized.severity, options: base[id]?.options }
+		if (Array.isArray(setting)) {
+			next[id] = normalized
+		} else {
+			// A bare level keeps the options below it, so those are what an enabled rule must accept.
+			if (normalized.severity !== "off") {
+				checkOptions(id, base[id]?.options, registry, where)
+			}
+			next[id] = { severity: normalized.severity, options: base[id]?.options }
+		}
 	}
 	return next
 }
@@ -250,10 +265,11 @@ export function resolveConfig(
 	const overrides: KiiraOverride[] = (config.overrides ?? []).map((override) => {
 		const where = `override ${JSON.stringify(override.include)}`
 		const overridePresets = resolvePresets(override.presets ?? [], presetRegistry)
+		let layered = rules
 		for (const preset of overridePresets) {
-			applyRules({}, preset.rules, ruleRegistry, `preset "${preset.name}" in ${where}`)
+			layered = applyRules(layered, preset.rules, ruleRegistry, `preset "${preset.name}" in ${where}`)
 		}
-		applyRules({}, override.rules, ruleRegistry, where)
+		applyRules(layered, override.rules, ruleRegistry, where)
 		return override.presets ? { ...override, presets: overridePresets } : override
 	})
 
@@ -321,6 +337,9 @@ export function rulesForFile(
 	if (cli.length > 0) {
 		rules = { ...rules }
 		for (const [id, severity] of cli) {
+			if (severity !== "off") {
+				checkOptions(id, rules[id]?.options, resolved.ruleRegistry, "--rule")
+			}
 			rules[id] = { severity, options: rules[id]?.options }
 		}
 	}
