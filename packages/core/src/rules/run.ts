@@ -113,7 +113,7 @@ function createIsTracked(cwd: string): (path: string) => boolean {
 	}
 	return (path) => {
 		const rel = isAbsolute(path) ? relative(cwd, path) : relative(cwd, resolve(cwd, path))
-		if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+		if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
 			return false
 		}
 		return load().has(rel.split(sep).join("/"))

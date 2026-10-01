@@ -602,6 +602,19 @@ describe("project and fs helpers", () => {
 		expect(isTracked("")).toBe(false)
 	})
 
+	it.skipIf(!hasGit)("isTracked accepts tracked filenames and directories starting with two dots", async () => {
+		const cwd = tempProject({ "..tracked.txt": "t", "..nested/deep.txt": "d" })
+		execFileSync("git", ["init", "-q"], { cwd })
+		execFileSync("git", ["add", "."], { cwd })
+		const { isTracked } = await createProject(cwd)
+		expect(isTracked("..tracked.txt")).toBe(true)
+		expect(isTracked("./..tracked.txt")).toBe(true)
+		expect(isTracked(join(cwd, "..tracked.txt"))).toBe(true)
+		expect(isTracked("..nested/deep.txt")).toBe(true)
+		expect(isTracked("..")).toBe(false)
+		expect(isTracked("../outside.txt")).toBe(false)
+	})
+
 	it("isTracked is false outside a git repository", async () => {
 		const { isTracked } = await createProject(tempProject({ "a.txt": "a" }))
 		expect(isTracked("a.txt")).toBe(false)
