@@ -1,5 +1,5 @@
 import { createRequire } from "node:module"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import type ts from "typescript"
 import type { CheckerEngine, RawDiagnostic } from "./engine"
@@ -32,6 +32,7 @@ interface NativeProject {
 
 interface NativeSnapshot {
 	getProjects(): readonly NativeProject[]
+	dispose(): void
 }
 
 /** The `unstable/fs` `FileSystem` callback contract kiira serves to the server. */
@@ -44,12 +45,23 @@ interface NativeFileSystem {
 }
 
 interface NativeApi {
-	updateSnapshot(params: { openProjects: string[] }): NativeSnapshot
+	updateSnapshot(params: {
+		openProjects?: string[]
+		fileChanges?: {
+			changed?: string[]
+			created?: string[]
+			deleted?: string[]
+		}
+	}): NativeSnapshot
 	close(): void
 }
 
 export interface NativeApiConstructor {
 	new (options: { cwd: string; fs: NativeFileSystem }): NativeApi
+}
+
+interface NativeEngineSession extends CheckerEngine {
+	close(): Promise<void>
 }
 
 const caseInsensitive = process.platform === "win32" || process.platform === "darwin"
@@ -203,24 +215,189 @@ function fromNativeDiagnostic(diagnostic: NativeDiagnostic, vf: VirtualFile, lin
  * files from memory, and fall through to the real filesystem (return `undefined`)
  * for everything else, so real `node_modules` still resolve.
  */
-function createOverlayFileSystem(overlay: Map<string, string>): NativeFileSystem {
-	const dirs = new Set<string>()
-	for (const file of overlay.keys()) {
-		let dir = file.slice(0, file.lastIndexOf("/"))
-		while (dir.length > 0 && !dirs.has(dir)) {
-			dirs.add(dir)
-			dir = dir.slice(0, dir.lastIndexOf("/"))
+function createOverlayFileSystem(
+	overlay: Map<string, string>,
+	dirs?: Set<string>,
+	deleted?: Set<string>
+): NativeFileSystem {
+	const directories = dirs ?? new Set<string>()
+	const removed = deleted ?? new Set<string>()
+	if (!dirs) {
+		for (const file of overlay.keys()) {
+			let dir = file.slice(0, file.lastIndexOf("/"))
+			while (dir.length > 0 && !directories.has(dir)) {
+				directories.add(dir)
+				dir = dir.slice(0, dir.lastIndexOf("/"))
+			}
 		}
 	}
 	return {
 		readFile: (fileName) => {
-			const value = overlay.get(normalize(fileName))
+			const key = normalize(fileName)
+			if (removed.has(key)) {
+				return null
+			}
+			const value = overlay.get(key)
 			return value !== undefined ? value : undefined
 		},
-		fileExists: (fileName) => (overlay.has(normalize(fileName)) ? true : undefined),
-		directoryExists: (dir) => (dirs.has(normalize(dir)) ? true : undefined),
+		fileExists: (fileName) => {
+			const key = normalize(fileName)
+			return removed.has(key) ? false : overlay.has(key) ? true : undefined
+		},
+		directoryExists: (dir) => (directories.has(normalize(dir)) ? true : undefined),
 		getAccessibleEntries: () => undefined,
 		realpath: () => undefined,
+	}
+}
+
+const nativeEngines = new Map<string, Promise<NativeEngineSession>>()
+
+/** Create one native checker session that can safely serve repeated snapshots. */
+export function createNativeEngineSession(
+	API: NativeApiConstructor,
+	cwd: string,
+	onFailure?: () => void
+): NativeEngineSession {
+	const root = resolve(cwd)
+	const tsconfigPath = join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/")
+	const overlay = new Map<string, string>()
+	const dirs = new Set<string>()
+	const deleted = new Set<string>()
+	const fs = createOverlayFileSystem(overlay, dirs, deleted)
+	const api = new API({ cwd: root, fs })
+	let projectOpened = false
+	let closed = false
+	let queue: Promise<void> = Promise.resolve()
+
+	const closeApi = (): void => {
+		if (closed) {
+			return
+		}
+		closed = true
+		try {
+			api.close()
+		} finally {
+			onFailure?.()
+		}
+	}
+
+	const collectSnapshot = (virtualFiles: VirtualFile[], options: ts.CompilerOptions): RawDiagnostic[] => {
+		if (closed) {
+			throw new Error(`Native TypeScript API for ${root} is closed`)
+		}
+
+		const previous = new Map(overlay)
+		overlay.clear()
+		dirs.clear()
+		deleted.clear()
+		const current = new Map<string, string>()
+		const addFile = (fileName: string, content: string): void => {
+			const path = resolve(fileName).replace(/\\/g, "/")
+			current.set(normalize(path), content)
+		}
+		const filePaths = virtualFiles.map((vf) => resolve(vf.fileName).replace(/\\/g, "/"))
+		addFile(tsconfigPath, JSON.stringify({ compilerOptions: compilerOptionsToTsconfigJson(options), files: filePaths }))
+		for (const vf of virtualFiles) {
+			addFile(vf.fileName, vf.content)
+		}
+
+		const changed: string[] = []
+		const created: string[] = []
+		const deletedFiles: string[] = []
+		for (const [path, content] of current) {
+			const prior = previous.get(path)
+			const fileName = path
+			if (prior === undefined) {
+				created.push(fileName)
+			} else if (prior !== content) {
+				changed.push(fileName)
+			}
+			overlay.set(path, content)
+		}
+		for (const path of previous.keys()) {
+			if (!current.has(path)) {
+				deleted.add(path)
+				deletedFiles.push(path)
+			}
+		}
+
+		for (const file of overlay.keys()) {
+			let dir = file.slice(0, file.lastIndexOf("/"))
+			while (dir.length > 0 && !dirs.has(dir)) {
+				dirs.add(dir)
+				dir = dir.slice(0, dir.lastIndexOf("/"))
+			}
+		}
+
+		const params: Parameters<NativeApi["updateSnapshot"]>[0] = {
+			fileChanges: { changed, created, deleted: deletedFiles },
+		}
+		if (!projectOpened) {
+			params.openProjects = [tsconfigPath]
+		}
+
+		let snapshot: NativeSnapshot | undefined
+		const disposeSnapshot = (): void => {
+			const current = snapshot
+			snapshot = undefined
+			current?.dispose()
+		}
+		try {
+			snapshot = api.updateSnapshot(params)
+			projectOpened = true
+			const project = snapshot.getProjects()[0]
+			if (!project) {
+				throw new Error(`Native TypeScript API did not load the project at ${tsconfigPath}`)
+			}
+			const diagnostics: RawDiagnostic[] = []
+			for (const vf of virtualFiles) {
+				const file = resolve(vf.fileName).replace(/\\/g, "/")
+				const raws = [...project.program.getSyntacticDiagnostics(file), ...project.program.getSemanticDiagnostics(file)]
+				if (raws.length === 0) {
+					continue
+				}
+				const lineStarts = lineStartsOf(vf.content)
+				for (const diagnostic of raws) {
+					diagnostics.push(fromNativeDiagnostic(diagnostic, vf, lineStarts))
+				}
+			}
+			disposeSnapshot()
+			return diagnostics
+		} catch (error) {
+			let cleanupError: unknown
+			try {
+				disposeSnapshot()
+			} catch (disposeError) {
+				cleanupError = disposeError
+			}
+			try {
+				closeApi()
+			} catch (closeError) {
+				cleanupError = cleanupError
+					? new AggregateError([cleanupError, closeError], `Native TypeScript API cleanup failed for ${root}`)
+					: closeError
+			}
+			if (cleanupError) {
+				throw new AggregateError([error, cleanupError], `Native TypeScript API failed for ${root}`)
+			}
+			throw error
+		}
+	}
+
+	return {
+		name: "native",
+		collect(virtualFiles, options) {
+			const operation = queue.then(() => collectSnapshot(virtualFiles, options))
+			queue = operation.then(
+				() => undefined,
+				() => undefined
+			)
+			return operation
+		},
+		async close() {
+			await queue
+			closeApi()
+		},
 	}
 }
 
@@ -229,17 +406,50 @@ function createOverlayFileSystem(overlay: Map<string, string>): NativeFileSystem
  * compiler. Throws if `typescript/unstable/sync` cannot be resolved from `cwd`.
  */
 export async function createNativeEngine(cwd: string): Promise<CheckerEngine> {
-	const require = createRequire(join(cwd, "__kiira_native_resolver__.js"))
-	const syncEntry = require.resolve("typescript/unstable/sync")
-	const mod = (await import(pathToFileURL(syncEntry).href)) as { API: NativeApiConstructor }
-	const API = mod.API
-
-	return {
-		name: "native",
-		collect(virtualFiles, options) {
-			return collectNativeDiagnostics(API, cwd, virtualFiles, options)
-		},
+	const root = resolve(cwd)
+	const key = normalize(root)
+	const existing = nativeEngines.get(key)
+	if (existing) {
+		return existing
 	}
+
+	let enginePromise: Promise<NativeEngineSession>
+	enginePromise = (async () => {
+		const require = createRequire(join(root, "__kiira_native_resolver__.js"))
+		const syncEntry = require.resolve("typescript/unstable/sync")
+		const mod = (await import(pathToFileURL(syncEntry).href)) as { API: NativeApiConstructor }
+		return createNativeEngineSession(mod.API, root, () => {
+			if (nativeEngines.get(key) === enginePromise) {
+				nativeEngines.delete(key)
+			}
+		})
+	})()
+	nativeEngines.set(key, enginePromise)
+	try {
+		return await enginePromise
+	} catch (error) {
+		if (nativeEngines.get(key) === enginePromise) {
+			nativeEngines.delete(key)
+		}
+		throw error
+	}
+}
+
+/** Close the native compiler session for one cwd, or every session when omitted. */
+export async function closeNativeEngine(cwd?: string): Promise<void> {
+	if (cwd !== undefined) {
+		const key = normalize(resolve(cwd))
+		const enginePromise = nativeEngines.get(key)
+		if (!enginePromise) {
+			return
+		}
+		nativeEngines.delete(key)
+		await (await enginePromise).close()
+		return
+	}
+	const engines = [...nativeEngines.values()]
+	nativeEngines.clear()
+	await Promise.all(engines.map(async (engine) => (await engine).close()))
 }
 
 /**
@@ -266,10 +476,17 @@ export function collectNativeDiagnostics(
 	}
 
 	const api = new API({ cwd, fs: createOverlayFileSystem(overlay) })
+	let snapshot: NativeSnapshot | undefined
+	const disposeSnapshot = (): void => {
+		const current = snapshot
+		snapshot = undefined
+		current?.dispose()
+	}
 	try {
-		const project = api.updateSnapshot({ openProjects: [tsconfigPath] }).getProjects()[0]
+		snapshot = api.updateSnapshot({ openProjects: [tsconfigPath] })
+		const project = snapshot.getProjects()[0]
 		if (!project) {
-			return []
+			throw new Error(`Native TypeScript API did not load the project at ${tsconfigPath}`)
 		}
 		const diagnostics: RawDiagnostic[] = []
 		for (const vf of virtualFiles) {
@@ -283,8 +500,10 @@ export function collectNativeDiagnostics(
 				diagnostics.push(fromNativeDiagnostic(diagnostic, vf, lineStarts))
 			}
 		}
+		disposeSnapshot()
 		return diagnostics
 	} finally {
+		disposeSnapshot()
 		api.close()
 	}
 }

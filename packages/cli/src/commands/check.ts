@@ -4,6 +4,7 @@ import {
 	type KiiraConfig,
 	type RuleSeverity,
 	checkMarkdownFiles,
+	closeNativeEngine,
 	collectExternalPackages,
 	discoverMarkdownFiles,
 	ensureExternalPackages,
@@ -165,6 +166,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 		}
 	} finally {
 		spinner.stop()
+		await closeNativeEngine(cwd)
 	}
 
 	for (const { message, channel } of pending) {

@@ -57,6 +57,7 @@ export {
 	setTypescriptLibDir,
 	setTypescriptModule,
 } from "./check"
+export { closeNativeEngine } from "./engine"
 export {
 	type CodeFixAction,
 	type CodeFixEdit,

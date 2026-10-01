@@ -462,17 +462,27 @@ export async function resolveEngine(cwd: string, engine: KiiraEngine): Promise<C
 		return classicEngine
 	}
 	if (engine === "native") {
-		const { createNativeEngine } = await import("./native-engine")
-		return createNativeEngine(cwd)
+		return (await loadNativeEngineModule()).createNativeEngine(cwd)
 	}
 	// auto
 	if ((projectTypescriptMajor(cwd) ?? 0) < 7) {
 		return classicEngine
 	}
 	try {
-		const { createNativeEngine } = await import("./native-engine")
-		return await createNativeEngine(cwd)
+		return await (await loadNativeEngineModule()).createNativeEngine(cwd)
 	} catch {
 		return classicEngine
 	}
+}
+
+let closeNativeEngineImpl: ((cwd?: string) => Promise<void>) | undefined
+
+async function loadNativeEngineModule(): Promise<typeof import("./native-engine")> {
+	const native = await import("./native-engine")
+	closeNativeEngineImpl = native.closeNativeEngine
+	return native
+}
+
+export async function closeNativeEngine(cwd?: string): Promise<void> {
+	await closeNativeEngineImpl?.(cwd)
 }

@@ -1,4 +1,7 @@
-import { join } from "node:path"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { createRequire } from "node:module"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
 import { describe, expect, it } from "vitest"
@@ -7,8 +10,11 @@ import { resolveConfig } from "./config"
 import { type RawDiagnostic, classicEngine } from "./engine"
 import {
 	type NativeApiConstructor,
+	closeNativeEngine,
 	collectNativeDiagnostics,
 	compilerOptionsToTsconfigJson,
+	createNativeEngine,
+	createNativeEngineSession,
 	lineStartsOf,
 	offsetToPosition,
 } from "./native-engine"
@@ -28,6 +34,19 @@ function vfile(name: string, content: string, dir = cwd): VirtualFile {
 		snippet: {} as VirtualFile["snippet"],
 		mappings: [],
 	}
+}
+
+function vfileAt(root: string, name: string, content: string): VirtualFile {
+	return vfile(name, content, root)
+}
+
+function nativeProject(): string {
+	const root = mkdtempSync(join(tmpdir(), "kiira-native-"))
+	const typescriptEntry = createRequire(import.meta.url).resolve("typescript-7/unstable/sync")
+	const typescriptRoot = join(dirname(typescriptEntry), "../../..")
+	mkdirSync(join(root, "node_modules"), { recursive: true })
+	symlinkSync(typescriptRoot, join(root, "node_modules", "typescript"), "dir")
+	return root
 }
 
 const OPTIONS: ts.CompilerOptions = {
@@ -145,6 +164,105 @@ describe("native engine (TypeScript 7)", () => {
 		const typeError = native.find((d) => d.code === 2322)
 		expect(typeError).toBeDefined()
 		expect(typeError?.start?.line).toBe(0)
+	})
+
+	it("reuses a cwd-scoped API and refreshes changed, deleted, and option overlays", async () => {
+		const firstCwd = nativeProject()
+		const secondCwd = nativeProject()
+		try {
+			const first = await createNativeEngine(firstCwd)
+			const sameCwd = await createNativeEngine(firstCwd)
+			const otherCwd = await createNativeEngine(secondCwd)
+			expect(sameCwd).toBe(first)
+			expect(otherCwd).not.toBe(first)
+
+			const source = vfileAt(firstCwd, "source.ts", "export const value: string = 'ok'\n")
+			const initial = await first.collect([source], { ...OPTIONS, strictNullChecks: false })
+			expect(initial.filter((diagnostic) => diagnostic.severity === "error")).toHaveLength(0)
+
+			const changed = { ...source, content: "export const value: string = null\n" }
+			const strict = await first.collect([changed], { ...OPTIONS, strictNullChecks: true })
+			expect(strict.some((diagnostic) => diagnostic.code === 2322)).toBe(true)
+
+			const consumer = vfileAt(firstCwd, "consumer.ts", 'import { value } from "./source"\n')
+			const afterDeletion = await first.collect([consumer], OPTIONS)
+			expect(afterDeletion.some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+
+			await closeNativeEngine(firstCwd)
+			expect(await createNativeEngine(firstCwd)).not.toBe(first)
+		} finally {
+			await closeNativeEngine()
+			rmSync(firstCwd, { recursive: true, force: true })
+			rmSync(secondCwd, { recursive: true, force: true })
+		}
+	})
+
+	it("serializes snapshot updates, reports update failures, and closes snapshots and APIs", async () => {
+		type ApiOptions = ConstructorParameters<NativeApiConstructor>[0]
+		type UpdateParams = Parameters<InstanceType<NativeApiConstructor>["updateSnapshot"]>[0]
+		class FakeApi {
+			static latest: FakeApi
+			readonly updates: UpdateParams[] = []
+			closed = 0
+			disposedSnapshots = 0
+
+			constructor(readonly options: ApiOptions) {
+				FakeApi.latest = this
+			}
+
+			updateSnapshot(params: UpdateParams) {
+				this.updates.push(params)
+				return {
+					getProjects: () => [
+						{
+							configFileName: "tsconfig.json",
+							program: {
+								getSyntacticDiagnostics: () => [],
+								getSemanticDiagnostics: () => [],
+							},
+						},
+					],
+					dispose: () => {
+						this.disposedSnapshots += 1
+					},
+				}
+			}
+
+			close(): void {
+				this.closed += 1
+			}
+		}
+
+		const root = "/native-api-test"
+		const engine = createNativeEngineSession(FakeApi, root)
+		const first = vfileAt(root, "first.ts", "export const first = 1\n")
+		const second = vfileAt(root, "second.ts", "export const second = 2\n")
+		await Promise.all([engine.collect([first], OPTIONS), engine.collect([second], OPTIONS)])
+
+		expect(FakeApi.latest.updates[0]?.openProjects).toEqual([
+			join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/"),
+		])
+		expect(FakeApi.latest.updates[1]?.openProjects).toBeUndefined()
+		expect(FakeApi.latest.updates[1]?.fileChanges).toMatchObject({
+			created: [second.fileName.replace(/\\/g, "/")],
+			deleted: [first.fileName.replace(/\\/g, "/")],
+		})
+		expect(FakeApi.latest.options.fs?.readFile?.(first.fileName)).toBeNull()
+		expect(FakeApi.latest.options.fs?.fileExists?.(first.fileName)).toBe(false)
+		expect(FakeApi.latest.disposedSnapshots).toBe(2)
+
+		await engine.close()
+		await engine.close()
+		expect(FakeApi.latest.closed).toBe(1)
+
+		class FailingApi extends FakeApi {
+			updateSnapshot(): never {
+				throw new Error("snapshot update failed")
+			}
+		}
+		const failing = createNativeEngineSession(FailingApi, root)
+		await expect(failing.collect([first], OPTIONS)).rejects.toThrow("snapshot update failed")
+		expect(FakeApi.latest.closed).toBe(1)
 	})
 })
 
