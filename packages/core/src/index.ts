@@ -47,6 +47,7 @@ export {
 	optionsForFile,
 	resolveTsconfigPath,
 	setTypescriptLibDir,
+	setTypescriptModule,
 } from "./check"
 export {
 	type CodeFixAction,

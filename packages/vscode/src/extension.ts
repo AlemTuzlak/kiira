@@ -8,7 +8,9 @@ import {
 	loadConfig,
 	loadConfigFile,
 	setTypescriptLibDir,
+	setTypescriptModule,
 } from "kiira-core"
+import ts from "typescript"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
 import { KiiraCodeActionProvider } from "./code-actions"
@@ -211,9 +213,11 @@ async function openVirtualFileCommand(provider: VirtualContentProvider): Promise
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-	// TypeScript is bundled into this extension, which breaks its built-in lookup of
-	// the standard `lib.*.d.ts` files; point it at the copies shipped in `out/lib` so
-	// globals (`JSON`, `Date`, DOM types) resolve instead of being flagged.
+	// Hand kiira-core the TypeScript bundled into this extension.
+	setTypescriptModule(ts)
+	// Bundling breaks TypeScript's built-in lookup of the standard `lib.*.d.ts` files;
+	// point it at the copies shipped in `out/lib` so globals (`JSON`, `Date`, DOM types)
+	// resolve instead of being flagged.
 	setTypescriptLibDir(join(__dirname, "lib"))
 
 	collection = vscode.languages.createDiagnosticCollection("kiira")

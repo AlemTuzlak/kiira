@@ -1,5 +1,7 @@
-import { dirname, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import { defineConfig, findConfigFile, loadConfig, loadConfigFile, resolveConfig } from "./config"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -112,5 +114,58 @@ describe("loadConfigFile", () => {
 	it("loads a config from an explicit path", async () => {
 		const config = await loadConfigFile(resolve(fixtures, "config-json/kiira.config.json"))
 		expect(config.include).toEqual(["readme/**/*.md"])
+	})
+
+	describe("without jiti", () => {
+		const noJiti = { loadJiti: () => Promise.reject(new Error("Cannot find package 'jiti'")) }
+		let dir: string
+
+		beforeEach(() => {
+			dir = mkdtempSync(join(tmpdir(), "kiira-config-"))
+		})
+		afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+		it("imports a .mjs config natively and takes its default export", async () => {
+			const file = join(dir, "kiira.config.mjs")
+			writeFileSync(file, 'export default { include: ["docs/**/*.md"] }\n')
+			const urls: string[] = []
+			const config = await loadConfigFile(file, {
+				...noJiti,
+				importNative: (url) => {
+					urls.push(url)
+					return import(url)
+				},
+			})
+			expect(config.include).toEqual(["docs/**/*.md"])
+			expect(urls).toEqual([pathToFileURL(file).href])
+		})
+
+		it("falls back to the module itself when there is no default export", async () => {
+			const config = await loadConfigFile(join(dir, "kiira.config.cjs"), {
+				...noJiti,
+				importNative: async () => ({ include: ["a.md"] }),
+			})
+			expect(config.include).toEqual(["a.md"])
+		})
+
+		it("explains how to load a TypeScript config when the native import fails", async () => {
+			await expect(
+				loadConfigFile(join(dir, "kiira.config.ts"), {
+					...noJiti,
+					importNative: () => Promise.reject(new Error("Unknown file extension")),
+				})
+			).rejects.toThrow(
+				'Loading a TypeScript Kiira config needs the "jiti" package or a Node version that strips types natively.'
+			)
+		})
+
+		it("rethrows native import errors for non-TypeScript configs", async () => {
+			await expect(
+				loadConfigFile(join(dir, "kiira.config.mjs"), {
+					...noJiti,
+					importNative: () => Promise.reject(new Error("boom")),
+				})
+			).rejects.toThrow("boom")
+		})
 	})
 })

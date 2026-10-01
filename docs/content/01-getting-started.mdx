@@ -16,6 +16,8 @@ pnpm add -D kiira
 
 The CLI depends on `kiira-core`, which is installed automatically. You only need to depend on `kiira-core` directly if you want to import `defineConfig` or call the check engine programmatically.
 
+The CLI brings `kiira-core`, `typescript`, and `jiti` with it, so there is nothing else to install. If you call `kiira-core` programmatically instead, install `typescript` 5 or newer alongside it. Kiira uses the copy in your project when it has one.
+
 <InfoAlert title="Install it where your types live">
 Kiira runs the TypeScript compiler against **your project's own types**. Install it inside the project (or workspace) whose API your docs reference, so those types resolve.
 </InfoAlert>

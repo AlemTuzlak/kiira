@@ -1,5 +1,6 @@
-import ts from "typescript"
+import type ts from "typescript"
 import type { KiiraLanguage } from "./types"
+import { getTypescript } from "./typescript"
 
 // Only `ts` is remapped: JSX in a `ts` fence is a hard syntax error, whereas
 // `js` fences parse and type-check JSX fine, so they need no correction.
@@ -7,15 +8,23 @@ const JSX_VARIANT: Partial<Record<KiiraLanguage, KiiraLanguage>> = {
 	ts: "tsx",
 }
 
-const SCRIPT_KIND: Record<KiiraLanguage, ts.ScriptKind> = {
-	ts: ts.ScriptKind.TS,
-	tsx: ts.ScriptKind.TSX,
-	js: ts.ScriptKind.JS,
-	jsx: ts.ScriptKind.JSX,
+function scriptKind(lang: KiiraLanguage): ts.ScriptKind {
+	const ts = getTypescript()
+	switch (lang) {
+		case "ts":
+			return ts.ScriptKind.TS
+		case "tsx":
+			return ts.ScriptKind.TSX
+		case "js":
+			return ts.ScriptKind.JS
+		case "jsx":
+			return ts.ScriptKind.JSX
+	}
 }
 
 function parse(code: string, lang: KiiraLanguage): ts.SourceFile {
-	return ts.createSourceFile("snippet", code, ts.ScriptTarget.Latest, false, SCRIPT_KIND[lang])
+	const ts = getTypescript()
+	return ts.createSourceFile("snippet", code, ts.ScriptTarget.Latest, false, scriptKind(lang))
 }
 
 function parseErrorCount(sourceFile: ts.SourceFile): number {
@@ -24,6 +33,7 @@ function parseErrorCount(sourceFile: ts.SourceFile): number {
 }
 
 function containsJsx(sourceFile: ts.SourceFile): boolean {
+	const ts = getTypescript()
 	let found = false
 	const visit = (node: ts.Node): void => {
 		if (found) {
