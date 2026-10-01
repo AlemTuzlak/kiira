@@ -1,7 +1,7 @@
 ---
 title: "Automatic fixes (--fix)"
 summary: "What kiira check --fix rewrites for you"
-description: "How the Kiira --fix flag rewrites mistagged code fences, adds group tags to continuation snippets, and writes framework jsxImportSource overrides into your config."
+description: "How the Kiira --fix flag rewrites mistagged code fences, adds group tags to continuation snippets, applies rule edits, and writes framework jsxImportSource overrides into your config. Preview with --dry-run."
 ---
 
 ## Running fixes
@@ -10,7 +10,7 @@ description: "How the Kiira --fix flag rewrites mistagged code fences, adds grou
 kiira check --fix
 ```
 
-`--fix` applies only **safe, mechanical** changes — it never edits the code inside your snippets. It rewrites fence metadata and config so your docs check correctly.
+`--fix` applies only **safe, mechanical** changes. Kiira's own fixes never edit the code inside your snippets: they rewrite fence metadata and config so your docs check correctly.
 
 ## What it fixes
 
@@ -64,6 +64,29 @@ When a JSX snippet fails because TypeScript can't find the right JSX runtime (fo
 
 See [Per-glob overrides](/latest/projects/per-glob-overrides) for how overrides work and how the framework is detected.
 
+### 4. Edits from rules
+
+A [rule](/latest/configuration/rules#return-a-fix) can return text edits for any file the check read. `--fix` applies them with the same care as the fixes above.
+
+## Preview with `--dry-run`
+
+```bash
+kiira check --fix --dry-run
+```
+
+Prints a unified diff for every file `--fix` would change and writes nothing, not even your config. The exit code is the one the check produced. With `--reporter json` the diff goes to stderr.
+
+## When a file is skipped
+
+`--fix` writes a file only when its text is exactly what the check read. It skips a file, prints the reason, and still fixes the others when:
+
+- the file changed since the check read it
+- the check did not read it
+- its path is outside the project, inside `.git` or `node_modules`, or reaches either through a symlink
+- two fixes edit overlapping ranges
+
+Files are written atomically and keep their permissions and line endings.
+
 ## What it never touches
 
-`--fix` does not rewrite the body of your code snippets, change your prose, or "fix" type errors by editing the example. Real type errors are yours to fix — `--fix` only corrects fence tags and config so Kiira checks each example the way it was meant to be checked.
+Kiira's own fixes do not rewrite the body of your code snippets, change your prose, or "fix" type errors by editing the example. Real type errors are yours to fix — `--fix` only corrects fence tags and config so Kiira checks each example the way it was meant to be checked.

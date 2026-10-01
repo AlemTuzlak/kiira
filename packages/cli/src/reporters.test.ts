@@ -5,6 +5,7 @@ function result(): KiiraCheckResult {
 	return {
 		snippets: [],
 		virtualFiles: [],
+		sources: { "a.md": "SOURCE-TEXT" },
 		diagnostics: [
 			{
 				severity: "error",
@@ -57,6 +58,12 @@ describe("formatJson", () => {
 		expect(parsed.diagnostics[0].markdownFile).toBe("docs/quickstart.md")
 		expect(parsed.diagnostics[0].markdownRange.start).toEqual({ line: 42, character: 10 })
 		expect(parsed.diagnostics[0].markdownRange.end).toEqual({ line: 42, character: 22 })
+	})
+
+	it("leaves the sources the run read out of the output", () => {
+		const output = formatJson(result())
+		expect(output).not.toContain("SOURCE-TEXT")
+		expect(Object.keys(JSON.parse(output))).toEqual(["stats", "diagnostics"])
 	})
 })
 
@@ -114,6 +121,7 @@ describe("formatPretty", () => {
 		const r: KiiraCheckResult = {
 			snippets: [],
 			virtualFiles: [],
+			sources: { "a.md": "SOURCE-TEXT" },
 			diagnostics: [
 				{
 					severity: "error",
@@ -152,6 +160,7 @@ describe("formatPretty", () => {
 		const clean: KiiraCheckResult = {
 			snippets: [],
 			virtualFiles: [],
+			sources: { "a.md": "SOURCE-TEXT" },
 			diagnostics: [],
 			stats: { markdownFiles: 2, snippets: 3, checked: 3, ignored: 0, errors: 0, warnings: 0 },
 		}

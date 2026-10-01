@@ -1,7 +1,7 @@
 ---
 title: "Flags"
 summary: "Every flag accepted by the kiira CLI"
-description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --config, --rule, --reporter, --fix, --verbose, --raw, --static, --help, and --version."
+description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --config, --rule, --reporter, --fix, --dry-run, --verbose, --raw, --static, --help, and --version."
 ---
 
 ## Flag reference
@@ -13,7 +13,8 @@ description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --c
 | `--config` | `<path>` | Path to a Kiira config file. Defaults to auto-discovery of `kiira.config.*`. |
 | `--rule` | `<id>=<off\|warn\|error>` | Set a [rule](/latest/configuration/rules) level for this run. **Repeatable.** Beats every config layer. |
 | `--reporter` | `<pretty\|json\|github>` | Output format. Defaults to `pretty`. |
-| `--fix` | — | Rewrite mistagged fences, add `group=` tags, and write framework overrides. |
+| `--fix` | — | Rewrite mistagged fences, add `group=` tags, apply rule edits, and write framework overrides. |
+| `--dry-run` | — | With `--fix`, print a diff of what would change and write nothing. |
 | `--verbose` | — | Show full error messages and code frames (the `pretty` reporter is compact by default). |
 | `--raw` | — | Disable colored output; emit plain text. |
 | `--static` | — | Disable the loading spinner. |
@@ -72,10 +73,18 @@ kiira check --reporter github
 
 ## `--fix`
 
-Applies safe automatic fixes — rewriting mistagged `ts`/`typescript` fences to `tsx` when JSX is detected, adding `group=` tags to ungrouped continuation snippets, and writing framework `jsxImportSource` overrides into your config. See the [--fix](/latest/cli/fix) page.
+Applies safe automatic fixes — rewriting mistagged `ts`/`typescript` fences to `tsx` when JSX is detected, adding `group=` tags to ungrouped continuation snippets, and applying edits that [rules](/latest/configuration/rules) return, and writing framework `jsxImportSource` overrides into your config. See the [--fix](/latest/cli/fix) page.
 
 ```bash
 kiira check --fix
+```
+
+## `--dry-run`
+
+Only valid with `--fix`; on its own it exits with code 2. Prints a unified diff for every file `--fix` would change and writes nothing, including your config. The exit code is the one the check itself produced, as if nothing had been fixed. With `--reporter json` the diff goes to stderr so stdout stays valid JSON.
+
+```bash
+kiira check --fix --dry-run
 ```
 
 ## `--verbose`

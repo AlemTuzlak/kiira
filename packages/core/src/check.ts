@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { dirname, isAbsolute, join, resolve } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import picomatch from "picomatch"
 import type ts from "typescript"
 import { loadConfig, resolveConfig, rulesForFile } from "./config"
@@ -546,7 +546,8 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	selectTypescript(cwd)
 	const userConfig = input.config ?? (await loadConfig(cwd))
 	const resolved = resolveConfig(userConfig, input.ruleOverrides)
-	const run: RuleRun = { config: resolved, project: await createProject(cwd), fs: createRuleFs(cwd).fs }
+	const { fs, reads } = createRuleFs(cwd)
+	const run: RuleRun = { config: resolved, project: await createProject(cwd), fs }
 
 	const files =
 		input.files ??
@@ -562,13 +563,23 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 		}))
 	if (files.length === 0 && resolved.allowEmpty) {
 		const stats = { markdownFiles: 0, snippets: 0, checked: 0, ignored: 0, errors: 0, warnings: 0 }
-		return { snippets: [], virtualFiles: [], diagnostics: [], stats, skipped: true }
+		return { snippets: [], virtualFiles: [], diagnostics: [], stats, sources: {}, skipped: true }
 	}
 
 	const documents = await parseDocuments(files, (file) => readFile(join(cwd, file), "utf8"), resolved)
 	const analyzed = await analyzeDocuments(cwd, run, documents)
 	const diagnostics = [...analyzed.diagnostics, ...(await runProjectRules(run, files))]
 	const snippets = documents.flatMap((doc) => doc.snippets)
+
+	const sources: Record<string, string> = {}
+	for (const [path, text] of reads) {
+		if (text !== undefined) {
+			sources[relative(cwd, resolve(cwd, path)).split(sep).join("/")] = text
+		}
+	}
+	for (const doc of documents) {
+		sources[doc.file] = doc.text
+	}
 
 	const errors = diagnostics.filter((d) => d.severity === "error").length
 	const warnings = diagnostics.filter((d) => d.severity === "warning").length
@@ -577,6 +588,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 		snippets,
 		virtualFiles: analyzed.virtualFiles,
 		diagnostics,
+		sources,
 		stats: {
 			markdownFiles: files.length,
 			snippets: snippets.length,

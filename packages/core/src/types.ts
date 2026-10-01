@@ -395,7 +395,25 @@ export interface KiiraConfigOverrideFix {
 	compilerOptions: Record<string, string>
 }
 
-export type KiiraFix = KiiraFenceLanguageFix | KiiraFenceMetaFix | KiiraConfigOverrideFix
+/** One text replacement in a file. */
+export interface KiiraTextEdit {
+	/** Path relative to the project `cwd`, with posix separators. */
+	file: string
+	/** Zero-based range to replace. A zero-width range inserts. */
+	range: SourceRange
+	newText: string
+}
+
+/**
+ * An auto-fix made of text edits, in any file the check read. `kiira check --fix`
+ * applies them only if the file is unchanged since the check, and refuses overlapping edits.
+ */
+export interface KiiraEditsFix {
+	kind: "edits"
+	edits: KiiraTextEdit[]
+}
+
+export type KiiraFix = KiiraFenceLanguageFix | KiiraFenceMetaFix | KiiraConfigOverrideFix | KiiraEditsFix
 
 export interface KiiraDiagnostic {
 	severity: "error" | "warning" | "info"
@@ -426,6 +444,8 @@ export interface KiiraCheckResult {
 	virtualFiles: VirtualFile[]
 	diagnostics: KiiraDiagnostic[]
 	stats: KiiraCheckStats
+	/** The exact text of every file the run read: each Markdown document and each file a rule read through `ctx.fs`. Keys are cwd-relative posix paths. */
+	sources: Record<string, string>
 	/** True when `allowEmpty` is set and no file matched, so nothing was checked. */
 	skipped?: boolean
 }
