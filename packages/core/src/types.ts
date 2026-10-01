@@ -317,6 +317,8 @@ export interface KiiraPreset {
 	allowEmpty?: boolean
 	codeFenceLanguages?: string[]
 	rules?: Record<string, RuleSetting>
+	/** Per-document TypeScript hook (experimental). Runs before the plugins' hooks. See {@link TypescriptHookResult}. */
+	typescript?: (file: string, ctx: TypescriptHookContext) => TypescriptHookResult | undefined
 }
 
 export interface KiiraPlugin {
@@ -325,6 +327,47 @@ export interface KiiraPlugin {
 	rules?: Record<string, KiiraRule>
 	/** Presets named `<plugin>/<preset.name>`. */
 	presets?: KiiraPreset[]
+	/** Per-document TypeScript hook (experimental). Runs after the presets' hooks. See {@link TypescriptHookResult}. */
+	typescript?: (file: string, ctx: TypescriptHookContext) => TypescriptHookResult | undefined
+}
+
+/** What a TypeScript hook sees about the document it is called for. */
+export interface TypescriptHookContext {
+	/** Markdown file path, relative to `cwd`, posix separators. */
+	file: string
+	/**
+	 * The document text. Editor quick fixes and `checkVirtualFiles` only have the
+	 * checked fences unless the caller passes the text, so there it is their code
+	 * joined by blank lines.
+	 */
+	text: string
+	snippets: ExtractedSnippet[]
+	project: KiiraProject
+	fs: KiiraFs
+}
+
+/**
+ * What a TypeScript hook returns for one document (experimental). Results from every
+ * hook merge: `compilerOptions` shallow-merge and `paths` merge per key (later hooks
+ * win), `replaceTsconfig` is true if any hook says so, and a diagnostic is dropped if
+ * any `filterDiagnostic` returns `false`. Presets' hooks run first, then plugins'.
+ */
+export interface TypescriptHookResult {
+	/** tsconfig-style `compilerOptions` (string enum forms, as in `overrides`), applied after matching overrides. */
+	compilerOptions?: Record<string, unknown>
+	/**
+	 * Start from Kiira's default compiler options instead of the project tsconfig.
+	 * Workspace and external-package resolution still apply.
+	 */
+	replaceTsconfig?: boolean
+	/** Path mappings merged on top of the resulting `paths`, including the workspace's. */
+	paths?: Record<string, string[]>
+	/**
+	 * Return `false` to drop a TypeScript diagnostic for this document. `snippet` is the
+	 * fence whose code contains the diagnostic, or the checked file's first fence when it
+	 * sits in generated code.
+	 */
+	filterDiagnostic?: (diagnostic: KiiraDiagnostic, info: { snippet: ExtractedSnippet; file: string }) => boolean
 }
 
 /** A code fence extracted from a Markdown file. */

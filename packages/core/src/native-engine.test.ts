@@ -2,18 +2,22 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
 import { describe, expect, it } from "vitest"
+import { buildBaseOptions } from "./check"
+import { resolveConfig } from "./config"
 import { type RawDiagnostic, classicEngine } from "./engine"
 import { type NativeApiConstructor, collectNativeDiagnostics, compilerOptionsToTsconfigJson } from "./native-engine"
-import type { VirtualFile } from "./types"
+import { createProject, createRuleFs } from "./rules/run"
+import type { TypescriptHookResult, VirtualFile } from "./types"
+import { applyTypescriptHook, runTypescriptHooks } from "./typescript-hook"
 
 const cwd = fileURLToPath(new URL(".", import.meta.url))
 
 /** Minimal virtual file — the native collector only reads `fileName`, `content`, `lang`. */
-function vfile(name: string, content: string): VirtualFile {
+function vfile(name: string, content: string, dir = cwd): VirtualFile {
 	return {
 		id: name,
-		fileName: join(cwd, ".kiira", "virtual", name),
-		lang: "ts",
+		fileName: join(dir, ".kiira", "virtual", name),
+		lang: name.endsWith(".js") ? "js" : "ts",
 		content,
 		snippet: {} as VirtualFile["snippet"],
 		mappings: [],
@@ -105,5 +109,91 @@ describe("native engine (TypeScript 7)", () => {
 		const typeError = native.find((d) => d.code === 2322)
 		expect(typeError).toBeDefined()
 		expect(typeError?.start?.line).toBe(0)
+	})
+})
+
+describe("options produced by a TypeScript hook", () => {
+	const hookCwd = join(cwd, "../tests/fixtures/ts-hook")
+
+	/** The options a document gets from a hook, applied over Kiira's defaults like `replaceTsconfig` does. */
+	async function hookOptions(result: TypescriptHookResult): Promise<ts.CompilerOptions> {
+		const resolved = resolveConfig({ plugins: [{ name: "hook", typescript: () => result }] })
+		const hook = runTypescriptHooks(resolved, {
+			file: "doc.md",
+			text: "",
+			snippets: [],
+			project: await createProject(hookCwd),
+			fs: createRuleFs(hookCwd).fs,
+		})
+		const base = await buildBaseOptions(hookCwd, resolved, { replaceTsconfig: true })
+		return hook ? applyTypescriptHook(hookCwd, base, hook) : base
+	}
+
+	it("round-trips through compilerOptionsToTsconfigJson", async () => {
+		const options = await hookOptions({
+			replaceTsconfig: true,
+			paths: { "@docs/*": ["./src/*"] },
+			compilerOptions: {
+				moduleDetection: "force",
+				lib: ["es2022", "dom"],
+				types: [],
+				jsx: "preserve",
+				resolveJsonModule: true,
+				allowSyntheticDefaultImports: false,
+				strictNullChecks: false,
+			},
+		})
+		const json = compilerOptionsToTsconfigJson(options)
+		expect(json).toMatchObject({
+			moduleDetection: "force",
+			lib: ["es2022", "dom"],
+			types: [],
+			jsx: "preserve",
+			resolveJsonModule: true,
+			allowSyntheticDefaultImports: false,
+			strictNullChecks: false,
+			paths: { "@docs/*": ["./src/*"] },
+			allowJs: true,
+			checkJs: true,
+		})
+		const parsed = ts.convertCompilerOptionsFromJson(json, hookCwd)
+		expect(parsed.errors).toEqual([])
+		expect(parsed.options).toMatchObject({
+			moduleDetection: options.moduleDetection,
+			lib: options.lib,
+			types: [],
+			jsx: ts.JsxEmit.Preserve,
+			resolveJsonModule: true,
+			allowSyntheticDefaultImports: false,
+			strictNullChecks: false,
+			paths: options.paths,
+		})
+	})
+
+	it("is checked the same by the native and classic engines", async () => {
+		const { API } = (await import("typescript-7/unstable/sync")) as unknown as { API: NativeApiConstructor }
+		const options = await hookOptions({
+			replaceTsconfig: true,
+			paths: { "@docs/*": ["./src/*"] },
+			compilerOptions: { noImplicitAny: false, strictNullChecks: false },
+		})
+		const files = [
+			// Resolves only through the hook's `paths`.
+			vfile("alias.ts", 'import { greet } from "@docs/greet"\nexport const x: string = greet()\n', hookCwd),
+			vfile("unresolved.ts", 'import { nope } from "@docs/missing"\nexport const y = nope\n', hookCwd),
+			// Clean only with `noImplicitAny: false`.
+			vfile("loose.ts", "export function f(x) {\n\treturn x\n}\n", hookCwd),
+			// Clean only with `strictNullChecks: false`.
+			vfile("nullable.ts", "export const n: string = null\n", hookCwd),
+			// `allowJs` and `checkJs` stay on under replaceTsconfig.
+			vfile("typed.js", '/** @type {number} */\nexport const a = "x"\n', hookCwd),
+		]
+
+		const native = collectNativeDiagnostics(API, hookCwd, files, options)
+		const classic = (await classicEngine.collect(files, options)) as RawDiagnostic[]
+
+		const names = (diagnostics: RawDiagnostic[]) => [...erroredFiles(diagnostics)].map((f) => f.split("/").pop()).sort()
+		expect(names(classic)).toEqual(["typed.js", "unresolved.ts"])
+		expect(names(native)).toEqual(names(classic))
 	})
 })

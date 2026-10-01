@@ -1,5 +1,5 @@
 import type ts from "typescript"
-import { applyLibDirOverride, buildBaseOptions, optionsForFile } from "./check"
+import { applyLibDirOverride, createOptionsResolver, documentFromVirtualFiles } from "./check"
 import { resolveConfig } from "./config"
 import type { KiiraConfig, SourcePosition, SourceRange, VirtualFile } from "./types"
 import { getTypescript, selectTypescript } from "./typescript"
@@ -30,6 +30,11 @@ export interface GetCodeFixesInput {
 	range: SourceRange
 	/** TypeScript error codes present at that range (drives which fixes apply). */
 	errorCodes: number[]
+	/**
+	 * The document's text, passed to TypeScript hooks. Without it they get the checked
+	 * fences' code joined by blank lines.
+	 */
+	text?: string
 }
 
 function normalizer(): (file: string) => string {
@@ -211,15 +216,17 @@ function changesToEdits(
  * type. A symbol from a package that no snippet imports may not be suggested.
  */
 export async function getCodeFixes(input: GetCodeFixesInput): Promise<CodeFixAction[]> {
-	const { cwd, virtualFiles, config, markdownFile, range, errorCodes } = input
+	const { cwd, virtualFiles, config, markdownFile, range, errorCodes, text } = input
 	if (virtualFiles.length === 0 || errorCodes.length === 0) {
 		return []
 	}
 	const ts = selectTypescript(cwd)
 
 	const resolved = resolveConfig(config)
-	const base = await buildBaseOptions(cwd, resolved)
-	const options = optionsForFile(cwd, base, resolved, markdownFile)
+	// Same options checking used, TypeScript hook included, so quick fixes agree with the diagnostics.
+	const resolver = createOptionsResolver(cwd, resolved)
+	const hook = await resolver.hookFor(markdownFile, documentFromVirtualFiles(markdownFile, virtualFiles, text))
+	const options = await resolver.optionsFor(markdownFile, hook)
 
 	// Reuse the language service (and its already-built program) across the repeated
 	// calls an editor makes for an unchanged document; only rebuild when an input

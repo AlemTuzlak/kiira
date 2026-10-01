@@ -180,6 +180,7 @@ export class KiiraCodeActionProvider implements vscode.CodeActionProvider {
 						end: { line: range.end.line, character: range.end.character },
 					},
 					errorCodes: tsCodes,
+					text: document.getText(),
 				})
 				for (const fix of fixes) {
 					const action = new vscode.CodeAction(fix.description, vscode.CodeActionKind.QuickFix)

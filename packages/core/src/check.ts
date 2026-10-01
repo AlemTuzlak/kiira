@@ -29,11 +29,20 @@ import type {
 	KiiraCheckResult,
 	KiiraConfig,
 	KiiraDiagnostic,
+	KiiraFs,
+	KiiraProject,
 	ResolvedKiiraConfig,
 	RuleSeverity,
 	VirtualFile,
 } from "./types"
 import { getTypescript, selectTypescript } from "./typescript"
+import {
+	type TypescriptHookOutcome,
+	applyTypescriptHook,
+	hasTypescriptHooks,
+	runTypescriptHooks,
+	stableStringify,
+} from "./typescript-hook"
 import { createVirtualFiles, mapVirtualRange } from "./virtual"
 import { buildWorkspaceResolution } from "./workspace"
 
@@ -143,10 +152,12 @@ export interface CheckVirtualFilesInput {
  */
 export async function buildBaseOptions(
 	cwd: string,
-	resolved: ReturnType<typeof resolveConfig>
+	resolved: ReturnType<typeof resolveConfig>,
+	// `replaceTsconfig` (a TypeScript hook's request) starts from Kiira's defaults, skipping the tsconfig.
+	{ replaceTsconfig = false }: { replaceTsconfig?: boolean } = {}
 ): Promise<ts.CompilerOptions> {
 	selectTypescript(cwd)
-	const tsconfigPath = resolveTsconfigPath(cwd, resolved.tsconfig)
+	const tsconfigPath = replaceTsconfig ? undefined : resolveTsconfigPath(cwd, resolved.tsconfig)
 	const options = loadCompilerOptions(tsconfigPath)
 
 	// Doc snippets routinely declare values they don't use; suppress unused-symbol
@@ -229,22 +240,119 @@ function applyToggleRules(diagnostics: KiiraDiagnostic[], resolved: ResolvedKiir
 	return kept
 }
 
+/** A document as a TypeScript hook sees it. */
+interface HookDocument {
+	text: string
+	snippets: ExtractedSnippet[]
+}
+
+/**
+ * A hook document built from checked virtual files, for callers without the parsed
+ * document (`checkVirtualFiles`, editor quick fixes). Its snippets are the checked
+ * fences (a group contributes its lead fence only), and `text` is the caller's
+ * document text when it has one, else those fences' code joined by blank lines.
+ */
+export function documentFromVirtualFiles(file: string, virtualFiles: VirtualFile[], text?: string): HookDocument {
+	const snippets = new Map<string, ExtractedSnippet>()
+	for (const vf of virtualFiles) {
+		if (vf.snippet.markdownFile === file) {
+			snippets.set(vf.snippet.id, vf.snippet)
+		}
+	}
+	const list = [...snippets.values()]
+	return { text: text ?? list.map((snippet) => snippet.code).join("\n\n"), snippets: list }
+}
+
+/**
+ * Resolves the compiler options each Markdown file is checked with, running the
+ * TypeScript hooks. Shared by checking and code fixes so both see identical options.
+ * Base options are built once per `replaceTsconfig` value.
+ */
+export function createOptionsResolver(
+	cwd: string,
+	resolved: ResolvedKiiraConfig,
+	shared?: { project: KiiraProject; fs: KiiraFs }
+) {
+	const bases = new Map<boolean, Promise<ts.CompilerOptions>>()
+	let env = shared
+	return {
+		/** The merged hook result for a document, or `undefined` when no hook applies. */
+		async hookFor(file: string, doc: HookDocument): Promise<TypescriptHookOutcome | undefined> {
+			if (!hasTypescriptHooks(resolved)) {
+				return undefined
+			}
+			env ??= { project: await createProject(cwd), fs: createRuleFs(cwd).fs }
+			return runTypescriptHooks(resolved, { file, ...doc, ...env })
+		},
+		async optionsFor(file: string, hook?: TypescriptHookOutcome): Promise<ts.CompilerOptions> {
+			const replaceTsconfig = hook?.replaceTsconfig ?? false
+			let base = bases.get(replaceTsconfig)
+			if (!base) {
+				base = buildBaseOptions(cwd, resolved, { replaceTsconfig })
+				bases.set(replaceTsconfig, base)
+			}
+			return optionsForFile(cwd, await base, resolved, file, hook)
+		},
+	}
+}
+
+/** The snippet whose code contains the diagnostic, else the checked file's own (lead) snippet. */
+function snippetForDiagnostic(
+	diagnostic: KiiraDiagnostic,
+	vf: VirtualFile,
+	candidates: ExtractedSnippet[]
+): ExtractedSnippet {
+	const line = diagnostic.markdownRange.start.line
+	return (
+		candidates.find(
+			(s) => s.markdownFile === vf.snippet.markdownFile && line >= s.codeStart.line && line < s.markdownRange.end.line
+		) ?? vf.snippet
+	)
+}
+
 async function runChecker(
 	cwd: string,
 	virtualFiles: VirtualFile[],
-	resolved: ResolvedKiiraConfig
+	resolved: ResolvedKiiraConfig,
+	run?: RuleRun,
+	documents: RuleDocument[] = []
 ): Promise<CheckerRun> {
 	if (virtualFiles.length === 0) {
 		return { diagnostics: [], programs: [] }
 	}
 	selectTypescript(cwd)
 
-	const options = await buildBaseOptions(cwd, resolved)
+	const resolver = createOptionsResolver(cwd, resolved, run)
+	const filesByMarkdown = new Map<string, VirtualFile[]>()
+	for (const vf of virtualFiles) {
+		const list = filesByMarkdown.get(vf.snippet.markdownFile) ?? []
+		list.push(vf)
+		filesByMarkdown.set(vf.snippet.markdownFile, list)
+	}
+	const parsed = new Map(documents.map((doc) => [doc.file, doc]))
+	const hookDocs = new Map<string, HookDocument>()
+	for (const [file, files] of filesByMarkdown) {
+		hookDocs.set(file, parsed.get(file) ?? documentFromVirtualFiles(file, files))
+	}
 
-	// Partition by matching `overrides` (per-glob compiler options) and run a
-	// separate program per distinct option set, so e.g. Solid docs can use
-	// `jsxImportSource: "solid-js"` while React docs use React's JSX.
-	const partitions = partitionByOverrides(cwd, virtualFiles, options, resolved)
+	// Partition by the options each file ends up with (tsconfig or defaults, matching
+	// `overrides`, and any TypeScript hook) and run a separate program per distinct
+	// option set, so e.g. Solid docs can use `jsxImportSource: "solid-js"` while React
+	// docs use React's JSX.
+	const hooks = new Map<string, TypescriptHookOutcome | undefined>()
+	const partitions = new Map<string, OptionsPartition>()
+	for (const [file, doc] of hookDocs) {
+		const hook = await resolver.hookFor(file, doc)
+		hooks.set(file, hook)
+		const options = await resolver.optionsFor(file, hook)
+		const key = stableStringify(options)
+		let partition = partitions.get(key)
+		if (!partition) {
+			partition = { options, virtualFiles: [] }
+			partitions.set(key, partition)
+		}
+		partition.virtualFiles.push(...(filesByMarkdown.get(file) ?? []))
+	}
 
 	// Pick the checker engine once (classic bundled TS, or the project's native
 	// TypeScript 7), then collect each partition's diagnostics through it.
@@ -258,7 +366,7 @@ async function runChecker(
 
 	const diagnostics: KiiraDiagnostic[] = []
 	const programs: CheckedProgram[] = []
-	for (const partition of partitions) {
+	for (const partition of partitions.values()) {
 		const raws = await engine.collect(
 			partition.virtualFiles,
 			partition.options,
@@ -266,9 +374,19 @@ async function runChecker(
 		)
 		for (const raw of raws) {
 			const vf = vfByName.get(raw.virtualFile)
-			if (vf) {
-				diagnostics.push(mapRawDiagnostic(raw, vf))
+			if (!vf) {
+				continue
 			}
+			const diagnostic = mapRawDiagnostic(raw, vf)
+			const file = vf.snippet.markdownFile
+			const filters = hooks.get(file)?.filters ?? []
+			if (filters.length > 0) {
+				const snippet = snippetForDiagnostic(diagnostic, vf, hookDocs.get(file)?.snippets ?? [])
+				if (!filters.every((keep) => keep(diagnostic, { snippet, file }))) {
+					continue
+				}
+			}
+			diagnostics.push(diagnostic)
 		}
 	}
 
@@ -284,7 +402,7 @@ export async function checkVirtualFiles({
 	return (await runChecker(cwd, virtualFiles, resolveConfig(config))).diagnostics
 }
 
-interface OverridePartition {
+interface OptionsPartition {
 	options: ts.CompilerOptions
 	virtualFiles: VirtualFile[]
 }
@@ -318,14 +436,16 @@ function convertOverrideOptions(
 /**
  * The compiler options for one Markdown file: the base options, the file's
  * `unused-symbols` level (as checking applies it), then every matching override's
- * own compilerOptions in order.
+ * own compilerOptions in order, then the TypeScript hook's. The caller builds
+ * `baseOptions` with the hook's `replaceTsconfig` (see {@link createOptionsResolver}).
  */
 export function optionsForFile(
 	cwd: string,
 	baseOptions: ts.CompilerOptions,
 	// The bare overrides array is the pre-rules signature, kept for existing callers.
 	config: ResolvedKiiraConfig | ResolvedKiiraConfig["overrides"],
-	markdownFile: string
+	markdownFile: string,
+	hook?: TypescriptHookOutcome
 ): ts.CompilerOptions {
 	let options = { ...baseOptions }
 	let overrides = config as ResolvedKiiraConfig["overrides"]
@@ -339,46 +459,7 @@ export function optionsForFile(
 			options = { ...options, ...convertOverrideOptions(cwd, override) }
 		}
 	}
-	return options
-}
-
-/** Group virtual files by the set of `overrides` matching each one's Markdown file. */
-function partitionByOverrides(
-	cwd: string,
-	virtualFiles: VirtualFile[],
-	baseOptions: ts.CompilerOptions,
-	resolved: ResolvedKiiraConfig
-): OverridePartition[] {
-	const { overrides } = resolved
-	if (overrides.length === 0) {
-		return [{ options: { ...baseOptions }, virtualFiles }]
-	}
-
-	const matchers = overrides.map((o) => picomatch(o.include))
-	const converted = overrides.map((o) => convertOverrideOptions(cwd, o))
-
-	const partitions = new Map<string, OverridePartition>()
-	for (const vf of virtualFiles) {
-		const file = vf.snippet.markdownFile
-		const matched = matchers.map((m) => m(file))
-		const key = matched.map((b) => (b ? "1" : "0")).join("")
-		let partition = partitions.get(key)
-		if (!partition) {
-			// Files in one partition match the same overrides, so they share a
-			// `unused-symbols` level; an override's own compilerOptions still win.
-			const unused = rulesForFile(resolved, file)["unused-symbols"]?.severity !== "off"
-			let options = { ...baseOptions, noUnusedLocals: unused, noUnusedParameters: unused }
-			matched.forEach((isMatch, i) => {
-				if (isMatch) {
-					options = { ...options, ...converted[i] }
-				}
-			})
-			partition = { options, virtualFiles: [] }
-			partitions.set(key, partition)
-		}
-		partition.virtualFiles.push(vf)
-	}
-	return [...partitions.values()]
+	return hook ? applyTypescriptHook(cwd, options, hook) : options
 }
 
 /** TS code for "Cannot find module 'X'". */
@@ -494,7 +575,7 @@ async function analyzeDocuments(
 		snippets: documents.flatMap((doc) => doc.snippets),
 		config: run.config,
 	})
-	const checked = await runChecker(cwd, virtualFiles, run.config)
+	const checked = await runChecker(cwd, virtualFiles, run.config, run, documents)
 
 	const typescriptByFile = new Map<string, KiiraDiagnostic[]>()
 	for (const diagnostic of checked.diagnostics) {

@@ -144,3 +144,49 @@ export const requireName = defineRule({
 ```
 
 Options that fail `validate`, an unknown rule id, a rule with an unknown `scope` or `defaultSeverity`, and a plugin without a `name` all fail when the config is resolved, not when the rule runs.
+
+## TypeScript hook
+
+<WarningAlert title="Experimental">
+The TypeScript hook can change between minor releases while it settles.
+</WarningAlert>
+
+A plugin or preset can set its own TypeScript options for each Markdown file. Add a `typescript` function next to `rules`. It gets the file path and a context with the document `text`, its `snippets`, the `project`, and read-only `fs`, and returns what to change for that file, or `undefined` to change nothing.
+
+| Result | Effect |
+| --- | --- |
+| `compilerOptions` | tsconfig-style options, in the same string form as [`overrides`](/latest/configuration/options#overrides). An invalid option throws an error that names the plugin or preset and the file. |
+| `replaceTsconfig` | When `true`, start from Kiira's default options instead of the project tsconfig. `allowJs` and `checkJs` stay on unless your `compilerOptions` turn them off. Workspace and external-package resolution still apply. |
+| `paths` | Path mappings merged on top of the file's `paths`, including the ones from your workspace. |
+| `filterDiagnostic` | Called for each TypeScript diagnostic of the file. Return `false` to drop it. |
+
+This plugin checks docs against Kiira's defaults instead of the project tsconfig, resolves `@docs/*` imports to a folder of examples, and drops "cannot find name" errors for a global the docs assume:
+
+```ts
+import { defineConfig } from "kiira-core"
+import { definePlugin } from "kiira-core/plugin"
+
+const docs = definePlugin({
+  name: "docs",
+  typescript(file) {
+    if (!file.startsWith("docs/")) return undefined
+    return {
+      replaceTsconfig: true,
+      compilerOptions: { noImplicitAny: false },
+      paths: { "@docs/*": ["./examples/*"] },
+      filterDiagnostic: (diagnostic) => !diagnostic.message.includes("'appConfig'"),
+    }
+  },
+})
+
+export default defineConfig({ plugins: [docs] })
+```
+
+A few things to know:
+
+- Hooks run once per document. Presets' hooks run first, in preset order, then plugins' hooks in plugin order.
+- Results merge: `compilerOptions` are shallow-merged and `paths` merge per key, with later hooks winning. `replaceTsconfig` is `true` if any hook says so. A diagnostic is dropped if any `filterDiagnostic` returns `false`.
+- A file's options are layered in this order: the tsconfig (or Kiira's defaults), the `unused-symbols` level, matching `overrides`, the hook's `compilerOptions`, then the hook's `paths`.
+- Files whose final options differ are checked in separate programs, so one document's hook never changes how another is checked.
+- `filterDiagnostic` runs on TypeScript diagnostics only, before `unused-symbols`, `relative-imports`, and document rules see them. Its `snippet` is the fence that contains the diagnostic, or the file's first fence when the diagnostic is in generated code.
+- Editor quick fixes in VS Code use the same options.
