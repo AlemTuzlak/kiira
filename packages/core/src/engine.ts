@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, statSync } from "node:fs"
 import { createRequire } from "node:module"
-import { join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import type ts from "typescript"
 import type { KiiraEngine, SourcePosition, VirtualFile } from "./types"
 import { type TypeScriptModule, getTypescript } from "./typescript"
@@ -73,6 +73,96 @@ function scriptKindFor(lang: VirtualFile["lang"]): ts.ScriptKind {
 // TypeScript ships the lib files and calls `setTypescriptLibDir` to point here.
 let typescriptLibDir: string | undefined
 
+interface ClassicResolutionCache {
+	cache: ts.ModuleResolutionCache
+	directories: Map<string, string | undefined>
+	files: Map<string, string | undefined>
+	virtualFiles: Set<string>
+}
+
+const classicResolutionCaches = new Map<string, ClassicResolutionCache>()
+
+function resolutionPath(path: string): string {
+	const absolute = resolve(path).replace(/\\/g, "/")
+	return getTypescript().sys.useCaseSensitiveFileNames ? absolute : absolute.toLowerCase()
+}
+
+function resolutionCacheKey(cwd: string, options: ts.CompilerOptions): string {
+	return `${resolutionPath(cwd)}\0${JSON.stringify(options)}`
+}
+
+export function getClassicResolutionCache(
+	cwd: string,
+	options: ts.CompilerOptions
+): ts.ModuleResolutionCache | undefined {
+	return classicResolutionCaches.get(resolutionCacheKey(cwd, options))?.cache
+}
+
+function isMissingPathError(error: unknown): boolean {
+	return error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")
+}
+
+function fileSystemFingerprint(path: string): string | undefined {
+	try {
+		const stat = statSync(path, { bigint: true })
+		return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`
+	} catch (error) {
+		if (isMissingPathError(error)) {
+			return undefined
+		}
+		throw error
+	}
+}
+
+function rememberResolutionDirectory(cache: ClassicResolutionCache, path: string): void {
+	const key = resolutionPath(path)
+	if (!cache.directories.has(key)) {
+		cache.directories.set(key, fileSystemFingerprint(path))
+	}
+}
+
+function rememberResolutionFile(cache: ClassicResolutionCache, path: string): void {
+	const key = resolutionPath(path)
+	if (!cache.files.has(key)) {
+		cache.files.set(key, fileSystemFingerprint(path))
+	}
+}
+
+function isWithinPath(path: string, root: string): boolean {
+	return path === root || path.startsWith(root.endsWith("/") ? root : `${root}/`)
+}
+
+function shouldTrackResolutionDirectory(path: string, cwd: string, options: ts.CompilerOptions): boolean {
+	const candidate = resolutionPath(path)
+	if (isWithinPath(candidate, resolutionPath(cwd)) || candidate.split("/").includes("node_modules")) {
+		return true
+	}
+	const pathsBasePath =
+		"pathsBasePath" in options && typeof options.pathsBasePath === "string" ? options.pathsBasePath : undefined
+	const roots = [options.baseUrl, pathsBasePath, ...(options.rootDirs ?? [])].filter(
+		(root): root is string => typeof root === "string"
+	)
+	return roots.some((root) => isWithinPath(candidate, resolutionPath(resolve(cwd, root))))
+}
+
+function hasChangedResolutionInputs(cache: ClassicResolutionCache): boolean {
+	for (const [path, fingerprint] of cache.directories) {
+		if (fileSystemFingerprint(path) !== fingerprint) {
+			return true
+		}
+	}
+	for (const [path, fingerprint] of cache.files) {
+		if (fileSystemFingerprint(path) !== fingerprint) {
+			return true
+		}
+	}
+	return false
+}
+
+function samePaths(left: Set<string>, right: Set<string>): boolean {
+	return left.size === right.size && [...left].every((path) => right.has(path))
+}
+
 /** Override where TypeScript loads its default `lib.*.d.ts` from (for bundled hosts). */
 export function setTypescriptLibDir(dir: string | undefined): void {
 	typescriptLibDir = dir
@@ -112,12 +202,13 @@ function ensureCacheOwner(ts: TypeScriptModule): void {
 }
 
 /**
- * Drop every cached source file. Call when the TypeScript module or lib directory
- * changes (a cached `SourceFile` belongs to the TypeScript that parsed it) or to
- * release memory in a long-lived host.
+ * Drop every cached source file and module resolution. Call when the TypeScript
+ * module or lib directory changes (a cached `SourceFile` or resolution belongs to
+ * the TypeScript that made it) or to release memory in a long-lived host.
  */
 export function resetClassicEngineCache(): void {
 	sourceFileCache.clear()
+	classicResolutionCaches.clear()
 }
 
 /** Number of real source files currently held by the classic engine's cache. */
@@ -159,8 +250,8 @@ export function applyLibDirOverride(host: {
 	host.getDefaultLibFileName = (options) => join(dir, ts.getDefaultLibFileName(options))
 }
 
-/** Build a TS compiler host that overlays in-memory virtual files on the real filesystem. */
-function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFile[]): ts.CompilerHost {
+/** Build a TS host with virtual files and a cwd/options-scoped module cache. */
+function createOverlayHost(cwd: string, options: ts.CompilerOptions, virtualFiles: VirtualFile[]): ts.CompilerHost {
 	const ts = getTypescript()
 	const host = ts.createCompilerHost(options, true)
 	const caseSensitive = host.useCaseSensitiveFileNames()
@@ -170,18 +261,61 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 	}
 
 	const overlay = new Map<string, VirtualFile>()
+	const overlayDirectories = new Set<string>()
 	for (const vf of virtualFiles) {
-		overlay.set(normalize(vf.fileName), vf)
+		const fileName = normalize(vf.fileName)
+		overlay.set(fileName, vf)
+		let directory = dirname(fileName)
+		while (directory.length > 0 && !overlayDirectories.has(directory)) {
+			overlayDirectories.add(directory)
+			directory = dirname(directory)
+		}
 	}
 
-	const originalReadFile = host.readFile.bind(host)
-	host.readFile = (fileName) => {
-		const vf = overlay.get(normalize(fileName))
-		return vf ? vf.content : originalReadFile(fileName)
+	const cacheKey = resolutionCacheKey(cwd, options)
+	const virtualFileNames = new Set(overlay.keys())
+	let resolutionCache = classicResolutionCaches.get(cacheKey)
+	if (!resolutionCache) {
+		resolutionCache = {
+			cache: ts.createModuleResolutionCache(resolve(cwd), host.getCanonicalFileName, options),
+			directories: new Map(),
+			files: new Map(),
+			virtualFiles: virtualFileNames,
+		}
+		classicResolutionCaches.set(cacheKey, resolutionCache)
+	} else if (
+		!samePaths(resolutionCache.virtualFiles, virtualFileNames) ||
+		hasChangedResolutionInputs(resolutionCache)
+	) {
+		resolutionCache.cache.clear()
+		resolutionCache.directories.clear()
+		resolutionCache.files.clear()
+		resolutionCache.virtualFiles = virtualFileNames
 	}
 
 	const originalFileExists = host.fileExists.bind(host)
-	host.fileExists = (fileName) => overlay.has(normalize(fileName)) || originalFileExists(fileName)
+	let resolvingModule = false
+	host.fileExists = (fileName) => {
+		if (
+			resolvingModule &&
+			!overlay.has(normalize(fileName)) &&
+			shouldTrackResolutionDirectory(dirname(fileName), cwd, options)
+		) {
+			rememberResolutionDirectory(resolutionCache, dirname(fileName))
+		}
+		return overlay.has(normalize(fileName)) || originalFileExists(fileName)
+	}
+
+	// The source file cache below validates its hits with `originalReadFile`, so
+	// those reads are not recorded as resolution inputs.
+	const originalReadFile = host.readFile.bind(host)
+	host.readFile = (fileName) => {
+		const vf = overlay.get(normalize(fileName))
+		if (resolvingModule && !vf && fileName.split(/[\\/]/).pop()?.toLowerCase() === "package.json") {
+			rememberResolutionFile(resolutionCache, fileName)
+		}
+		return vf ? vf.content : originalReadFile(fileName)
+	}
 
 	// The settings that change how a file parses or binds (TypeScript binds a
 	// `SourceFile` only once), so files from different settings never mix.
@@ -207,6 +341,45 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 		return sourceFile
 	}
 
+	const originalDirectoryExists = host.directoryExists?.bind(host) ?? ts.sys.directoryExists?.bind(ts.sys)
+	host.directoryExists = (directoryName) => {
+		if (resolvingModule && shouldTrackResolutionDirectory(directoryName, cwd, options)) {
+			rememberResolutionDirectory(resolutionCache, directoryName)
+		}
+		return overlayDirectories.has(normalize(directoryName)) || (originalDirectoryExists?.(directoryName) ?? false)
+	}
+
+	host.getModuleResolutionCache = () => resolutionCache.cache
+	host.resolveModuleNameLiterals = (
+		moduleLiterals,
+		containingFile,
+		redirectedReference,
+		resolutionOptions,
+		containingSourceFile
+	) => {
+		resolvingModule = true
+		try {
+			return moduleLiterals.map((literal) => {
+				const mode = ts.getModeForUsageLocation(containingSourceFile, literal, resolutionOptions)
+				const result = ts.resolveModuleName(
+					literal.text,
+					containingFile,
+					resolutionOptions,
+					host,
+					resolutionCache.cache,
+					redirectedReference,
+					mode
+				)
+				if (result.resolvedModule) {
+					rememberResolutionFile(resolutionCache, result.resolvedModule.resolvedFileName)
+				}
+				return result
+			})
+		} finally {
+			resolvingModule = false
+		}
+	}
+
 	applyLibDirOverride(host)
 	return host
 }
@@ -216,7 +389,9 @@ export const classicEngine: CheckerEngine = {
 	collect(virtualFiles, options, onProgram) {
 		const ts = getTypescript()
 		ensureCacheOwner(ts)
-		const host = createOverlayHost(options, virtualFiles)
+		const firstFile = virtualFiles[0]?.fileName
+		const cwd = firstFile ? resolve(dirname(dirname(dirname(firstFile)))) : process.cwd()
+		const host = createOverlayHost(cwd, options, virtualFiles)
 		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
 		onProgram?.(program)
 
