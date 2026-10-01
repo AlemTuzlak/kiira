@@ -1,10 +1,15 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { checkMarkdownFiles } from "./check"
 import type { KiiraDiagnostic } from "./types"
-import { buildWorkspaceResolution, discoverWorkspacePackages, parsePnpmWorkspacePackages } from "./workspace"
+import {
+	buildWorkspaceResolution,
+	discoverWorkspacePackages,
+	parsePnpmWorkspacePackages,
+	resetWorkspaceCache,
+} from "./workspace"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const workspace = resolve(here, "../tests/fixtures/workspace")
@@ -78,5 +83,78 @@ describe("checkMarkdownFiles with workspace resolution", () => {
 		// proving `@demo/lib` resolved rather than failing as a missing module (TS2307).
 		expect(errors(result.diagnostics).some((d) => d.code === 2305)).toBe(true)
 		expect(errors(result.diagnostics).some((d) => d.code === 2307)).toBe(false)
+	})
+})
+
+describe("workspace cache", () => {
+	/** Force a path's mtime forward so a change made within the same millisecond is still detectable. */
+	function touch(path: string): void {
+		const later = new Date(Date.now() + 5_000)
+		utimesSync(path, later, later)
+	}
+
+	function makeWorkspace(): string {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-ws-cache-"))
+		writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
+		mkdirSync(join(dir, "packages", "a"), { recursive: true })
+		writeFileSync(join(dir, "packages", "a", "package.json"), JSON.stringify({ name: "@demo/a" }))
+		return dir
+	}
+
+	beforeEach(() => {
+		resetWorkspaceCache()
+	})
+
+	it("returns the same resolution object while the workspace is unchanged", async () => {
+		const dir = makeWorkspace()
+		try {
+			const first = await buildWorkspaceResolution(dir)
+			expect(first).toBe(await buildWorkspaceResolution(dir))
+			expect(await discoverWorkspacePackages(dir)).toBe(await discoverWorkspacePackages(dir))
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up a package added under a workspace glob", async () => {
+		const dir = makeWorkspace()
+		try {
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name)).toEqual(["@demo/a"])
+			mkdirSync(join(dir, "packages", "b"))
+			writeFileSync(join(dir, "packages", "b", "package.json"), JSON.stringify({ name: "@demo/b" }))
+			touch(join(dir, "packages"))
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name).sort()).toEqual(["@demo/a", "@demo/b"])
+			expect(await buildWorkspaceResolution(dir)).toHaveProperty(["paths", "@demo/b/*"])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up @types installed into a package after the first resolution", async () => {
+		const dir = makeWorkspace()
+		try {
+			expect((await buildWorkspaceResolution(dir))?.typeRoots).toEqual([])
+			const types = join(dir, "packages", "a", "node_modules", "@types")
+			mkdirSync(join(types, "react"), { recursive: true })
+			touch(join(dir, "packages", "a"))
+			const resolution = await buildWorkspaceResolution(dir)
+			expect(resolution?.typeRoots).toHaveLength(1)
+			expect(resolution?.paths.react?.[0]?.endsWith("node_modules/@types/react")).toBe(true)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up a renamed export after its package.json changes", async () => {
+		const dir = makeWorkspace()
+		try {
+			expect(await buildWorkspaceResolution(dir)).not.toHaveProperty(["paths", "@demo/a/sub"])
+			const manifest = join(dir, "packages", "a", "package.json")
+			writeFileSync(manifest, JSON.stringify({ name: "@demo/a", exports: { ".": "./index.js", "./sub": "./sub.js" } }))
+			touch(manifest)
+			expect(await buildWorkspaceResolution(dir)).toHaveProperty(["paths", "@demo/a/sub"])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 })

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs"
+import { existsSync, readdirSync, statSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { dirname, join, sep } from "node:path"
 import { glob } from "tinyglobby"
@@ -73,9 +73,93 @@ async function readWorkspaceGlobs(cwd: string): Promise<string[]> {
 	return []
 }
 
-/** Discover the named packages in a pnpm/npm/yarn workspace rooted at `cwd`. */
-export async function discoverWorkspacePackages(cwd: string): Promise<WorkspacePackage[]> {
+// --- cross-call reuse ---
+//
+// Discovering a workspace globs for every `package.json`, reads each one, and lists
+// every package's `node_modules/@types`. One check run does this at least twice
+// (`createProject` and `buildBaseOptions`), the `group` rule once more per probe,
+// and the editor once per keystroke. The result only changes when the workspace
+// does, so it is cached per `cwd` behind a fingerprint of the paths that decide it:
+// the workspace manifest, the glob roots (a new package changes its parent's mtime),
+// and each package's `package.json`, `node_modules`, and `node_modules/@types`.
+// Validating the fingerprint is a few stats per package instead of a glob and N reads.
+
+interface WorkspaceSnapshot {
+	/** The paths whose mtimes decide the snapshot, in a fixed order. */
+	watched: string[]
+	fingerprint: string
+	packages: WorkspacePackage[]
+	/** Built on first request; `null` when not yet built. */
+	resolution: WorkspaceResolution | undefined | null
+}
+
+const snapshots = new Map<string, WorkspaceSnapshot>()
+
+/** Forget every cached workspace. Tests and long-lived hosts that want a clean slate call this. */
+export function resetWorkspaceCache(): void {
+	snapshots.clear()
+}
+
+const GLOB_MAGIC = /[*?{}[\]()!]/
+
+/** The static leading directory of a workspace glob (`packages/*` -> `packages`). */
+function globRoot(glob: string): string {
+	const segments = glob.split("/")
+	const fixed: string[] = []
+	for (const segment of segments) {
+		if (GLOB_MAGIC.test(segment)) {
+			break
+		}
+		fixed.push(segment)
+	}
+	return fixed.join("/")
+}
+
+function mtimeOf(path: string): string {
+	const stat = statSync(path, { throwIfNoEntry: false })
+	return stat ? String(stat.mtimeMs) : "-"
+}
+
+function fingerprintOf(watched: string[]): string {
+	return watched.map(mtimeOf).join("\n")
+}
+
+function watchedPaths(cwd: string, globs: string[], packages: WorkspacePackage[]): string[] {
+	const watched = [
+		join(cwd, "pnpm-workspace.yaml"),
+		join(cwd, "package.json"),
+		join(cwd, "node_modules"),
+		join(cwd, "node_modules", "@types"),
+	]
+	for (const root of new Set(globs.map(globRoot))) {
+		watched.push(join(cwd, root))
+	}
+	for (const pkg of packages) {
+		watched.push(join(pkg.dir, "package.json"), join(pkg.dir, "node_modules"), join(pkg.dir, "node_modules", "@types"))
+	}
+	return watched
+}
+
+/** The cached snapshot for `cwd`, rebuilt when any watched path's mtime changed. */
+async function workspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
+	const cached = snapshots.get(cwd)
+	if (cached && fingerprintOf(cached.watched) === cached.fingerprint) {
+		return cached
+	}
 	const globs = await readWorkspaceGlobs(cwd)
+	const packages = await globWorkspacePackages(cwd, globs)
+	const watched = watchedPaths(cwd, globs, packages)
+	const snapshot: WorkspaceSnapshot = { watched, fingerprint: fingerprintOf(watched), packages, resolution: null }
+	snapshots.set(cwd, snapshot)
+	return snapshot
+}
+
+/** Discover the named packages in a pnpm/npm/yarn workspace rooted at `cwd`. Cached; see {@link workspaceSnapshot}. */
+export async function discoverWorkspacePackages(cwd: string): Promise<WorkspacePackage[]> {
+	return (await workspaceSnapshot(cwd)).packages
+}
+
+async function globWorkspacePackages(cwd: string, globs: string[]): Promise<WorkspacePackage[]> {
 	if (globs.length === 0) {
 		return []
 	}
@@ -181,10 +265,18 @@ function toSourceIfPresent(absTarget: string): string | undefined {
  * `./adapters` -> `dist/esm/activities`). Every package's `node_modules` is added
  * as a `*` fallback so third-party deps resolve too.
  *
- * Returns `undefined` when `cwd` is not a workspace.
+ * Returns `undefined` when `cwd` is not a workspace. Cached with the workspace
+ * snapshot (see {@link discoverWorkspacePackages}); callers must not mutate the result.
  */
 export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceResolution | undefined> {
-	const packages = await discoverWorkspacePackages(cwd)
+	const snapshot = await workspaceSnapshot(cwd)
+	if (snapshot.resolution === null) {
+		snapshot.resolution = await resolveWorkspace(cwd, snapshot.packages)
+	}
+	return snapshot.resolution
+}
+
+async function resolveWorkspace(cwd: string, packages: WorkspacePackage[]): Promise<WorkspaceResolution | undefined> {
 	if (packages.length === 0) {
 		return undefined
 	}
