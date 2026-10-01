@@ -59,7 +59,11 @@ export function formatJson(result: KiiraCheckResult): string {
 		},
 		generated: d.generated ?? false,
 	}))
-	return JSON.stringify({ stats: { ...result.stats, fixable: fixableCount(result) }, diagnostics }, null, 2)
+	return JSON.stringify(
+		{ schemaVersion: 1, stats: { ...result.stats, fixable: fixableCount(result) }, diagnostics },
+		null,
+		2
+	)
 }
 
 // --- GitHub ---------------------------------------------------------------
@@ -89,6 +93,34 @@ export function formatGithub(result: KiiraCheckResult): string {
 			return `::${githubSeverity(d.severity)} file=${d.markdownFile},line=${line},col=${col}${titlePart}::${escapeGithubData(d.message)}`
 		})
 		.join("\n")
+}
+
+const SUMMARY_ERROR_LIMIT = 10
+
+/** Markdown for `$GITHUB_STEP_SUMMARY`: outcome, counts, and the first errors. */
+export function formatGithubSummary(result: KiiraCheckResult): string {
+	const { stats } = result
+	const errors = result.diagnostics.filter((d) => d.severity === "error")
+	const lines = [
+		"### Kiira",
+		"",
+		stats.errors === 0 ? "Passed" : "Failed",
+		"",
+		`- Files: ${stats.markdownFiles}`,
+		`- Snippets checked: ${stats.checked}`,
+		`- Errors: ${stats.errors}`,
+		`- Warnings: ${stats.warnings}`,
+	]
+	if (errors.length > 0) {
+		lines.push("")
+		for (const d of errors.slice(0, SUMMARY_ERROR_LIMIT)) {
+			lines.push(`- \`${d.markdownFile}:${d.markdownRange.start.line + 1}\` ${d.message.split("\n")[0]}`)
+		}
+		if (errors.length > SUMMARY_ERROR_LIMIT) {
+			lines.push(`- and ${errors.length - SUMMARY_ERROR_LIMIT} more`)
+		}
+	}
+	return `${lines.join("\n")}\n`
 }
 
 // --- Pretty ---------------------------------------------------------------

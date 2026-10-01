@@ -31,4 +31,17 @@ describe("json reporter output is pinned per fixture", () => {
 			expect(logs.join("\n")).toMatchSnapshot()
 		})
 	}
+
+	it("starts with schemaVersion", async () => {
+		const logs: string[] = []
+		await runCheck({
+			cwd: join(coreFixtures, "check"),
+			files: ["docs.md"],
+			reporter: "json",
+			static: true,
+			log: (m) => logs.push(m),
+			error: () => {},
+		})
+		expect(Object.keys(JSON.parse(logs.join("\n")))[0]).toBe("schemaVersion")
+	})
 })

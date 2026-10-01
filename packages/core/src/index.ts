@@ -39,6 +39,8 @@ export {
 } from "./virtual"
 export {
 	buildBaseOptions,
+	check,
+	type CheckInput,
 	type CheckMarkdownFilesInput,
 	type CheckMarkdownTextInput,
 	type CheckMarkdownTextResult,

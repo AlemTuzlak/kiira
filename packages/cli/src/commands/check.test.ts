@@ -316,5 +316,39 @@ describe("runCheck --fix with rule edits", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}
+describe("runCheck GitHub step summary", () => {
+	const summaryPath = join(mkdtempSync(join(tmpdir(), "kiira-summary-")), "summary.md")
+
+	function run(reporter: "github" | "pretty" | "json", env: Record<string, string | undefined>) {
+		return runCheck({ cwd: fixtures, files: ["bad.md"], reporter, static: true, raw: true, env, ...capture() })
+	}
+
+	it("appends a summary for the github reporter, keeping existing content", async () => {
+		writeFileSync(summaryPath, "earlier step\n")
+		await run("github", { GITHUB_STEP_SUMMARY: summaryPath })
+		expect(readFileSync(summaryPath, "utf8")).toBe(
+			[
+				"earlier step",
+				"### Kiira",
+				"",
+				"Failed",
+				"",
+				"- Files: 1",
+				"- Snippets checked: 1",
+				"- Errors: 1",
+				"- Warnings: 0",
+				"",
+				"- `bad.md:4` Type 'string' is not assignable to type 'number'.",
+				"",
+			].join("\n")
+		)
+	})
+
+	it("writes nothing for other reporters or without the variable", async () => {
+		writeFileSync(summaryPath, "")
+		await run("pretty", { GITHUB_STEP_SUMMARY: summaryPath })
+		await run("json", { GITHUB_STEP_SUMMARY: summaryPath })
+		await run("github", {})
+		expect(readFileSync(summaryPath, "utf8")).toBe("")
 	})
 })

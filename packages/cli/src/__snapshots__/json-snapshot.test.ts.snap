@@ -2,6 +2,7 @@
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for check 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 2,
     "snippets": 4,
@@ -89,6 +90,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for c
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for codefix 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 2,
     "snippets": 3,
@@ -177,6 +179,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for c
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for group 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 8,
     "snippets": 22,
@@ -625,6 +628,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for g
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for jsxframework 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 2,
     "snippets": 2,
@@ -785,6 +789,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for j
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for markdown 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 1,
     "snippets": 3,
@@ -836,6 +841,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for m
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for overrides 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 2,
     "snippets": 2,
@@ -888,6 +894,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for o
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for relative-imports 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 1,
     "snippets": 2,
@@ -922,6 +929,7 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for r
 
 exports[`json reporter output is pinned per fixture > matches the snapshot for workspace 1`] = `
 "{
+  "schemaVersion": 1,
   "stats": {
     "markdownFiles": 1,
     "snippets": 2,

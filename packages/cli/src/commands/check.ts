@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { appendFileSync, readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
 import {
 	type KiiraConfig,
@@ -16,7 +16,7 @@ import type { ReporterName } from "../args"
 import { unifiedDiff } from "../diff"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"
-import { formatReport } from "../reporters"
+import { formatGithubSummary, formatReport } from "../reporters"
 import { startSpinner } from "../spinner"
 
 interface RunCheckOptions {
@@ -34,6 +34,8 @@ interface RunCheckOptions {
 	verbose?: boolean
 	raw?: boolean
 	static?: boolean
+	/** Where `GITHUB_STEP_SUMMARY` is read from; defaults to `process.env`. */
+	env?: Record<string, string | undefined>
 	log: (message: string) => void
 	error: (message: string) => void
 }
@@ -182,6 +184,11 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	})
 	if (output.length > 0) {
 		options.log(output)
+	}
+
+	const summaryFile = (options.env ?? process.env).GITHUB_STEP_SUMMARY
+	if (options.reporter === "github" && summaryFile) {
+		appendFileSync(summaryFile, formatGithubSummary(result))
 	}
 
 	return result.stats.errors > 0 ? 1 : 0

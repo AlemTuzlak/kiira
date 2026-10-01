@@ -31,6 +31,7 @@ import type {
 	KiiraDiagnostic,
 	KiiraFs,
 	KiiraProject,
+	KiiraPlugin,
 	ResolvedKiiraConfig,
 	RuleSeverity,
 	VirtualFile,
@@ -688,6 +689,23 @@ function collectSources(
 		sources[doc.file] = doc.text
 	}
 	return sources
+export interface CheckInput {
+	cwd: string
+	/** Markdown files relative to `cwd`; defaults to the config's `include`. */
+	files?: string[]
+	/** Used as is; when omitted, the config is loaded from `cwd`. */
+	config?: Partial<KiiraConfig>
+	/** Added to the config's plugins; one with the same `name` replaces the config's. */
+	plugins?: KiiraPlugin[]
+}
+
+/** Check Markdown files and run every rule: document, program and project. Experimental. */
+export async function check(input: CheckInput): Promise<KiiraCheckResult> {
+	const config = input.config ?? (await loadConfig(input.cwd))
+	const added = input.plugins ?? []
+	const names = new Set(added.map((plugin) => plugin.name))
+	const plugins = [...(config.plugins ?? []).filter((plugin) => !names.has(plugin.name)), ...added]
+	return checkMarkdownFiles({ cwd: input.cwd, files: input.files, config: { ...config, plugins } })
 }
 
 export interface CheckMarkdownTextInput {
