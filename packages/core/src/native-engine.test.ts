@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -197,6 +197,32 @@ describe("native engine (TypeScript 7)", () => {
 		}
 	})
 
+	it("refreshes imported disk files across snapshots without replacing the API session", async () => {
+		const root = nativeProject()
+		try {
+			const dependency = join(root, "dependency.d.ts")
+			writeFileSync(dependency, 'export declare const value: "ok"\n')
+			const engine = await createNativeEngine(root)
+			const source = vfileAt(
+				root,
+				"main.ts",
+				'import { value } from "../../dependency"\nconst expected: "ok" = value\n'
+			)
+
+			expect(await engine.collect([source], OPTIONS)).toHaveLength(0)
+
+			writeFileSync(dependency, "export declare const value: number\n")
+			expect((await engine.collect([source], OPTIONS)).some((diagnostic) => diagnostic.code === 2322)).toBe(true)
+
+			rmSync(dependency)
+			expect((await engine.collect([source], OPTIONS)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+			expect(await createNativeEngine(root)).toBe(engine)
+		} finally {
+			await closeNativeEngine()
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
 	it("serializes snapshot updates, reports update failures, and closes snapshots and APIs", async () => {
 		type ApiOptions = ConstructorParameters<NativeApiConstructor>[0]
 		type UpdateParams = Parameters<InstanceType<NativeApiConstructor>["updateSnapshot"]>[0]
@@ -243,13 +269,19 @@ describe("native engine (TypeScript 7)", () => {
 			join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/"),
 		])
 		expect(FakeApi.latest.updates[1]?.openProjects).toBeUndefined()
+		expect(FakeApi.latest.updates[0]?.fileChanges).toEqual({ invalidateAll: true })
 		expect(FakeApi.latest.updates[1]?.fileChanges).toMatchObject({
+			created: [join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/"), first.fileName.replace(/\\/g, "/")],
+		})
+		expect(FakeApi.latest.updates[2]?.fileChanges).toEqual({ invalidateAll: true })
+		expect(FakeApi.latest.updates[3]?.openProjects).toBeUndefined()
+		expect(FakeApi.latest.updates[3]?.fileChanges).toMatchObject({
 			created: [second.fileName.replace(/\\/g, "/")],
 			deleted: [first.fileName.replace(/\\/g, "/")],
 		})
 		expect(FakeApi.latest.options.fs?.readFile?.(first.fileName)).toBeNull()
 		expect(FakeApi.latest.options.fs?.fileExists?.(first.fileName)).toBe(false)
-		expect(FakeApi.latest.disposedSnapshots).toBe(2)
+		expect(FakeApi.latest.disposedSnapshots).toBe(4)
 
 		await engine.close()
 		await engine.close()

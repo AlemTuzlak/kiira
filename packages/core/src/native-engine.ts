@@ -47,11 +47,15 @@ interface NativeFileSystem {
 interface NativeApi {
 	updateSnapshot(params: {
 		openProjects?: string[]
-		fileChanges?: {
-			changed?: string[]
-			created?: string[]
-			deleted?: string[]
-		}
+		fileChanges?:
+			| {
+					changed?: string[]
+					created?: string[]
+					deleted?: string[]
+			  }
+			| {
+					invalidateAll: true
+			  }
 	}): NativeSnapshot
 	close(): void
 }
@@ -306,11 +310,10 @@ export function createNativeEngineSession(
 		const deletedFiles: string[] = []
 		for (const [path, content] of current) {
 			const prior = previous.get(path)
-			const fileName = path
 			if (prior === undefined) {
-				created.push(fileName)
+				created.push(path)
 			} else if (prior !== content) {
-				changed.push(fileName)
+				changed.push(path)
 			}
 			overlay.set(path, content)
 		}
@@ -332,8 +335,11 @@ export function createNativeEngineSession(
 		const params: Parameters<NativeApi["updateSnapshot"]>[0] = {
 			fileChanges: { changed, created, deleted: deletedFiles },
 		}
+		const invalidateParams: Parameters<NativeApi["updateSnapshot"]>[0] = {
+			fileChanges: { invalidateAll: true },
+		}
 		if (!projectOpened) {
-			params.openProjects = [tsconfigPath]
+			invalidateParams.openProjects = [tsconfigPath]
 		}
 
 		let snapshot: NativeSnapshot | undefined
@@ -343,6 +349,10 @@ export function createNativeEngineSession(
 			current?.dispose()
 		}
 		try {
+			// Invalidate disk state first, then apply the current in-memory overlay changes.
+			snapshot = api.updateSnapshot(invalidateParams)
+			projectOpened = true
+			disposeSnapshot()
 			snapshot = api.updateSnapshot(params)
 			projectOpened = true
 			const project = snapshot.getProjects()[0]
