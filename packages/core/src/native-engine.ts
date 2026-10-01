@@ -160,25 +160,38 @@ export function compilerOptionsToTsconfigJson(options: ts.CompilerOptions): Reco
 	return out
 }
 
-/** Zero-based line/character for a UTF-16 offset into `content` (matches classic coords). */
-function offsetToPosition(content: string, offset: number): SourcePosition {
-	const clamped = Math.max(0, Math.min(offset, content.length))
-	let line = 0
-	let lineStart = 0
-	for (let i = 0; i < clamped; i += 1) {
+/** Offsets at which each line of `content` starts; computed once per file, then shared by every diagnostic. */
+function lineStartsOf(content: string): number[] {
+	const starts = [0]
+	for (let i = 0; i < content.length; i += 1) {
 		if (content.charCodeAt(i) === 10 /* \n */) {
-			line += 1
-			lineStart = i + 1
+			starts.push(i + 1)
 		}
 	}
-	return { line, character: clamped - lineStart }
+	return starts
 }
 
-function fromNativeDiagnostic(diagnostic: NativeDiagnostic, vf: VirtualFile): RawDiagnostic {
+/** Zero-based line/character for a UTF-16 offset (matches classic coords); binary search over `lineStarts`. */
+function offsetToPosition(lineStarts: number[], contentLength: number, offset: number): SourcePosition {
+	const clamped = Math.max(0, Math.min(offset, contentLength))
+	let low = 0
+	let high = lineStarts.length - 1
+	while (low < high) {
+		const mid = (low + high + 1) >> 1
+		if ((lineStarts[mid] ?? 0) <= clamped) {
+			low = mid
+		} else {
+			high = mid - 1
+		}
+	}
+	return { line: low, character: clamped - (lineStarts[low] ?? 0) }
+}
+
+function fromNativeDiagnostic(diagnostic: NativeDiagnostic, vf: VirtualFile, lineStarts: number[]): RawDiagnostic {
 	return {
 		virtualFile: vf.fileName,
-		start: offsetToPosition(vf.content, diagnostic.pos),
-		end: offsetToPosition(vf.content, diagnostic.end),
+		start: offsetToPosition(lineStarts, vf.content.length, diagnostic.pos),
+		end: offsetToPosition(lineStarts, vf.content.length, diagnostic.end),
 		code: diagnostic.code,
 		message: diagnostic.text,
 		severity: severityFromCategory(diagnostic.category),
@@ -261,11 +274,13 @@ export function collectNativeDiagnostics(
 		const diagnostics: RawDiagnostic[] = []
 		for (const vf of virtualFiles) {
 			const file = vf.fileName.replace(/\\/g, "/")
-			for (const diagnostic of [
-				...project.program.getSyntacticDiagnostics(file),
-				...project.program.getSemanticDiagnostics(file),
-			]) {
-				diagnostics.push(fromNativeDiagnostic(diagnostic, vf))
+			const raws = [...project.program.getSyntacticDiagnostics(file), ...project.program.getSemanticDiagnostics(file)]
+			if (raws.length === 0) {
+				continue
+			}
+			const lineStarts = lineStartsOf(vf.content)
+			for (const diagnostic of raws) {
+				diagnostics.push(fromNativeDiagnostic(diagnostic, vf, lineStarts))
 			}
 		}
 		return diagnostics

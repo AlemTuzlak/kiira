@@ -121,6 +121,12 @@ function uniqueName(name: string, used: Set<string>): string {
 
 /** Resolve a virtual line to its originating Markdown line, or `null` if generated. */
 export function mapVirtualLine(mappings: SourceMapping[], virtualLine: number): number | null {
+	// Kiira's own builders emit one mapping per virtual line, in order, so the
+	// mapping for line N sits at index N. Fall back to a scan for any other shape.
+	const direct = mappings[virtualLine]
+	if (direct && direct.virtualLine === virtualLine) {
+		return direct.markdownLine
+	}
 	return mappings.find((m) => m.virtualLine === virtualLine)?.markdownLine ?? null
 }
 

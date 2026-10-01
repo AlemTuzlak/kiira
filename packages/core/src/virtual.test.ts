@@ -107,6 +107,16 @@ describe("createVirtualFiles uniqueness", () => {
 })
 
 describe("mapVirtualLine", () => {
+	it("resolves sparse or unordered mappings by scanning", () => {
+		const mappings = [
+			{ virtualLine: 7, markdownLine: 70, characterDelta: 0 },
+			{ virtualLine: 2, markdownLine: 20, characterDelta: 0 },
+		]
+		expect(mapVirtualLine(mappings, 2)).toBe(20)
+		expect(mapVirtualLine(mappings, 7)).toBe(70)
+		expect(mapVirtualLine(mappings, 0)).toBeNull()
+	})
+
 	it("returns null for generated lines and out-of-range lines", () => {
 		const mappings = buildVirtualFile({ snippet: snippet({ code: "x" }), before: "gen" }).mappings
 		expect(mapVirtualLine(mappings, 0)).toBeNull()

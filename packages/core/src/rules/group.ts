@@ -23,10 +23,28 @@ function groupSlug(markdownFile: string): string {
 const errorKey = (d: KiiraDiagnostic): string =>
 	`${d.code}@${d.markdownRange.start.line}:${d.markdownRange.start.character}:${d.message}`
 
+// Line count per snippet, computed once: `isWithinSnippet` runs for every
+// (diagnostic, snippet) pair and splitting the code each time was the hot spot.
+const lineCounts = new WeakMap<ExtractedSnippet, number>()
+
+function lineCount(snippet: ExtractedSnippet): number {
+	let count = lineCounts.get(snippet)
+	if (count === undefined) {
+		count = 1
+		for (let i = 0; i < snippet.code.length; i += 1) {
+			if (snippet.code.charCodeAt(i) === 10 /* \n */) {
+				count += 1
+			}
+		}
+		lineCounts.set(snippet, count)
+	}
+	return count
+}
+
 /** Whether a diagnostic's line falls within a snippet's code span. */
 function isWithinSnippet(diagnostic: KiiraDiagnostic, snippet: ExtractedSnippet): boolean {
 	const start = snippet.codeStart.line
-	const end = start + snippet.code.split("\n").length - 1
+	const end = start + lineCount(snippet) - 1
 	const line = diagnostic.markdownRange.start.line
 	return line >= start && line <= end
 }
