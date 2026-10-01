@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
-import picomatch from "picomatch"
-import { resolveConfig } from "./config"
+import { overrideMatcher, resolveConfig } from "./config"
 import { detectLanguageTag } from "./detect"
 import type {
 	ExtractedSnippet,
@@ -162,7 +161,7 @@ export function effectiveValidate(snippet: ExtractedSnippet, config: ResolvedKii
 function resolveDefaultGroup(config: ResolvedKiiraConfig, markdownFile: string): "none" | "file" {
 	let value = config.defaultGroup
 	for (const override of config.overrides) {
-		if (override.defaultGroup !== undefined && picomatch(override.include)(markdownFile)) {
+		if (override.defaultGroup !== undefined && overrideMatcher(override)(markdownFile)) {
 			value = override.defaultGroup
 		}
 	}

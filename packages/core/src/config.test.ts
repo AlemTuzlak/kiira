@@ -480,6 +480,23 @@ describe("resolveConfig presets", () => {
 	})
 })
 
+describe("rulesForFile memoization", () => {
+	it("returns the same settings object for the same config and file", () => {
+		const resolved = resolveConfig({ overrides: [{ include: ["docs/**"], rules: { group: "off" } }] })
+		expect(rulesForFile(resolved, "docs/a.md")).toBe(rulesForFile(resolved, "docs/a.md"))
+		expect(rulesForFile(resolved)).toBe(rulesForFile(resolved))
+		expect(rulesForFile(resolved, "docs/a.md").group?.severity).toBe("off")
+		expect(rulesForFile(resolved, "other.md").group?.severity).toBe("warn")
+	})
+
+	it("does not share settings between two resolved configs", () => {
+		const a = resolveConfig({ rules: { group: "off" } })
+		const b = resolveConfig({ rules: { group: "error" } })
+		expect(rulesForFile(a, "x.md").group?.severity).toBe("off")
+		expect(rulesForFile(b, "x.md").group?.severity).toBe("error")
+	})
+})
+
 describe("codeFenceLanguagesForFile", () => {
 	it("uses the last matching override, including its presets, per file", () => {
 		const resolved = resolveConfig({

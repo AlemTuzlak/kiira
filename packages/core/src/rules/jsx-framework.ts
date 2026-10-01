@@ -1,4 +1,4 @@
-import picomatch from "picomatch"
+import { overrideMatcher } from "../config"
 import { defineRule } from "../plugin"
 import type { ExtractedSnippet, KiiraDiagnostic, ResolvedKiiraConfig, RuleReport } from "../types"
 
@@ -36,7 +36,7 @@ export function jsxFrameworkSuggestions({
 	config,
 }: JsxFrameworkSuggestionInput): RuleReport[] {
 	const jsxError = diagnostics.find((d) => d.code === JSX_NO_INTRINSICS)
-	if (!jsxError || config.overrides.some((o) => "jsxImportSource" in o && picomatch(o.include)(file))) {
+	if (!jsxError || config.overrides.some((o) => "jsxImportSource" in o && overrideMatcher(o)(file))) {
 		return []
 	}
 	const framework = FRAMEWORK_JSX.find(([keyword]) => file.toLowerCase().includes(keyword))

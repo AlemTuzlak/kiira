@@ -310,10 +310,36 @@ export function resolveConfig(
 	}
 }
 
+// --- per-config memoization ---
+//
+// Compiling an override's `include` glob costs tens of microseconds; the pipeline
+// asks "does this override match this file?" several times per file (extraction,
+// rule levels per scope, toggle filtering, partitioning, grouping), so the compiled
+// matcher is kept on the override object, and the per-file rule settings on the
+// resolved config. Both are WeakMaps keyed by object identity: a new config or
+// override is a new entry, so nothing is ever stale.
+
+const overrideMatchers = new WeakMap<KiiraOverride, (file: string) => boolean>()
+
+/** The compiled `include` matcher for an override, built once per override object. */
+export function overrideMatcher(override: KiiraOverride): (file: string) => boolean {
+	let matcher = overrideMatchers.get(override)
+	if (!matcher) {
+		matcher = picomatch(override.include)
+		overrideMatchers.set(override, matcher)
+	}
+	return matcher
+}
+
 /** Overrides whose `include` glob matches `markdownFile`, in config order. */
 function matchingOverrides(resolved: ResolvedKiiraConfig, markdownFile: string): KiiraOverride[] {
-	return resolved.overrides.filter((override) => picomatch(override.include)(markdownFile))
+	return resolved.overrides.filter((override) => overrideMatcher(override)(markdownFile))
 }
+
+const ruleSettingsByFile = new WeakMap<
+	ResolvedKiiraConfig,
+	Map<string | undefined, Record<string, ResolvedRuleSetting>>
+>()
 
 /**
  * The effective rule settings: the resolved base, then (for `markdownFile`) each
@@ -324,6 +350,23 @@ function matchingOverrides(resolved: ResolvedKiiraConfig, markdownFile: string):
 export function rulesForFile(
 	resolved: ResolvedKiiraConfig,
 	markdownFile?: string
+): Record<string, ResolvedRuleSetting> {
+	let byFile = ruleSettingsByFile.get(resolved)
+	if (!byFile) {
+		byFile = new Map()
+		ruleSettingsByFile.set(resolved, byFile)
+	}
+	let rules = byFile.get(markdownFile)
+	if (!rules) {
+		rules = computeRulesForFile(resolved, markdownFile)
+		byFile.set(markdownFile, rules)
+	}
+	return rules
+}
+
+function computeRulesForFile(
+	resolved: ResolvedKiiraConfig,
+	markdownFile: string | undefined
 ): Record<string, ResolvedRuleSetting> {
 	let rules = resolved.ruleSettings
 	for (const override of markdownFile === undefined ? [] : matchingOverrides(resolved, markdownFile)) {
