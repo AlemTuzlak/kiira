@@ -4,7 +4,9 @@ description: >
   Gate CI on Markdown doc errors and keep examples current. Load when wiring
   `kiira check` into CI, choosing a reporter, or interpreting exit codes.
   Covers exit codes (0 clean, 1 doc errors, 2 config/runtime failure), the
-  `github`/`json`/`pretty` reporters, the `AlemTuzlak/kiira@v1` composite
+  `github`/`json`/`pretty` reporters (the JSON `schemaVersion`, the GitHub
+  step summary), previewing fixes with `--fix --dry-run`, the
+  `AlemTuzlak/kiira@v1` composite
   action, plain exit-code-gated steps for any runner, `--entry` overriding
   `include`, and `--static`/`--raw` for clean log capture.
 type: lifecycle
@@ -14,6 +16,8 @@ sources:
   - "AlemTuzlak/kiira:docs/content/02-cli/05-exit-codes.mdx"
   - "AlemTuzlak/kiira:docs/content/02-cli/03-reporters.mdx"
   - "AlemTuzlak/kiira:docs/content/06-ci/01-github-action.mdx"
+  - "AlemTuzlak/kiira:docs/content/02-cli/04-fix.mdx"
+  - "AlemTuzlak/kiira:docs/content/03-configuration/05-programmatic-api.mdx"
   - "AlemTuzlak/kiira:packages/cli/src/index.ts"
 ---
 
@@ -56,9 +60,27 @@ if [ "$status" -eq 1 ]; then echo "::error::docs have type errors"; fi
 ### Capture machine-readable or clean output
 
 ```bash
-pnpm kiira check --reporter json > kiira-report.json   # 1-based positions, fixable count
+pnpm kiira check --reporter json > kiira-report.json   # 1-based positions, first key is "schemaVersion"
 pnpm kiira check --static --raw > kiira-report.txt      # no spinner, no ANSI color
 ```
+
+### Read the JSON report by `schemaVersion`
+
+The JSON reporter's first key is `schemaVersion` (currently `1`). Within a version fields are
+only added, so ignore unknown fields and check `schemaVersion` before relying on a shape.
+
+### Step summary and fix preview
+
+With `--reporter github`, Kiira also appends a summary (files, snippets, errors, warnings and
+the first errors) to the file named by `GITHUB_STEP_SUMMARY` when it is set. To see what
+`--fix` would change without writing, run `--fix --dry-run`: it prints a diff and keeps the
+exit code of the check, so it is safe in CI.
+
+```bash
+pnpm kiira check --fix --dry-run   # diff on stdout (stderr with --reporter json); nothing written
+```
+
+To run Kiira from a script or test, `check()` from `kiira-core` returns the same result as an object.
 
 ## Common Mistakes
 

@@ -1,0 +1,107 @@
+---
+title: "Rules and presets reference"
+summary: "Rule settings, preset fields, overrides, and the order Kiira merges them"
+description: "Reference for RuleSetting, every preset field, the rules, presets, and codeFenceLanguages fields of an override, the order Kiira merges rule settings in, and the --rule flag."
+---
+
+<WarningAlert title="Experimental">
+This API can change between minor releases while it settles. See [Experimental API](/latest/plugins/experimental-api).
+</WarningAlert>
+
+## Built-in rules
+
+The list of built-in rules, with their scopes and default levels, lives on the [Rules](/latest/configuration/rules#built-in-rules) page. Plugin rules use the id `<plugin>/<rule>`.
+
+## `RuleSetting`
+
+A rule's entry in `rules`, in a preset, or in an override:
+
+```ts
+import type { RuleSetting } from "kiira-core/plugin"
+
+export const levels: Record<string, RuleSetting> = {
+  "language-tag": "off",
+  "unused-symbols": "warn",
+  "docs/max-length": ["error", { lines: 40 }],
+}
+```
+
+A level is `"off"`, `"warn"` (reports a warning), or `"error"` (reports an error). A `[level, options]` pair also passes options to a rule. The rule's `meta.options.validate` can reject them. A level without options keeps the options an earlier layer set.
+
+An unknown rule id, an invalid level, or options a rule rejects fail when the config is resolved, and `kiira check` exits `2`.
+
+## Presets
+
+A preset is a named bundle of settings. Reference it by name (`<plugin>/<preset>`) in `presets`, or write it inline.
+
+| Field | Type | What it does |
+| --- | --- | --- |
+| `name` | `string` | Required. |
+| `extends` | `string[]` | Presets applied before this one, by name. A cycle is an error. |
+| `include` | `string[] \| (project) => string[]` | Added to the top-level `include`. The function form is called with the project (`cwd`, `packageJson`, `workspacePackages`, `isTracked`) before files are discovered. |
+| `exclude` | `string[]` | Added to the top-level `exclude`. |
+| `allowEmpty` | `boolean` | When true and no file matches, Kiira skips the run, prints `No files matched; nothing to check.`, and exits `0`. Without it, an empty match is a normal run with zero files. |
+| `codeFenceLanguages` | `string[]` | The fence identifiers to recognize. The last preset that sets it wins, unless you set `markdown.codeFenceLanguages` yourself. |
+| `rules` | `Record<string, RuleSetting>` | Rule settings, applied in the order described in [How settings merge](#how-settings-merge). |
+| `typescript` | `(file, ctx) => result` | A per-file [TypeScript hook](/latest/plugins/writing-a-plugin#typescript-hook). Runs before the plugins' hooks. |
+
+This preset builds on a preset named `base`, checks the `docs` folder of every workspace package, and is fine with finding none:
+
+```ts
+import { relative } from "node:path"
+import type { KiiraPreset } from "kiira-core/plugin"
+
+export const docs: KiiraPreset = {
+  name: "docs",
+  extends: ["base"],
+  include: (project) => project.workspacePackages.map((pkg) => `${relative(project.cwd, pkg.dir)}/docs/**/*.md`),
+  exclude: ["**/changelog.md"],
+  allowEmpty: true,
+  codeFenceLanguages: ["ts", "tsx", "typescript", "js", "jsx", "javascript"],
+  rules: { group: "off" },
+}
+```
+
+`--entry` and positional paths on the CLI replace the whole `include` set, presets included.
+
+## Overrides
+
+An entry of [`overrides`](/latest/configuration/options#overrides) can also set, for the files its `include` matches:
+
+- `rules` is applied after the top-level `rules`.
+- `presets` is a list of presets whose `rules` and `codeFenceLanguages` apply. Their other fields are ignored.
+- `codeFenceLanguages` replaces the recognized fence identifiers. The last matching override wins.
+
+```ts
+import { defineConfig } from "kiira-core"
+
+export default defineConfig({
+  overrides: [
+    {
+      include: ["docs/intent/**/*.md"],
+      codeFenceLanguages: ["ts", "tsx", "typescript", "js", "jsx", "javascript"],
+      rules: { group: "off" },
+    },
+  ],
+})
+```
+
+## How settings merge
+
+Each layer is applied on top of the one before it:
+
+1. Each rule's built-in default level.
+2. `presets`, in order, with each preset's `extends` applied first.
+3. Top-level `rules`. The legacy `checkUnusedSymbols` and `checkRelativeImports` options count as this layer, as aliases of `unused-symbols` and `relative-imports`. An explicit `rules` entry for the same rule wins.
+4. Matching `overrides`, in order. Within an override, its `presets` apply before its `rules`.
+5. `--rule` on the CLI.
+
+## `--rule`
+
+Sets the level of one rule for one run, without editing your config. It is repeatable, and it beats every layer above, including per-file overrides.
+
+```bash
+kiira check --rule unused-symbols=warn --rule docs/no-todo=off
+```
+
+A value that isn't `<id>=<level>`, or an id Kiira doesn't know, exits with code `2`. See [Flags](/latest/cli/flags#--rule-idlevel).

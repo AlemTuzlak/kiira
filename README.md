@@ -165,6 +165,29 @@ for you:
 kiira check --fix    # rewrites mistagged fences (ts/typescript -> tsx)
 ```
 
+## Rules and plugins
+
+Everything Kiira reports besides TypeScript's own errors is a rule, and each rule has a level
+(`off`, `warn`, `error`). Set levels in `rules`, or for one run with `--rule`. Plugins (experimental)
+add your own rules and presets, with a document, program (type checker), or project scope, plus
+`--fix` text edits and a per-file TypeScript hook. Run Kiira from a script or test with
+`check()` from `kiira-core`:
+
+```bash
+kiira check --rule unused-symbols=warn --rule group=off
+kiira check --fix --dry-run     # print a diff of what --fix would change; write nothing
+```
+
+```ts
+import { check } from "kiira-core"
+
+const result = await check({ cwd: process.cwd() })
+console.log(result.stats.errors)
+```
+
+See the [plugin guide](docs/content/08-plugins/03-writing-a-plugin.mdx) and the
+[`examples/plugin-basic`](examples/plugin-basic) project.
+
 ## CLI
 
 ```bash
@@ -175,6 +198,8 @@ kiira check "docs/**/*.md"      # validate specific files/globs
 kiira check --reporter json     # machine-readable output
 kiira check --reporter github   # GitHub Actions annotations
 kiira check --fix               # rewrite mistagged code fences (ts -> tsx)
+kiira check --fix --dry-run     # show what --fix would change, write nothing
+kiira check --rule group=off    # set a rule level for this run (repeatable)
 kiira check --verbose           # full messages + code frames (default is compact)
 kiira init                      # scaffold kiira.config.ts + tsconfig.docs.json
 ```
@@ -186,8 +211,10 @@ kiira init                      # scaffold kiira.config.ts + tsconfig.docs.json
 | `--entry <path>` | Directory, file, or glob to check. Repeatable. Overrides `include`. |
 | `--ignore <path>` | Directory, file, or glob to exclude. Repeatable (e.g. `--ignore docs/api`). |
 | `--config <path>` | Path to a Kiira config file. |
-| `--reporter <name>` | Output format: `pretty` (default), `json`, or `github` (Actions annotations). |
-| `--fix` | Apply auto-fixes: rewrite mistagged fences (`ts`→`tsx`), add `group=` tags, write framework `jsxImportSource` overrides. |
+| `--reporter <name>` | Output format: `pretty` (default), `json` (with a `schemaVersion`), or `github` (Actions annotations and a step summary). |
+| `--rule <id>=<level>` | Set a rule level (`off`, `warn`, `error`) for this run. Repeatable. Beats every config layer. |
+| `--fix` | Apply auto-fixes: rewrite mistagged fences (`ts`→`tsx`), add `group=` tags, apply rule edits, write framework `jsxImportSource` overrides. |
+| `--dry-run` | With `--fix`, print a diff of what would change and write nothing. |
 | `--verbose` | Full error messages and code frames (default output is compact). |
 | `--raw` | Plain text — disable colored output. |
 | `--static` | Disable the loading spinner. |
@@ -320,6 +347,7 @@ Use the [composite action](action.yml):
 | [`examples/basic`](examples/basic)     | Plain TypeScript snippets against the `node` types. |
 | [`examples/react`](examples/react)     | `tsx` snippets with `react` and wrap fixtures.      |
 | [`examples/monorepo`](examples/monorepo) | One config validating docs across many packages.  |
+| [`examples/plugin-basic`](examples/plugin-basic) | A plugin with document, program, and project rules, a preset, and a TypeScript hook. |
 
 ## Development
 

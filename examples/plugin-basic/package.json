@@ -1,0 +1,25 @@
+{
+	"name": "@kiira-example/plugin-basic",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check:docs": "kiira check",
+		"test:unit": "vitest run",
+		"test:types": "tsc"
+	},
+	"nx": {
+		"targets": {
+			"test:unit": {
+				"inputs": ["default", "^production", "{projectRoot}/docs/**/*.md"]
+			}
+		}
+	},
+	"devDependencies": {
+		"@types/node": "22.14.1",
+		"kiira": "workspace:*",
+		"kiira-core": "workspace:*",
+		"typescript": "^5.4.0",
+		"vitest": "^3.1.1"
+	}
+}

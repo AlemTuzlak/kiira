@@ -1,0 +1,309 @@
+---
+title: "Writing a plugin"
+summary: "Rules in three scopes, fixes, frontmatter, the TypeScript hook, and testing with check()"
+description: "Write a Kiira plugin with kiira-core/plugin: document, program, and project rules, report and edits fixes, frontmatter, the TypeScript hook, plain JavaScript plugins, and testing with check()."
+---
+
+<WarningAlert title="Experimental">
+This API can change between minor releases while it settles. See [Experimental API](/latest/plugins/experimental-api).
+</WarningAlert>
+
+## A first plugin
+
+Import `defineRule` and `definePlugin` from `kiira-core/plugin`. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
+
+This rule flags a word in the prose of every document:
+
+```ts
+import { defineConfig } from "kiira-core"
+import { definePlugin, defineRule } from "kiira-core/plugin"
+
+const noWord = defineRule({
+  meta: {
+    scope: "document",
+    defaultSeverity: "warn",
+    options: {
+      default: { word: "TODO" },
+      validate: (options) =>
+        typeof (options as { word?: unknown })?.word === "string" ? undefined : "`word` must be a string",
+    },
+  },
+  create(ctx) {
+    ctx.text.split("\n").forEach((line, index) => {
+      const character = line.indexOf(ctx.options.word)
+      if (character === -1) return
+      const start = { line: index, character }
+      const end = { line: index, character: character + ctx.options.word.length }
+      ctx.report({ range: { start, end }, message: `Remove "${ctx.options.word}" before publishing.` })
+    })
+  },
+})
+
+export default defineConfig({
+  plugins: [definePlugin({ name: "docs", rules: { "no-word": noWord } })],
+  rules: { "docs/no-word": ["error", { word: "FIXME" }] },
+})
+```
+
+The rule is registered as `docs/no-word`, and its diagnostics use that as their `code`. Set its level in [`rules`](/latest/plugins/rules-and-presets#rulesetting) or with `--rule`.
+
+A few things to know:
+
+- `create` runs once per file for a `document` or `program` rule, and once per run for a `project` rule. It can be `async`.
+- Ranges are zero-based, like the rest of Kiira's diagnostics. The CLI adds one when it prints them.
+- A rule that throws fails the run with an error that names the rule and the file.
+- Options that fail `validate`, an unknown rule id, and a plugin without a `name` all fail when the config is resolved, not when the rule runs.
+
+## Scopes
+
+A rule's `meta.scope` decides what it can see and when it runs.
+
+| Scope | Runs | Sees |
+| --- | --- | --- |
+| `document` | Once per Markdown file, after type-checking. | The text, the parsed Markdown tree, the fences, and the TypeScript diagnostics already produced for the file. |
+| `program` | Once per Markdown file that has checked fences, right after its document rules. | Everything a document rule sees, plus the TypeScript `Program` and type checker for the file's snippets. |
+| `project` | Once per run. | The list of files in the run, the project, and read-only file access. It can report on any file, not only Markdown. |
+
+### Document rules
+
+`ctx` has these fields:
+
+| Field | What it is |
+| --- | --- |
+| `file` | The Markdown file's path, relative to the project root, with `/` separators. |
+| `text` | The whole file, frontmatter included. |
+| `frontmatter` | The leading `---` block, or `undefined`. See [Frontmatter](#frontmatter). |
+| `mdast` | The parsed Markdown tree, without the frontmatter. It has no children when `parseError` is set. |
+| `parseError` | The message and position of a failed parse, if any. |
+| `snippets` | The fences in the file. `snippet.lang` is always `ts`, `tsx`, `js`, or `jsx`, whatever identifier the fence used. |
+| `diagnostics` | The TypeScript diagnostics already produced for this file, after the TypeScript hook ran. |
+| `options`, `severity` | The rule's options, and its level for this file as `"error"` or `"warning"`. |
+| `config`, `project`, `fs` | The resolved config, the project, and read-only file access. |
+| `report` | Reports a diagnostic. |
+
+`project` has `cwd`, `packageJson`, `workspacePackages` (`name` and `dir`), and `isTracked(path)`, which asks git. `fs` has `exists(path)` and `readText(path)`, resolved against `cwd`. Every file a rule reads through `fs` is recorded, which is what lets `--fix` edit it later.
+
+### Program rules
+
+A program rule gets everything above, plus `program` and `checker` for the file's snippets, `virtualFiles` (the generated file of each snippet), and `toMarkdownRange(virtualFile, start, end)`. That maps an offset span in a generated file back to a Markdown range, and returns `undefined` for generated code such as a fixture.
+
+This rule flags exported values typed `any`:
+
+```ts
+import { defineRule } from "kiira-core/plugin"
+
+export const noAnyExports = defineRule({
+  meta: { scope: "program", defaultSeverity: "warn" },
+  create(ctx) {
+    for (const virtualFile of ctx.virtualFiles) {
+      const sourceFile = ctx.program.getSourceFile(virtualFile.fileName)
+      const moduleSymbol = sourceFile && ctx.checker.getSymbolAtLocation(sourceFile)
+      if (!sourceFile || !moduleSymbol) continue
+      for (const symbol of ctx.checker.getExportsOfModule(moduleSymbol)) {
+        const declaration = symbol.valueDeclaration
+        if (!declaration) continue
+        if (ctx.checker.typeToString(ctx.checker.getTypeOfSymbolAtLocation(symbol, declaration)) !== "any") continue
+        const range = ctx.toMarkdownRange(virtualFile, declaration.getStart(sourceFile), declaration.getEnd())
+        if (range) ctx.report({ range, message: `\`${symbol.name}\` is exported as \`any\`.` })
+      }
+    }
+  },
+})
+```
+
+Program rules only run for documents that have at least one type-checked fence, and only on the classic engine, because only it builds a `ts.Program` in-process. On the native engine they are skipped, and Kiira reports one `info` diagnostic with the code `program-rules-skipped` that names them. Set [`engine: "classic"`](/latest/configuration/options#engine) to run them.
+
+### Project rules
+
+A project rule gets `options`, `severity`, `config`, `project`, `fs`, `files` (every document in the run), and a `report` that also takes the `file` to report on, and an optional `range` that defaults to the start of the file.
+
+This rule reports on `package.json` when the docs have no index page:
+
+```ts
+import { defineRule } from "kiira-core/plugin"
+
+export const docsIndex = defineRule({
+  meta: { scope: "project", defaultSeverity: "error" },
+  create(ctx) {
+    if (!ctx.fs.exists("docs/index.md")) {
+      ctx.report({ file: "package.json", message: "Add docs/index.md." })
+    }
+  },
+})
+```
+
+## Reporting and fixes
+
+`report` takes a `range` and a `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) replaces the configured level for that one report, and an optional `fix` is applied by `--fix`.
+
+### Return a fix
+
+An `edits` fix is a list of text edits. Each edit names a `file` (relative to the project root, with `/` separators), a zero-based `range` to replace, and the `newText`. A zero-width range inserts.
+
+This `report` call replaces the flagged word with `DONE`:
+
+```ts
+import { definePlugin, defineRule } from "kiira-core/plugin"
+
+const rewrite = defineRule({
+  meta: { scope: "document", defaultSeverity: "warn" },
+  create(ctx) {
+    ctx.text.split("\n").forEach((line, index) => {
+      const character = line.indexOf("TODO")
+      if (character === -1) return
+      const start = { line: index, character }
+      const end = { line: index, character: character + 4 }
+      ctx.report({
+        range: { start, end },
+        message: "Replace TODO.",
+        fix: {
+          kind: "edits",
+          edits: [{ file: ctx.file, range: { start, end }, newText: "DONE" }],
+        },
+      })
+    })
+  },
+})
+
+export const plugin = definePlugin({ name: "docs", rules: { rewrite } })
+```
+
+An `edits` fix can also change another file, such as one the rule read with `ctx.fs.readText`. The safe writer behind `--fix` is careful with the files it writes:
+
+- It only edits a file the check read: a Markdown document in the run, or a file a rule read with `ctx.fs.readText`. An edit to any other file is refused.
+- It re-reads the file first and refuses it if the text changed since the check, so a fix never lands on stale ranges.
+- It refuses paths outside the project, inside `.git` or `node_modules`, or that reach either through a symlink.
+- It refuses every edit in a file when two of them overlap, and prints which fixes conflict. Other files are still fixed. Identical edits count once, and inserts at the same point apply in report order.
+- It keeps a file's line endings: in a file that uses CRLF, a `\n` in `newText` is written as `\r\n`. A line's characters stop before its `\r\n`.
+
+Each refusal is printed with its reason.
+
+### Preview with `--dry-run`
+
+```bash
+kiira check --fix --dry-run
+```
+
+Prints a unified diff of what `--fix` would write, and writes nothing. The exit code is the one the check had before any fix. With the `json` reporter, the diff goes to stderr so stdout stays one JSON document.
+
+An error that has a fix still fails the run until `--fix` applies it, so a CI job that runs plain `kiira check` fails on pending fixes.
+
+## Frontmatter
+
+A document that starts with a `---` line and has a later line of exactly `---` has frontmatter. Rules get it as `ctx.frontmatter`, or `undefined` when the document has none:
+
+- `raw` is the text between the two `---` lines, with the file's own line endings.
+- `range` runs from the start of the opening `---` to the end of the closing `---`.
+- `bodyStart` is the first line after the block.
+
+Kiira does not parse YAML, so a plugin brings its own parser, or reads `raw` as text. The block is left out of `ctx.mdast`, and line numbers after it are the same as in the file. `ctx.text` is still the whole file. A byte order mark before the opening `---` means the document has no frontmatter.
+
+This rule requires a `name:` line:
+
+```ts
+import { defineRule } from "kiira-core/plugin"
+
+export const requireName = defineRule({
+  meta: { scope: "document", defaultSeverity: "error" },
+  create(ctx) {
+    const { frontmatter } = ctx
+    if (!frontmatter) return
+    if (!/^name:/m.test(frontmatter.raw)) {
+      ctx.report({ range: frontmatter.range, message: "Frontmatter needs a `name:` line." })
+    }
+  },
+})
+```
+
+The TypeScript hook gets the same `frontmatter` in its context.
+
+## TypeScript hook
+
+<WarningAlert title="Experimental">
+The TypeScript hook can change between minor releases while it settles.
+</WarningAlert>
+
+A plugin or preset can set its own TypeScript options for each Markdown file. Add a `typescript` function next to `rules`. It gets the file path and a context with the document `text`, its `frontmatter`, its `snippets`, the `project`, and read-only `fs`, and returns what to change for that file, or `undefined` to change nothing.
+
+| Result | Effect |
+| --- | --- |
+| `compilerOptions` | tsconfig-style options, in the same string form as [`overrides`](/latest/configuration/options#overrides). An invalid option throws an error that names the plugin or preset and the file. |
+| `replaceTsconfig` | When `true`, start from Kiira's default options instead of the project tsconfig. `allowJs` and `checkJs` stay on unless your `compilerOptions` turn them off. Workspace and external-package resolution still apply. |
+| `paths` | Path mappings merged on top of the file's `paths`, including the ones from your workspace. |
+| `filterDiagnostic` | Called for each TypeScript diagnostic of the file. Return `false` to drop it. |
+
+This plugin checks docs against Kiira's defaults instead of the project tsconfig, resolves `@docs/*` imports to a folder of examples, and drops "cannot find name" errors for a global the docs assume:
+
+```ts
+import { defineConfig } from "kiira-core"
+import { definePlugin } from "kiira-core/plugin"
+
+const docs = definePlugin({
+  name: "docs",
+  typescript(file) {
+    if (!file.startsWith("docs/")) return undefined
+    return {
+      replaceTsconfig: true,
+      compilerOptions: { noImplicitAny: false },
+      paths: { "@docs/*": ["./examples/*"] },
+      filterDiagnostic: (diagnostic) => !diagnostic.message.includes("'appConfig'"),
+    }
+  },
+})
+
+export default defineConfig({ plugins: [docs] })
+```
+
+A few things to know:
+
+- Hooks run once per document. Presets' hooks run first, in preset order, then plugins' hooks in plugin order.
+- Results merge: `compilerOptions` are shallow-merged and `paths` merge per key, with later hooks winning. `replaceTsconfig` is `true` if any hook says so. A diagnostic is dropped if any `filterDiagnostic` returns `false`.
+- A file's options are layered in this order: the tsconfig (or Kiira's defaults), the `unused-symbols` level, matching `overrides`, the hook's `compilerOptions`, then the hook's `paths`.
+- Files whose final options differ are checked in separate programs, so one document's hook never changes how another is checked.
+- `filterDiagnostic` runs on TypeScript diagnostics only, before `unused-symbols`, `relative-imports`, and document rules see them. Its `snippet` is the fence that contains the diagnostic, or the file's first fence when the diagnostic is in generated code.
+- Editor quick fixes in VS Code use the same options and the same `frontmatter`. A caller that has only the checked fences, such as `checkVirtualFiles`, gives hooks their code joined by blank lines as `text`, and `frontmatter` is `undefined`.
+
+## Plain JavaScript plugins
+
+A plugin is a plain object, so a `kiira.config.mjs` needs no imports at all:
+
+```js
+export default {
+  include: ["docs/**/*.md"],
+  plugins: [
+    {
+      name: "docs",
+      rules: {
+        "no-todo": {
+          meta: { scope: "document", defaultSeverity: "warn" },
+          /** @param {import("kiira-core/plugin").RuleDocumentContext} ctx */
+          create(ctx) {
+            const character = ctx.text.indexOf("TODO")
+            if (character === -1) return
+            const start = { line: 0, character }
+            ctx.report({ range: { start, end: start }, message: "Remove TODO." })
+          },
+        },
+      },
+    },
+  ],
+  rules: { "docs/no-todo": "error" },
+}
+```
+
+`defineRule` and `definePlugin` only add types, so a JavaScript plugin loses nothing at runtime. The JSDoc `@param` above gives `ctx` its type under `checkJs`, and is optional. Plugins can't be written in `kiira.config.json`.
+
+## Test it with `check()`
+
+[`check()`](/latest/configuration/programmatic-api) runs every rule and returns the diagnostics, so a plugin's test is a fixture and an assertion:
+
+```ts
+import { check } from "kiira-core"
+import { plugin } from "./plugin"
+
+const result = await check({ cwd: "fixtures/todo", plugins: [plugin] })
+
+console.log(result.diagnostics.map((diagnostic) => diagnostic.code))
+```
+
+A complete example lives in [`examples/plugin-basic`](https://github.com/AlemTuzlak/kiira/tree/main/examples/plugin-basic): a document, a program, and a project rule, a preset with an `include` function, a TypeScript hook, and end-to-end tests that run `check()` and the CLI with `--fix` and `--dry-run`.

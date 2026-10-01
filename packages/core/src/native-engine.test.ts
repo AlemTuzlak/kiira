@@ -121,6 +121,7 @@ describe("options produced by a TypeScript hook", () => {
 		const hook = runTypescriptHooks(resolved, {
 			file: "doc.md",
 			text: "",
+			frontmatter: undefined,
 			snippets: [],
 			project: await createProject(hookCwd),
 			fs: createRuleFs(hookCwd).fs,
