@@ -15,6 +15,10 @@ exact line inside the fence.
 > Powered by [`kiira`](https://github.com/AlemTuzlak/kiira). For CI and
 > command-line use, see the [`kiira` CLI](https://github.com/AlemTuzlak/kiira).
 
+## Requirements
+
+The extension checks with the workspace's own TypeScript (5 or 6) when one is installed, so diagnostics match your project, and otherwise uses the TypeScript that VS Code ships for its built-in TypeScript features. It does not bundle a copy of TypeScript.
+
 ## Features
 
 - **Live diagnostics in Markdown** — type errors in fenced code appear as you type

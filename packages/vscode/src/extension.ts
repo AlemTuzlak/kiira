@@ -10,11 +10,11 @@ import {
 	setTypescriptLibDir,
 	setTypescriptModule,
 } from "kiira-core"
-import ts from "typescript"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
 import { KiiraCodeActionProvider } from "./code-actions"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
+import { findTypescript } from "./typescript-host"
 
 const VIRTUAL_SCHEME = "kiira"
 
@@ -215,15 +215,30 @@ async function openVirtualFileCommand(provider: VirtualContentProvider): Promise
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-	// Hand kiira-core the TypeScript bundled into this extension.
-	setTypescriptModule(ts)
-	// Bundling breaks TypeScript's built-in lookup of the standard `lib.*.d.ts` files;
-	// point it at the copies shipped in `out/lib` so globals (`JSON`, `Date`, DOM types)
-	// resolve instead of being flagged.
-	setTypescriptLibDir(join(__dirname, "lib"))
-
 	collection = vscode.languages.createDiagnosticCollection("kiira")
 	output = vscode.window.createOutputChannel("Kiira")
+
+	// The extension does not bundle TypeScript (it was ~10 MB of the install): it
+	// checks with the workspace's own TypeScript, so diagnostics match the project,
+	// and falls back to the copy VS Code ships for its built-in TypeScript features.
+	// Either is a real on-disk install, so TypeScript finds its own `lib.*.d.ts`.
+	const found = findTypescript({
+		workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
+		appRoot: vscode.env.appRoot,
+	})
+	if (!found) {
+		const message =
+			"Kiira needs TypeScript 5 or 6: install `typescript` in the workspace, or enable VS Code's built-in TypeScript extension."
+		output.appendLine(message)
+		void vscode.window.showErrorMessage(message)
+		context.subscriptions.push(collection, output)
+		return
+	}
+	output.appendLine(
+		`Using TypeScript ${found.version} from ${found.source === "workspace" ? "the workspace" : "VS Code"} (${found.path})`
+	)
+	setTypescriptModule(found.module)
+	setTypescriptLibDir(undefined)
 	const provider = new VirtualContentProvider()
 
 	context.subscriptions.push(
