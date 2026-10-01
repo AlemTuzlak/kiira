@@ -1,6 +1,5 @@
 // Proves that the plugin API can express each behavior of TanStack Intent's skill validator.
-// Every `it` is one row of the capability map in docs/content/08-plugins/04-intent-capability-map.mdx,
-// built from a minimal inline plugin and a throwaway project. Test only; nothing here is exported.
+// Tests use minimal inline plugins and throwaway projects; nothing here is exported.
 // Kiira does not parse YAML, so every frontmatter check works on `frontmatter.raw` as text.
 import { execFileSync } from "node:child_process"
 import { basename, dirname, posix, relative } from "node:path"
