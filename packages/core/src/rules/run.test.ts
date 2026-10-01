@@ -591,6 +591,17 @@ describe("project and fs helpers", () => {
 		expect(isTracked("missing.txt")).toBe(false)
 	})
 
+	it.skipIf(!hasGit)("isTracked accepts absolute and ./-prefixed paths and rejects paths outside cwd", async () => {
+		const cwd = tempProject({ "tracked.txt": "t", "nested/deep.txt": "d" })
+		execFileSync("git", ["init", "-q"], { cwd })
+		execFileSync("git", ["add", "."], { cwd })
+		const { isTracked } = await createProject(cwd)
+		expect(isTracked(join(cwd, "tracked.txt"))).toBe(true)
+		expect(isTracked("./nested/deep.txt")).toBe(true)
+		expect(isTracked(join(cwd, "..", "elsewhere.txt"))).toBe(false)
+		expect(isTracked("")).toBe(false)
+	})
+
 	it("isTracked is false outside a git repository", async () => {
 		const { isTracked } = await createProject(tempProject({ "a.txt": "a" }))
 		expect(isTracked("a.txt")).toBe(false)

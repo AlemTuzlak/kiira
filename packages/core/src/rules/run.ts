@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { isAbsolute, join, relative, resolve, sep } from "node:path"
 import type { Root } from "mdast"
 import type ts from "typescript"
 import { rulesForFile } from "../config"
@@ -82,17 +82,41 @@ export async function createProject(cwd: string): Promise<KiiraProject> {
 		cwd,
 		packageJson,
 		workspacePackages: await discoverWorkspacePackages(cwd),
-		isTracked: (path) => {
-			try {
-				execFileSync("git", ["-c", "core.fsmonitor=false", "ls-files", "--error-unmatch", "--", path], {
-					cwd,
-					stdio: "ignore",
-				})
-				return true
-			} catch {
-				return false
-			}
-		},
+		isTracked: createIsTracked(cwd),
+	}
+}
+
+/**
+ * `isTracked` for a project: one `git ls-files` lists every tracked path under
+ * `cwd` the first time it is asked, and every later answer is a set lookup. (A
+ * spawn per path cost ~20 ms, so a rule asking per document scaled linearly.)
+ * Paths outside `cwd` are not tracked as far as the project is concerned.
+ */
+function createIsTracked(cwd: string): (path: string) => boolean {
+	let tracked: Set<string> | undefined
+	const load = (): Set<string> => {
+		if (tracked) {
+			return tracked
+		}
+		try {
+			const out = execFileSync("git", ["-c", "core.fsmonitor=false", "ls-files", "-z"], {
+				cwd,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+				maxBuffer: 256 * 1024 * 1024,
+			})
+			tracked = new Set(out.split("\0").filter((entry) => entry.length > 0))
+		} catch {
+			tracked = new Set()
+		}
+		return tracked
+	}
+	return (path) => {
+		const rel = isAbsolute(path) ? relative(cwd, path) : relative(cwd, resolve(cwd, path))
+		if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+			return false
+		}
+		return load().has(rel.split(sep).join("/"))
 	}
 }
 
