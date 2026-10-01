@@ -157,7 +157,9 @@ export async function buildBaseOptions(
 	cwd: string,
 	resolved: ReturnType<typeof resolveConfig>,
 	// `replaceTsconfig` (a TypeScript hook's request) starts from Kiira's defaults, skipping the tsconfig.
-	{ replaceTsconfig = false }: { replaceTsconfig?: boolean } = {}
+	// `markdownFiles` are the docs checked with these options; owner-scoped workspace
+	// resolution scopes to the packages that own them.
+	{ replaceTsconfig = false, markdownFiles }: { replaceTsconfig?: boolean; markdownFiles?: string[] } = {}
 ): Promise<ts.CompilerOptions> {
 	selectTypescript(cwd)
 	const tsconfigPath = replaceTsconfig ? undefined : resolveTsconfigPath(cwd, resolved.tsconfig)
@@ -173,7 +175,10 @@ export async function buildBaseOptions(
 	// dependencies resolvable from the repo root, where a pnpm isolated
 	// node_modules would otherwise hide them. User-defined paths win on conflict.
 	if (resolved.packageMode === "workspace") {
-		const ws = await buildWorkspaceResolution(cwd)
+		const ws = await buildWorkspaceResolution(cwd, {
+			workspacePackageResolution: resolved.workspacePackageResolution,
+			markdownFiles,
+		})
 		if (ws) {
 			options.baseUrl = options.baseUrl ?? ws.baseUrl
 			options.paths = { ...ws.paths, ...(options.paths ?? {}) }
@@ -275,14 +280,16 @@ export function documentFromVirtualFiles(file: string, virtualFiles: VirtualFile
 /**
  * Resolves the compiler options each Markdown file is checked with, running the
  * TypeScript hooks. Shared by checking and code fixes so both see identical options.
- * Base options are built once per `replaceTsconfig` value.
+ * Base options are built once per `replaceTsconfig` value (and per file with owner-scoped
+ * workspace resolution).
  */
 export function createOptionsResolver(
 	cwd: string,
 	resolved: ResolvedKiiraConfig,
 	shared?: { project: KiiraProject; fs: KiiraFs }
 ) {
-	const bases = new Map<boolean, Promise<ts.CompilerOptions>>()
+	const bases = new Map<string, Promise<ts.CompilerOptions>>()
+	const ownerScoped = resolved.packageMode === "workspace" && resolved.workspacePackageResolution === "owner"
 	let env = shared
 	return {
 		/** The merged hook result for a document, or `undefined` when no hook applies. */
@@ -296,10 +303,13 @@ export function createOptionsResolver(
 		},
 		async optionsFor(file: string, hook?: TypescriptHookOutcome): Promise<ts.CompilerOptions> {
 			const replaceTsconfig = hook?.replaceTsconfig ?? false
-			let base = bases.get(replaceTsconfig)
+			// Owner-scoped workspace resolution depends on the file, so build its base per file.
+			const markdownFiles = ownerScoped ? [file] : undefined
+			const key = `${replaceTsconfig}\0${markdownFiles?.[0] ?? ""}`
+			let base = bases.get(key)
 			if (!base) {
-				base = buildBaseOptions(cwd, resolved, { replaceTsconfig })
-				bases.set(replaceTsconfig, base)
+				base = buildBaseOptions(cwd, resolved, { replaceTsconfig, markdownFiles })
+				bases.set(key, base)
 			}
 			return optionsForFile(cwd, await base, resolved, file, hook)
 		},

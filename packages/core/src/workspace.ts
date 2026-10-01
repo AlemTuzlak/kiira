@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { dirname, join, sep } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { glob } from "tinyglobby"
 
 export interface WorkspacePackage {
@@ -14,6 +14,16 @@ export interface WorkspaceResolution {
 	paths: Record<string, string[]>
 	/** `@types` directories across the workspace, so e.g. @types/react resolves for a package's docs. */
 	typeRoots: string[]
+}
+
+export interface WorkspaceResolutionOptions {
+	workspacePackageResolution?: "exhaustive" | "owner"
+	markdownFiles?: string[]
+}
+
+interface WorkspaceOwners {
+	directDependencies: Set<string>
+	directories: Set<string>
 }
 
 function toPosix(path: string): string {
@@ -92,6 +102,8 @@ interface WorkspaceSnapshot {
 	packages: readonly WorkspacePackage[]
 	/** Built on first request; `null` when not yet built. */
 	resolution: WorkspaceResolution | undefined | null
+	/** Owner-scoped resolutions, keyed by their owner package directories. */
+	ownerResolutions: Map<string, WorkspaceResolution>
 }
 
 interface WorkspaceScan {
@@ -199,6 +211,7 @@ async function workspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
 				fingerprint: settled ? fingerprint : "",
 				packages: await readWorkspacePackages(cwd, scan.manifests),
 				resolution: null,
+				ownerResolutions: new Map(),
 			}
 			snapshots.set(cwd, snapshot)
 			return snapshot
@@ -313,25 +326,103 @@ function toSourceIfPresent(absTarget: string): string | undefined {
  * Returns `undefined` when `cwd` is not a workspace. Cached with the workspace
  * snapshot (see {@link discoverWorkspacePackages}) and frozen, so callers cannot mutate it.
  */
-export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceResolution | undefined> {
-	const snapshot = await workspaceSnapshot(cwd)
-	if (snapshot.resolution === null) {
-		snapshot.resolution = await resolveWorkspace(cwd, snapshot.packages)
-	}
-	return snapshot.resolution
-}
-
-async function resolveWorkspace(
+export async function buildWorkspaceResolution(
 	cwd: string,
-	packages: readonly WorkspacePackage[]
+	options: WorkspaceResolutionOptions = {}
 ): Promise<WorkspaceResolution | undefined> {
-	if (packages.length === 0) {
+	const snapshot = await workspaceSnapshot(cwd)
+	if (snapshot.packages.length === 0) {
 		return undefined
 	}
+	const owners =
+		options.workspacePackageResolution === "owner"
+			? await resolveWorkspaceOwners(cwd, snapshot.packages, options.markdownFiles)
+			: undefined
+	if (!owners) {
+		if (snapshot.resolution === null) {
+			snapshot.resolution = await resolveWorkspace(cwd, snapshot.packages)
+		}
+		return snapshot.resolution
+	}
+	// An owner-scoped result depends only on the owner packages (their manifests are
+	// part of the snapshot's fingerprint), so it is cached per set of owners.
+	const key = [...owners.directories].sort().join("\n")
+	let scoped = snapshot.ownerResolutions.get(key)
+	if (!scoped) {
+		scoped = await resolveWorkspace(cwd, snapshot.packages, owners)
+		snapshot.ownerResolutions.set(key, scoped)
+	}
+	return scoped
+}
+
+async function resolveWorkspaceOwners(
+	cwd: string,
+	packages: readonly WorkspacePackage[],
+	markdownFiles: string[] | undefined
+): Promise<WorkspaceOwners | undefined> {
+	if (!markdownFiles || markdownFiles.length === 0) {
+		return undefined
+	}
+	const root = resolve(cwd)
+	const directories = new Set<string>()
+	const directDependencies = new Set<string>()
+	for (const markdownFile of markdownFiles) {
+		if (isAbsolute(markdownFile)) {
+			return undefined
+		}
+		const file = resolve(root, markdownFile)
+		const relativeToRoot = relative(root, file)
+		if (relativeToRoot === ".." || relativeToRoot.startsWith(`..${sep}`) || isAbsolute(relativeToRoot)) {
+			return undefined
+		}
+		const owner =
+			packages
+				.filter((pkg) => {
+					const relativeToPackage = relative(resolve(pkg.dir), file)
+					return (
+						relativeToPackage === "" ||
+						(relativeToPackage !== ".." && !relativeToPackage.startsWith(`..${sep}`) && !isAbsolute(relativeToPackage))
+					)
+				})
+				.sort((left, right) => right.dir.length - left.dir.length)[0]?.dir ?? root
+		let manifest: Record<string, unknown>
+		try {
+			manifest = JSON.parse(await readFile(join(owner, "package.json"), "utf8")) as Record<string, unknown>
+		} catch {
+			return undefined
+		}
+		directories.add(resolve(owner))
+		for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+			const dependencies = manifest[field]
+			if (dependencies && typeof dependencies === "object") {
+				for (const name of Object.keys(dependencies)) {
+					directDependencies.add(name)
+				}
+			}
+		}
+	}
+	return { directories, directDependencies }
+}
+
+/** Build the (frozen) resolution; with `owners`, scope the `node_modules` fallbacks to them. */
+async function resolveWorkspace(
+	cwd: string,
+	packages: readonly WorkspacePackage[],
+	owners?: WorkspaceOwners
+): Promise<WorkspaceResolution> {
+	const scoped = owners !== undefined
 
 	const paths: Record<string, string[]> = {}
 	const nodeModulesFallbacks: string[] = []
 	const typeRoots: string[] = []
+	const fallbackDirectories = new Set<string>()
+	const addNodeModulesFallback = (dir: string): void => {
+		const nodeModules = resolve(dir, "node_modules")
+		if (existsSync(nodeModules) && !fallbackDirectories.has(nodeModules)) {
+			fallbackDirectories.add(nodeModules)
+			nodeModulesFallbacks.push(`${toPosix(join(nodeModules, "*"))}`)
+		}
+	}
 
 	const addTypeRoot = (dir: string): void => {
 		const typesDir = join(dir, "node_modules", "@types")
@@ -372,10 +463,29 @@ async function resolveWorkspace(
 
 	// Absolute path values so resolution is correct regardless of any `baseUrl`
 	// the project's tsconfig may set (paths values are otherwise baseUrl-relative).
-	if (existsSync(join(cwd, "node_modules"))) {
-		nodeModulesFallbacks.push(`${toPosix(join(cwd, "node_modules"))}/*`)
+	if (scoped) {
+		for (const owner of owners.directories) {
+			if (owner !== resolve(cwd)) {
+				addNodeModulesFallback(owner)
+			}
+		}
+		addNodeModulesFallback(cwd)
+		for (const pkg of packages) {
+			if (
+				!owners.directories.has(resolve(pkg.dir)) &&
+				(existsSync(join(pkg.dir, "node_modules", "@types")) || owners.directDependencies.has(pkg.name))
+			) {
+				addNodeModulesFallback(pkg.dir)
+			}
+		}
+		for (const owner of owners.directories) {
+			addTypeRoot(owner)
+		}
+		addTypeRoot(cwd)
+	} else {
+		addNodeModulesFallback(cwd)
+		addTypeRoot(cwd)
 	}
-	addTypeRoot(cwd)
 
 	for (const pkg of packages) {
 		const manifest = JSON.parse(await readFile(join(pkg.dir, "package.json"), "utf8")) as Record<string, unknown>
@@ -397,10 +507,18 @@ async function resolveWorkspace(
 				? [`${toPosix(srcDir)}/*`, `${toPosix(pkg.dir)}/*`]
 				: [`${toPosix(pkg.dir)}/*`]
 		}
-		if (existsSync(join(pkg.dir, "node_modules"))) {
-			nodeModulesFallbacks.push(`${toPosix(join(pkg.dir, "node_modules"))}/*`)
+		if (!scoped) {
+			addNodeModulesFallback(pkg.dir)
+		} else if (
+			owners.directories.has(resolve(pkg.dir)) ||
+			existsSync(join(pkg.dir, "node_modules", "@types")) ||
+			owners.directDependencies.has(pkg.name)
+		) {
+			addNodeModulesFallback(pkg.dir)
 		}
-		addTypeRoot(pkg.dir)
+		if (!scoped || owners.directories.has(resolve(pkg.dir)) || existsSync(join(pkg.dir, "node_modules", "@types"))) {
+			addTypeRoot(pkg.dir)
+		}
 	}
 
 	if (nodeModulesFallbacks.length > 0) {

@@ -35,6 +35,7 @@ describe("resolveConfig", () => {
 			engine: "auto",
 			overrides: [],
 			packageMode: "workspace",
+			workspacePackageResolution: "exhaustive",
 			defaultValidate: "type",
 			defaultFixture: undefined,
 			defaultGroup: "none",

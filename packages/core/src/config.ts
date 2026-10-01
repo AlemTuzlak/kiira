@@ -293,6 +293,7 @@ export function resolveConfig(
 		engine: config.engine ?? "auto",
 		overrides,
 		packageMode: config.packageMode ?? "workspace",
+		workspacePackageResolution: config.workspacePackageResolution ?? "exhaustive",
 		defaultValidate: config.defaultValidate ?? "type",
 		defaultFixture: config.defaultFixture,
 		defaultGroup: config.defaultGroup ?? "none",

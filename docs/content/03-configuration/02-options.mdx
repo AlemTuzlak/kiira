@@ -13,6 +13,7 @@ description: "Complete reference for Kiira config options: include, exclude, tsc
 | `tsconfig` | `string` | auto | Path to the tsconfig used to compile snippets. Auto-resolves `tsconfig.docs.json`, then `tsconfig.json`. |
 | `engine` | `"auto" \| "classic" \| "native"` | `"auto"` | Which TypeScript engine type-checks snippets. `"auto"` uses TypeScript 7's native compiler when your project has it, else the bundled one. |
 | `packageMode` | `"workspace" \| "packed"` | `"workspace"` | How package imports are resolved. |
+| `workspacePackageResolution` | `"exhaustive" \| "owner"` | `"exhaustive"` | Which workspace `node_modules` directories are dependency fallbacks. |
 | `defaultValidate` | `"type" \| "runtime" \| "none"` | `"type"` | Default validation level for fences. |
 | `defaultGroup` | `"none" \| "file"` | `"none"` | Implicitly group every checkable fence in a file so later fences see earlier declarations. |
 | `checkUnusedSymbols` | `boolean` | `false` | Report unused symbols (TS6133). |
@@ -90,6 +91,15 @@ How Kiira resolves package imports referenced in your snippets:
 ```ts
 packageMode: "workspace"
 ```
+
+## `workspacePackageResolution`
+
+Workspace dependency lookup is exhaustive by default. Set this option to `"owner"` to try the
+package that owns each Markdown file first, then the workspace root, then packages with `@types`
+or a direct dependency declared by an owner. This can miss undeclared workspace dependencies.
+When a check includes Markdown files from several packages, Kiira keeps one shared TypeScript
+program and uses the union of their candidates. Workspace package exports, user `paths`, and
+`typeRoots` remain in effect.
 
 ## `defaultValidate`
 
