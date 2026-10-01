@@ -159,6 +159,7 @@ describe("lazy MDX support", () => {
 		expect(before.diagnostics).toEqual([
 			{
 				severity: "error",
+				code: "parse-error",
 				source: "kiira",
 				message: notLoaded,
 				markdownFile: "docs/page.mdx",

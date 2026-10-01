@@ -1,0 +1,955 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for check 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 2,
+    "snippets": 4,
+    "checked": 4,
+    "ignored": 0,
+    "errors": 3,
+    "warnings": 1,
+    "fixable": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "message": "Unknown fixture \\"node\\". Add it to the \`fixtures\` map in your Kiira config.",
+      "markdownFile": "with-fixture.md",
+      "markdownRange": {
+        "start": {
+          "line": 1,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 4
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2305,
+      "message": "Module '\\"typescript\\"' has no exported member 'definitelyNotExported'.",
+      "markdownFile": "docs.md",
+      "markdownRange": {
+        "start": {
+          "line": 6,
+          "character": 10
+        },
+        "end": {
+          "line": 6,
+          "character": 31
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2322,
+      "message": "Type 'string' is not assignable to type 'number'.",
+      "markdownFile": "docs.md",
+      "markdownRange": {
+        "start": {
+          "line": 20,
+          "character": 7
+        },
+        "end": {
+          "line": 20,
+          "character": 12
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2322,
+      "message": "Type 'string' is not assignable to type 'number'.",
+      "markdownFile": "with-fixture.md",
+      "markdownRange": {
+        "start": {
+          "line": 2,
+          "character": 7
+        },
+        "end": {
+          "line": 2,
+          "character": 8
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for codefix 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 2,
+    "snippets": 3,
+    "checked": 3,
+    "ignored": 0,
+    "errors": 2,
+    "warnings": 2,
+    "fixable": 2
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'greet'.",
+      "markdownFile": "autoimport.md",
+      "markdownRange": {
+        "start": {
+          "line": 9,
+          "character": 1
+        },
+        "end": {
+          "line": 9,
+          "character": 6
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2552,
+      "message": "Cannot find name 'consle'. Did you mean 'console'?",
+      "markdownFile": "spelling.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 1
+        },
+        "end": {
+          "line": 4,
+          "character": 7
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=autoimport\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "autoimport.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=autoimport\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "autoimport.md",
+      "markdownRange": {
+        "start": {
+          "line": 8,
+          "character": 1
+        },
+        "end": {
+          "line": 8,
+          "character": 1
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for group 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 8,
+    "snippets": 22,
+    "checked": 21,
+    "ignored": 1,
+    "errors": 10,
+    "warnings": 14,
+    "fixable": 14
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'base'.",
+      "markdownFile": "conflict.md",
+      "markdownRange": {
+        "start": {
+          "line": 10,
+          "character": 25
+        },
+        "end": {
+          "line": 10,
+          "character": 29
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'greeting'.",
+      "markdownFile": "doc.md",
+      "markdownRange": {
+        "start": {
+          "line": 18,
+          "character": 16
+        },
+        "end": {
+          "line": 18,
+          "character": 24
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'greeting'.",
+      "markdownFile": "file-group-detach.md",
+      "markdownRange": {
+        "start": {
+          "line": 8,
+          "character": 13
+        },
+        "end": {
+          "line": 8,
+          "character": 21
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'greeting'.",
+      "markdownFile": "file-group.md",
+      "markdownRange": {
+        "start": {
+          "line": 8,
+          "character": 13
+        },
+        "end": {
+          "line": 8,
+          "character": 21
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'Item'.",
+      "markdownFile": "nearest-conflicts.md",
+      "markdownRange": {
+        "start": {
+          "line": 21,
+          "character": 20
+        },
+        "end": {
+          "line": 21,
+          "character": 24
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'client'.",
+      "markdownFile": "redeclare-ref.md",
+      "markdownRange": {
+        "start": {
+          "line": 11,
+          "character": 1
+        },
+        "end": {
+          "line": 11,
+          "character": 7
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'Widget'.",
+      "markdownFile": "redeclare-ref.md",
+      "markdownRange": {
+        "start": {
+          "line": 18,
+          "character": 20
+        },
+        "end": {
+          "line": 18,
+          "character": 26
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'alpha'.",
+      "markdownFile": "two-clusters.md",
+      "markdownRange": {
+        "start": {
+          "line": 8,
+          "character": 26
+        },
+        "end": {
+          "line": 8,
+          "character": 31
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'beta'.",
+      "markdownFile": "two-clusters.md",
+      "markdownRange": {
+        "start": {
+          "line": 18,
+          "character": 25
+        },
+        "end": {
+          "line": 18,
+          "character": 29
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2304,
+      "message": "Cannot find name 'token'.",
+      "markdownFile": "ungrouped.md",
+      "markdownRange": {
+        "start": {
+          "line": 10,
+          "character": 23
+        },
+        "end": {
+          "line": 10,
+          "character": 28
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=conflict\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "conflict.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=conflict\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "conflict.md",
+      "markdownRange": {
+        "start": {
+          "line": 9,
+          "character": 1
+        },
+        "end": {
+          "line": 9,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=file-group-detach\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "file-group-detach.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=file-group-detach\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "file-group-detach.md",
+      "markdownRange": {
+        "start": {
+          "line": 7,
+          "character": 1
+        },
+        "end": {
+          "line": 7,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=file-group\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "file-group.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=file-group\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "file-group.md",
+      "markdownRange": {
+        "start": {
+          "line": 7,
+          "character": 1
+        },
+        "end": {
+          "line": 7,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=redeclare-ref\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "redeclare-ref.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=redeclare-ref\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "redeclare-ref.md",
+      "markdownRange": {
+        "start": {
+          "line": 10,
+          "character": 1
+        },
+        "end": {
+          "line": 10,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=two-clusters-1\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "two-clusters.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=two-clusters-1\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "two-clusters.md",
+      "markdownRange": {
+        "start": {
+          "line": 7,
+          "character": 1
+        },
+        "end": {
+          "line": 7,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=two-clusters-2\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "two-clusters.md",
+      "markdownRange": {
+        "start": {
+          "line": 13,
+          "character": 1
+        },
+        "end": {
+          "line": 13,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=two-clusters-2\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "two-clusters.md",
+      "markdownRange": {
+        "start": {
+          "line": 17,
+          "character": 1
+        },
+        "end": {
+          "line": 17,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=ungrouped\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "ungrouped.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "group",
+      "message": "This snippet continues an earlier one. Tag them \`group=ungrouped\` to type-check them together (run \`kiira check --fix\` to apply).",
+      "markdownFile": "ungrouped.md",
+      "markdownRange": {
+        "start": {
+          "line": 9,
+          "character": 1
+        },
+        "end": {
+          "line": 9,
+          "character": 1
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for jsxframework 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 2,
+    "snippets": 2,
+    "checked": 2,
+    "ignored": 0,
+    "errors": 6,
+    "warnings": 2,
+    "fixable": 2
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 7026,
+      "message": "JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.",
+      "markdownFile": "ai-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 5,
+          "character": 9
+        },
+        "end": {
+          "line": 5,
+          "character": 30
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2875,
+      "message": "This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.",
+      "markdownFile": "ai-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 5,
+          "character": 9
+        },
+        "end": {
+          "line": 5,
+          "character": 41
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 7026,
+      "message": "JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.",
+      "markdownFile": "ai-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 5,
+          "character": 35
+        },
+        "end": {
+          "line": 5,
+          "character": 41
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 7026,
+      "message": "JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.",
+      "markdownFile": "widget-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 29
+        },
+        "end": {
+          "line": 4,
+          "character": 35
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2875,
+      "message": "This JSX tag requires the module path 'react/jsx-runtime' to exist, but none could be found. Make sure you have types for the appropriate package installed.",
+      "markdownFile": "widget-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 29
+        },
+        "end": {
+          "line": 4,
+          "character": 48
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 7026,
+      "message": "JSX element implicitly has type 'any' because no interface 'JSX.IntrinsicElements' exists.",
+      "markdownFile": "widget-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 41
+        },
+        "end": {
+          "line": 4,
+          "character": 48
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "jsx-framework",
+      "message": "JSX here looks like solid. Add a \`jsxImportSource: \\"solid-js\\"\` override for \`**/*solid*\` (run \`kiira check --fix\` to apply).",
+      "markdownFile": "ai-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "code": "jsx-framework",
+      "message": "JSX here looks like solid. Add a \`jsxImportSource: \\"solid-js\\"\` override for \`**/*solid*\` (run \`kiira check --fix\` to apply).",
+      "markdownFile": "widget-solid.md",
+      "markdownRange": {
+        "start": {
+          "line": 3,
+          "character": 1
+        },
+        "end": {
+          "line": 3,
+          "character": 1
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for markdown 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 1,
+    "snippets": 3,
+    "checked": 2,
+    "ignored": 1,
+    "errors": 1,
+    "warnings": 1,
+    "fixable": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "source": "kiira",
+      "message": "Unknown fixture \\"react\\". Add it to the \`fixtures\` map in your Kiira config.",
+      "markdownFile": "intro.md",
+      "markdownRange": {
+        "start": {
+          "line": 9,
+          "character": 1
+        },
+        "end": {
+          "line": 11,
+          "character": 4
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2307,
+      "message": "Cannot find module '@tanstack/ai/react' or its corresponding type declarations.",
+      "markdownFile": "intro.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 25
+        },
+        "end": {
+          "line": 4,
+          "character": 45
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for overrides 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 2,
+    "snippets": 2,
+    "checked": 2,
+    "ignored": 0,
+    "errors": 2,
+    "warnings": 0,
+    "fixable": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 7006,
+      "message": "Parameter 'value' implicitly has an 'any' type.",
+      "markdownFile": "loose.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 26
+        },
+        "end": {
+          "line": 4,
+          "character": 31
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 7006,
+      "message": "Parameter 'value' implicitly has an 'any' type.",
+      "markdownFile": "strict.md",
+      "markdownRange": {
+        "start": {
+          "line": 4,
+          "character": 26
+        },
+        "end": {
+          "line": 4,
+          "character": 31
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for relative-imports 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 1,
+    "snippets": 2,
+    "checked": 2,
+    "ignored": 0,
+    "errors": 1,
+    "warnings": 0,
+    "fixable": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2307,
+      "message": "Cannot find module 'totally-not-a-real-package-xyz' or its corresponding type declarations.",
+      "markdownFile": "doc.md",
+      "markdownRange": {
+        "start": {
+          "line": 13,
+          "character": 23
+        },
+        "end": {
+          "line": 13,
+          "character": 55
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;
+
+exports[`json reporter output is pinned per fixture > matches the snapshot for workspace 1`] = `
+"{
+  "stats": {
+    "markdownFiles": 1,
+    "snippets": 2,
+    "checked": 2,
+    "ignored": 0,
+    "errors": 1,
+    "warnings": 0,
+    "fixable": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2305,
+      "message": "Module '\\"@demo/lib\\"' has no exported member 'doesNotExist'.",
+      "markdownFile": "docs/usage.md",
+      "markdownRange": {
+        "start": {
+          "line": 15,
+          "character": 10
+        },
+        "end": {
+          "line": 15,
+          "character": 22
+        }
+      },
+      "generated": false
+    }
+  ]
+}"
+`;

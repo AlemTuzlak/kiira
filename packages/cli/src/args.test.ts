@@ -61,4 +61,19 @@ describe("parseArgs", () => {
 	it("throws on an unknown reporter", () => {
 		expect(() => parseArgs(["check", "--reporter", "nope"])).toThrow(/reporter/i)
 	})
+
+	it("collects repeatable --rule flags, with space or equals, last one winning", () => {
+		const parsed = parseArgs(["check", "--rule", "group=off", "--rule=demo/shout=error", "--rule", "group=warn"])
+		expect(parsed.rules).toEqual({ group: "warn", "demo/shout": "error" })
+		expect(parseArgs(["check"]).rules).toEqual({})
+	})
+
+	it.each(["group", "group=", "=warn", "group=loud", ""])("rejects a malformed --rule value %j", (value) => {
+		expect(() => parseArgs(["check", "--rule", value])).toThrow(/Invalid --rule .*Expected <id>=<off\|warn\|error>/)
+		expect(() => parseArgs(["check", `--rule=${value}`])).toThrow(/Invalid --rule/)
+	})
+
+	it("rejects --rule without a value", () => {
+		expect(() => parseArgs(["check", "--rule"])).toThrow(/Invalid --rule/)
+	})
 })

@@ -42,7 +42,7 @@ describe("createVirtualFiles", () => {
 		expect(tsx?.fileName.replace(/\\/g, "/").endsWith(".kiira/virtual/intro__snippet_001.tsx")).toBe(true)
 	})
 
-	it("warns and checks as tsx when a ts fence contains JSX", async () => {
+	it("checks a ts fence that contains JSX as tsx, leaving the warning to the language-tag rule", async () => {
 		const snippet = {
 			id: "comp.md#0",
 			markdownFile: "comp.md",
@@ -57,9 +57,7 @@ describe("createVirtualFiles", () => {
 			snippets: [snippet],
 			config: { include: ["**/*.md"] },
 		})
-		const warning = diagnostics.find((d) => d.code === "language-tag")
-		expect(warning?.severity).toBe("warning")
-		expect(warning?.fix).toEqual({ kind: "fence-language", line: 4, language: "tsx" })
+		expect(diagnostics).toEqual([])
 		// The virtual file is checked as tsx, not ts.
 		expect(virtualFiles[0]?.lang).toBe("tsx")
 		expect(virtualFiles[0]?.fileName.endsWith(".tsx")).toBe(true)

@@ -40,8 +40,11 @@ export {
 export {
 	buildBaseOptions,
 	type CheckMarkdownFilesInput,
+	type CheckMarkdownTextInput,
+	type CheckMarkdownTextResult,
 	type CheckVirtualFilesInput,
 	checkMarkdownFiles,
+	checkMarkdownText,
 	checkVirtualFiles,
 	type CollectSuggestionsInput,
 	collectSuggestions,

@@ -101,8 +101,49 @@ describe("checkMarkdownFiles", () => {
 		// stripped before the override is converted — otherwise TS throws "Unknown
 		// compiler option 'defaultGroup'".
 		expect(() =>
-			optionsForFile(fixtures, {}, [{ include: ["**/*.md"], defaultGroup: "none" }], "docs.md")
+			optionsForFile(
+				fixtures,
+				{},
+				resolveConfig({ overrides: [{ include: ["**/*.md"], defaultGroup: "none" }] }),
+				"docs.md"
+			)
 		).not.toThrow()
+	})
+
+	it("does not leak rules, presets, or codeFenceLanguages overrides into compilerOptions", () => {
+		const override = {
+			include: ["**/*.md"],
+			rules: { group: "off" as const },
+			presets: [{ name: "p" }],
+			codeFenceLanguages: ["ts"],
+			noImplicitAny: false,
+		}
+		expect(optionsForFile(fixtures, {}, resolveConfig({ overrides: [override] }), "docs.md")).toMatchObject({
+			noImplicitAny: false,
+		})
+	})
+
+	it("applies the per-file unused-symbols level, as checking does", () => {
+		const resolved = resolveConfig({
+			checkUnusedSymbols: true,
+			overrides: [{ include: ["loose/**"], rules: { "unused-symbols": "off" } }],
+		})
+		expect(optionsForFile(fixtures, {}, resolved, "docs.md")).toMatchObject({
+			noUnusedLocals: true,
+			noUnusedParameters: true,
+		})
+		expect(optionsForFile(fixtures, {}, resolved, "loose/a.md")).toMatchObject({
+			noUnusedLocals: false,
+			noUnusedParameters: false,
+		})
+		const cli = resolveConfig({}, { "unused-symbols": "warn" })
+		expect(optionsForFile(fixtures, {}, cli, "docs.md")).toMatchObject({ noUnusedLocals: true })
+	})
+
+	it("still accepts a bare overrides array", () => {
+		expect(
+			optionsForFile(fixtures, { strict: true }, [{ include: ["**/loose/*"], noImplicitAny: false }], "loose/a.md")
+		).toEqual({ strict: true, noImplicitAny: false })
 	})
 })
 

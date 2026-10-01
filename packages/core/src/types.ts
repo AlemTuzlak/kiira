@@ -6,6 +6,9 @@
  * `Position` model. Consumers that render for humans (e.g. the CLI) add 1.
  */
 
+import type { Root as MdastRoot } from "mdast"
+import type { Program as TsProgram, TypeChecker as TsTypeChecker } from "typescript"
+
 export type KiiraLanguage = "ts" | "tsx" | "js" | "jsx"
 
 /** A zero-based line/character position. */
@@ -60,6 +63,12 @@ export interface KiiraOverride {
 	defaultGroup?: "none" | "file"
 	/** Per-glob external packages, merged into the single global install (see {@link KiiraConfig.externalPackages}). */
 	externalPackages?: Record<string, string>
+	/** Per-glob fence identifiers to recognize (replaces `markdown.codeFenceLanguages` for matching files). */
+	codeFenceLanguages?: string[]
+	/** Per-glob rule settings, applied after the top-level `rules` for matching files. */
+	rules?: Record<string, RuleSetting>
+	/** Per-glob presets; only their `rules` and `codeFenceLanguages` apply to matching files. */
+	presets?: (string | KiiraPreset)[]
 	[option: string]: unknown
 }
 
@@ -77,7 +86,8 @@ export interface KiiraOverride {
 export type KiiraEngine = "auto" | "classic" | "native"
 
 export interface KiiraConfig {
-	include: string[]
+	/** Glob patterns of the Markdown files to check. Presets may add more; defaults to every `.md`/`.mdx`. */
+	include?: string[]
 	exclude?: string[]
 	tsconfig?: string
 	/** Type-checking engine. See {@link KiiraEngine}. Defaults to `"auto"`. */
@@ -118,6 +128,12 @@ export interface KiiraConfig {
 	markdown?: {
 		codeFenceLanguages?: string[]
 	}
+	/** Plugins providing rules and presets (JS/TS config files only). */
+	plugins?: KiiraPlugin[]
+	/** Presets to apply, by name (`<plugin>/<preset>` or a built-in name) or inline. */
+	presets?: (string | KiiraPreset)[]
+	/** Rule settings layered on top of the presets. Keys are rule ids. */
+	rules?: Record<string, RuleSetting>
 }
 
 /**
@@ -128,6 +144,8 @@ export interface KiiraConfig {
 export interface ResolvedKiiraConfig {
 	include: string[]
 	exclude: string[]
+	/** When true and no file matches `include`, the run is skipped with an info line instead of a report. */
+	allowEmpty: boolean
 	tsconfig?: string
 	engine: KiiraEngine
 	overrides: KiiraOverride[]
@@ -143,6 +161,158 @@ export interface ResolvedKiiraConfig {
 	markdown: {
 		codeFenceLanguages: string[]
 	}
+	plugins: KiiraPlugin[]
+	/** Presets in effect, in application order with `extends` flattened in front of each. */
+	presets: KiiraPreset[]
+	/** Every known rule by id (built-ins without a prefix, plugin rules as `<plugin>/<rule>`). */
+	ruleRegistry: Record<string, KiiraRule>
+	/** The effective base rule settings: defaults → presets → `rules` (and legacy toggles). Overrides layer per file. */
+	ruleSettings: Record<string, ResolvedRuleSetting>
+	/** Levels from the CLI `--rule` flag. They beat every other layer, including per-file overrides. */
+	ruleOverrides: Record<string, RuleSeverity>
+}
+
+// --- rules & plugins -------------------------------------------------------
+
+export type RuleScope = "document" | "program" | "project"
+
+/** A rule's configured level. `"warn"` reports as a `warning` diagnostic. */
+export type RuleSeverity = "off" | "warn" | "error"
+
+/** A rule entry in `rules`: a level, or a level with options. */
+export type RuleSetting = RuleSeverity | [RuleSeverity, unknown]
+
+export interface ResolvedRuleSetting {
+	severity: RuleSeverity
+	options: unknown
+}
+
+export interface RuleDocs {
+	description: string
+	url?: string
+}
+
+export interface RuleOptionsMeta<TOptions> {
+	default?: TOptions
+	/** Return an error message to reject `options`, or `undefined` to accept. */
+	validate?: (options: unknown) => string | undefined
+}
+
+export interface RuleMeta<TOptions = unknown> {
+	scope: RuleScope
+	defaultSeverity: RuleSeverity
+	docs?: RuleDocs
+	options?: RuleOptionsMeta<TOptions>
+}
+
+/** The workspace a check runs in, shared by every rule scope and the TypeScript hook. */
+export interface KiiraProject {
+	/** Absolute path the check runs from (config, globs, and `fs` are relative to it). */
+	cwd: string
+	/** The parsed `package.json` at `cwd`, if any. */
+	packageJson: Record<string, unknown> | undefined
+	/** Named packages of the pnpm/npm/yarn workspace rooted at `cwd` (empty when not a workspace). */
+	workspacePackages: Array<{ name: string; dir: string }>
+	/** Whether git tracks `path` (cwd-relative or absolute). `false` when git is unavailable. */
+	isTracked: (path: string) => boolean
+}
+
+/** Read-only file access, resolved against the project `cwd`. Every read is recorded by the runner. */
+export interface KiiraFs {
+	exists: (path: string) => boolean
+	/** The file's text, or `undefined` when it cannot be read. */
+	readText: (path: string) => string | undefined
+}
+
+/** The position in a document where a Markdown/MDX parse failed. */
+export interface DocumentParseError {
+	message: string
+	position: SourcePosition
+}
+
+export interface RuleReport {
+	range: SourceRange
+	message: string
+	/** Defaults to the rule's configured severity. */
+	severity?: KiiraDiagnostic["severity"]
+	fix?: KiiraFix
+}
+
+export interface ProjectRuleReport extends Omit<RuleReport, "range"> {
+	/** A cwd-relative posix path; any file, not only Markdown. */
+	file: string
+	/** Defaults to the start of the file. */
+	range?: SourceRange
+}
+
+export interface RuleDocumentContext<TOptions = unknown> {
+	/** Markdown file path, relative to `cwd`, posix separators. */
+	file: string
+	text: string
+	/** The parsed tree. Empty (no children) when `parseError` is set. */
+	mdast: MdastRoot
+	parseError?: DocumentParseError
+	snippets: ExtractedSnippet[]
+	/** TypeScript diagnostics already produced for this document (after the engine and filters ran). */
+	diagnostics: readonly KiiraDiagnostic[]
+	options: TOptions
+	/** The rule's configured severity for this document. */
+	severity: "error" | "warning"
+	config: ResolvedKiiraConfig
+	fs: KiiraFs
+	project: KiiraProject
+	report: (report: RuleReport) => void
+}
+
+export interface RuleProgramContext<TOptions = unknown> extends RuleDocumentContext<TOptions> {
+	program: TsProgram
+	checker: TsTypeChecker
+	/** This document's virtual files, all members of `program`. */
+	virtualFiles: VirtualFile[]
+	/** Map a `[start, end)` offset span in a virtual file to Markdown, or `undefined` when it lands on generated code. */
+	toMarkdownRange: (virtualFile: VirtualFile, start: number, end: number) => SourceRange | undefined
+}
+
+export interface RuleProjectContext<TOptions = unknown> {
+	options: TOptions
+	severity: "error" | "warning"
+	config: ResolvedKiiraConfig
+	fs: KiiraFs
+	project: KiiraProject
+	/** Every document in the run, by cwd-relative path. */
+	files: readonly string[]
+	report: (report: ProjectRuleReport) => void
+}
+
+export type RuleContextFor<TScope extends RuleScope, TOptions> = TScope extends "project"
+	? RuleProjectContext<TOptions>
+	: TScope extends "program"
+		? RuleProgramContext<TOptions>
+		: RuleDocumentContext<TOptions>
+
+export interface KiiraRule<TScope extends RuleScope = RuleScope, TOptions = unknown> {
+	meta: RuleMeta<TOptions> & { scope: TScope }
+	// Method syntax (bivariant) so rules with concrete option types fit the registry.
+	create(context: RuleContextFor<TScope, TOptions>): void | Promise<void>
+}
+
+export interface KiiraPreset {
+	name: string
+	/** Presets applied before this one, by name. */
+	extends?: string[]
+	include?: string[] | ((project: KiiraProject) => string[])
+	exclude?: string[]
+	allowEmpty?: boolean
+	codeFenceLanguages?: string[]
+	rules?: Record<string, RuleSetting>
+}
+
+export interface KiiraPlugin {
+	name: string
+	/** Rules keyed by short name; their ids are `<plugin>/<name>`. */
+	rules?: Record<string, KiiraRule>
+	/** Presets named `<plugin>/<preset.name>`. */
+	presets?: KiiraPreset[]
 }
 
 /** A code fence extracted from a Markdown file. */
@@ -244,4 +414,6 @@ export interface KiiraCheckResult {
 	virtualFiles: VirtualFile[]
 	diagnostics: KiiraDiagnostic[]
 	stats: KiiraCheckStats
+	/** True when `allowEmpty` is set and no file matched, so nothing was checked. */
+	skipped?: boolean
 }

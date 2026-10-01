@@ -1,7 +1,7 @@
 ---
 title: "Flags"
 summary: "Every flag accepted by the kiira CLI"
-description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --config, --reporter, --fix, --verbose, --raw, --static, --help, and --version."
+description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --config, --rule, --reporter, --fix, --verbose, --raw, --static, --help, and --version."
 ---
 
 ## Flag reference
@@ -11,6 +11,7 @@ description: "Complete reference for the Kiira CLI flags: --entry, --ignore, --c
 | `--entry` | `<path>` | Directory, file, or glob to check. **Repeatable.** Overrides the config's `include` when present. |
 | `--ignore` | `<path>` | Directory, file, or glob to exclude from the scan. **Repeatable.** |
 | `--config` | `<path>` | Path to a Kiira config file. Defaults to auto-discovery of `kiira.config.*`. |
+| `--rule` | `<id>=<off\|warn\|error>` | Set a [rule](/latest/configuration/rules) level for this run. **Repeatable.** Beats every config layer. |
 | `--reporter` | `<pretty\|json\|github>` | Output format. Defaults to `pretty`. |
 | `--fix` | — | Rewrite mistagged fences, add `group=` tags, and write framework overrides. |
 | `--verbose` | — | Show full error messages and code frames (the `pretty` reporter is compact by default). |
@@ -46,6 +47,20 @@ Points Kiira at a specific config file instead of auto-discovering one:
 ```bash
 kiira check --config configs/kiira.config.mts
 ```
+
+## `--rule <id>=<level>`
+
+<WarningAlert title="Experimental">
+Rules are part of an experimental API.
+</WarningAlert>
+
+Sets the level of a [rule](/latest/configuration/rules) for one run, without editing your config. The level is `off`, `warn`, or `error`. It is **repeatable**, and both `--rule id=level` and `--rule=id=level` work:
+
+```bash
+kiira check --rule unused-symbols=warn --rule group=off
+```
+
+A `--rule` level wins over presets, `rules`, and per-glob `overrides`. A value that isn't `<id>=<level>` is an error, and so is an id Kiira doesn't know; both exit with code `2`. Plugin rules use their full id, such as `docs/no-todo`.
 
 ## `--reporter <pretty|json|github>`
 

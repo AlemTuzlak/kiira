@@ -1,6 +1,8 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { definePlugin, defineRule } from "kiira-core/plugin"
 import { checkDocument } from "./check-document"
+import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 
 const here = dirname(fileURLToPath(import.meta.url))
 // Reuse the CLI fixture project (a workspace with node_modules available above it).
@@ -31,5 +33,35 @@ describe("checkDocument", () => {
 		expect(result.diagnostics).toHaveLength(0)
 		expect(result.virtualFiles).toHaveLength(1)
 		expect(result.virtualFiles[0]?.content).toContain("const n: number = 1")
+	})
+
+	it("surfaces a document-rule diagnostic on a prose line outside any fence", async () => {
+		const plugin = definePlugin({
+			name: "docs",
+			rules: {
+				"no-todo": defineRule({
+					meta: { scope: "document", defaultSeverity: "warn" },
+					create(ctx) {
+						ctx.text.split("\n").forEach((line, index) => {
+							if (line.includes("TODO")) {
+								const range = { start: { line: index, character: 0 }, end: { line: index, character: 4 } }
+								ctx.report({ range, message: "Resolve this TODO." })
+							}
+						})
+					},
+				}),
+			},
+		})
+		const result = await checkDocument({
+			cwd,
+			markdownFile: "inline.md",
+			text: ["# Notes", "", "TODO: finish", "", "```ts", "const n: number = 1", "```", ""].join("\n"),
+			config: { include: ["**/*.md"], plugins: [plugin] },
+		})
+		// The editor's own filter keeps it: it only drops generated fixture diagnostics.
+		const shown = selectDiagnostics(result.diagnostics, { showGenerated: false })
+		const todo = shown.find((d) => d.code === "docs/no-todo")
+		expect(todo).toMatchObject({ severity: "warning", source: "kiira", markdownRange: { start: { line: 2 } } })
+		expect(diagnosticCodeLabel(todo?.code)).toBe("docs/no-todo")
 	})
 })
