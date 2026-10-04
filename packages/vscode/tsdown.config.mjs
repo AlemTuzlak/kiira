@@ -4,7 +4,9 @@ export default defineConfig({
 	entry: { extension: "src/extension.ts" },
 	sourcemap: true,
 	dts: false,
-	minify: false,
+	// Smaller download and faster load. Sourcemaps are still generated for local
+	// debugging but are excluded from the `.vsix` (see `.vscodeignore`).
+	minify: true,
 	clean: true,
 	format: ["cjs"],
 	outDir: "out",
