@@ -601,7 +601,7 @@ describe("project and fs helpers", () => {
 		expect(isTracked("missing.txt")).toBe(false)
 	})
 
-	it.skipIf(!hasGit)("isTracked accepts absolute and ./-prefixed paths and rejects paths outside cwd", async () => {
+	it.skipIf(!hasGit)("isTracked accepts absolute and ./-prefixed paths and rejects outside paths", async () => {
 		const cwd = tempProject({ "tracked.txt": "t", "nested/deep.txt": "d" })
 		execFileSync("git", ["init", "-q"], { cwd })
 		execFileSync("git", ["add", "."], { cwd })
@@ -623,6 +623,52 @@ describe("project and fs helpers", () => {
 		expect(isTracked("..nested/deep.txt")).toBe(true)
 		expect(isTracked("..")).toBe(false)
 		expect(isTracked("../outside.txt")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked answers for repository paths outside cwd", async () => {
+		const repo = tempProject({ "README.md": "r", "docs/guide.md": "g" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		execFileSync("git", ["add", "."], { cwd: repo })
+		const { isTracked } = await createProject(join(repo, "docs"))
+		expect(isTracked("guide.md")).toBe(true)
+		expect(isTracked("../README.md")).toBe(true)
+		expect(isTracked(join(repo, "README.md"))).toBe(true)
+		expect(isTracked("../missing.md")).toBe(false)
+		expect(isTracked("../../outside.md")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked is true for a directory or . holding a tracked file", async () => {
+		const repo = tempProject({ "nested/deep/a.txt": "a", "loose/b.txt": "b", "docs/c.md": "c" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		execFileSync("git", ["add", "nested", "docs"], { cwd: repo })
+		const { isTracked } = await createProject(repo)
+		expect(isTracked(".")).toBe(true)
+		expect(isTracked("nested")).toBe(true)
+		expect(isTracked("nested/")).toBe(true)
+		expect(isTracked("nested/deep")).toBe(true)
+		expect(isTracked(join(repo, "nested"))).toBe(true)
+		expect(isTracked("loose")).toBe(false)
+		expect(isTracked("nest")).toBe(false)
+		expect((await createProject(join(repo, "docs"))).isTracked("..")).toBe(true)
+		expect((await createProject(join(repo, "loose"))).isTracked(".")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked is false for . in a repository with nothing tracked", async () => {
+		const repo = tempProject({ "a.txt": "a" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		const { isTracked } = await createProject(repo)
+		expect(isTracked(".")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked matches globs like git does", async () => {
+		const repo = tempProject({ "docs/sub/a.md": "a", "b.txt": "b" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		execFileSync("git", ["add", "docs"], { cwd: repo })
+		const { isTracked } = await createProject(repo)
+		expect(isTracked("docs/*.md")).toBe(true)
+		expect(isTracked("docs/sub/?.md")).toBe(true)
+		expect(isTracked("docs/sub/[ab].md")).toBe(true)
+		expect(isTracked("*.txt")).toBe(false)
 	})
 
 	it("isTracked is false outside a git repository", async () => {
