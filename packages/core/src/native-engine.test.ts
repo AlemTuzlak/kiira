@@ -192,7 +192,8 @@ describe("options produced by a TypeScript hook", () => {
 		const native = collectNativeDiagnostics(API, hookCwd, files, options)
 		const classic = (await classicEngine.collect(files, options)) as RawDiagnostic[]
 
-		const names = (diagnostics: RawDiagnostic[]) => [...erroredFiles(diagnostics)].map((f) => f.split("/").pop()).sort()
+		const names = (diagnostics: RawDiagnostic[]) =>
+			[...erroredFiles(diagnostics)].map((f) => f.split(/[\\/]/).pop()).sort()
 		expect(names(classic)).toEqual(["typed.js", "unresolved.ts"])
 		expect(names(native)).toEqual(names(classic))
 	})
