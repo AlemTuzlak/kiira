@@ -413,7 +413,7 @@ interface OptionsPartition {
 const convertedOverrides = new WeakMap<KiiraOverride, Map<string, ts.CompilerOptions>>()
 
 /** Convert a single override's JSON compilerOptions to a `ts.CompilerOptions`, throwing on invalid input. */
-function convertOverrideOptions(cwd: string, override: KiiraOverride): ts.CompilerOptions {
+export function convertOverrideOptions(cwd: string, override: KiiraOverride): ts.CompilerOptions {
 	let byCwd = convertedOverrides.get(override)
 	if (!byCwd) {
 		byCwd = new Map()

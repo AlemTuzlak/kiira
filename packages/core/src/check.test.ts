@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { buildBaseOptions, checkMarkdownFiles, optionsForFile } from "./check"
-import { resolveConfig } from "./config"
+import { buildBaseOptions, checkMarkdownFiles, convertOverrideOptions, optionsForFile } from "./check"
+import { overrideMatcher, resolveConfig } from "./config"
 import { externalCacheDir } from "./external"
 import { definePlugin, defineRule } from "./plugin"
 import type { KiiraDiagnostic } from "./types"
@@ -165,6 +165,18 @@ describe("checkMarkdownFiles", () => {
 		expect(
 			optionsForFile(fixtures, { strict: true }, [{ include: ["**/loose/*"], noImplicitAny: false }], "loose/a.md")
 		).toEqual({ strict: true, noImplicitAny: false })
+	})
+
+	it("reuses the compiled matcher and converted options for the same override and cwd", () => {
+		const override = { include: ["**/loose/*"], noImplicitAny: false }
+		const other = { ...override }
+		expect(overrideMatcher(override)).toBe(overrideMatcher(override))
+		expect(overrideMatcher(other)).not.toBe(overrideMatcher(override))
+		const options = convertOverrideOptions(fixtures, override)
+		expect(convertOverrideOptions(fixtures, override)).toBe(options)
+		expect(convertOverrideOptions(fixtures, other)).not.toBe(options)
+		expect(convertOverrideOptions(join(fixtures, "sub"), override)).not.toBe(options)
+		expect(convertOverrideOptions(fixtures, other)).toEqual(options)
 	})
 })
 

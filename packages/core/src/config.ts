@@ -358,10 +358,36 @@ export function rulesForFile(
 	}
 	let rules = byFile.get(markdownFile)
 	if (!rules) {
-		rules = computeRulesForFile(resolved, markdownFile)
+		rules = freezeRuleSettings(computeRulesForFile(resolved, markdownFile))
 		byFile.set(markdownFile, rules)
 	}
 	return rules
+}
+
+// The cached settings are shared by every later call for the same file, and rules
+// receive `options` from them, so a rule that mutates its options would leak the
+// change into other runs. Freeze them instead.
+function freezeRuleSettings(rules: Record<string, ResolvedRuleSetting>): Record<string, ResolvedRuleSetting> {
+	for (const setting of Object.values(rules)) {
+		deepFreeze(setting.options)
+		Object.freeze(setting)
+	}
+	return Object.freeze(rules)
+}
+
+/** Freeze plain objects and arrays recursively; class instances (RegExp, Map, ...) are left alone. */
+function deepFreeze(value: unknown): void {
+	if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
+		return
+	}
+	const proto = Object.getPrototypeOf(value)
+	if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
+		return
+	}
+	Object.freeze(value)
+	for (const child of Object.values(value)) {
+		deepFreeze(child)
+	}
 }
 
 function computeRulesForFile(
