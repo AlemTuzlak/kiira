@@ -242,4 +242,15 @@ describe("compatibility wrappers", () => {
 		})
 		expect(codes(suggestions)).toEqual(["jsx-framework"])
 	})
+
+	it("collectSuggestions returns the language-tag warning that createVirtualFiles no longer reports", async () => {
+		const cwd = tempProject({ "doc.md": docWithFence("ts", JSX_CODE) })
+		const config: KiiraConfig = { include: ["**/*.md"] }
+		const result = await checkMarkdownFiles({ cwd, files: ["doc.md"], config })
+		const input = { cwd, files: ["doc.md"], snippets: result.snippets, diagnostics: result.diagnostics }
+		const suggestions = await collectSuggestions({ ...input, config })
+		expect(suggestions).toEqual(result.diagnostics.filter((d) => d.code === "language-tag"))
+		expect(codes(suggestions)).toEqual(["language-tag"])
+		expect(await collectSuggestions({ ...input, config: { ...config, rules: { "language-tag": "off" } } })).toEqual([])
+	})
 })

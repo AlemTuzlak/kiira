@@ -10,12 +10,14 @@ import { collectExternalPackages, externalResolution } from "./external"
 import { extractSnippets, loadMdxSupportFor, parseDocument } from "./extract"
 import { groupSuggestions } from "./rules/group"
 import { jsxFrameworkSuggestions } from "./rules/jsx-framework"
+import { languageTagSuggestions } from "./rules/language-tag"
 import {
 	type CheckedProgram,
 	type RuleDocument,
 	type RuleRun,
 	createProject,
 	createRuleFs,
+	enabledProgramRuleIds,
 	programRulesSkipped,
 	reportToDiagnostic,
 	runDocumentRules,
@@ -249,11 +251,18 @@ async function runChecker(
 	const engine = await resolveEngine(cwd, resolved.engine)
 	const vfByName = new Map(virtualFiles.map((vf) => [vf.fileName, vf]))
 
+	// Keep each partition's program only when a program rule will use it, so it can
+	// be garbage-collected otherwise.
+	const markdownFiles = [...new Set(virtualFiles.map((vf) => vf.snippet.markdownFile))]
+	const keepPrograms = enabledProgramRuleIds(resolved, markdownFiles).length > 0
+
 	const diagnostics: KiiraDiagnostic[] = []
 	const programs: CheckedProgram[] = []
 	for (const partition of partitions) {
-		const raws = await engine.collect(partition.virtualFiles, partition.options, (program) =>
-			programs.push({ program, virtualFiles: partition.virtualFiles })
+		const raws = await engine.collect(
+			partition.virtualFiles,
+			partition.options,
+			keepPrograms ? (program) => programs.push({ program, virtualFiles: partition.virtualFiles }) : undefined
 		)
 		for (const raw of raws) {
 			const vf = vfByName.get(raw.virtualFile)
@@ -398,9 +407,10 @@ export interface CollectSuggestionsInput {
 }
 
 /**
- * Compute the `group` and `jsx-framework` rule diagnostics for an already-checked
- * set of files. The pipeline runs these as rules; this wrapper keeps the original
- * entry point for callers that drive the steps themselves.
+ * Compute the `language-tag`, `group`, and `jsx-framework` rule diagnostics for an
+ * already-checked set of files. The pipeline runs these as rules; this wrapper keeps
+ * the original entry point for callers that drive the steps themselves. It also
+ * returns the `language-tag` warnings, which `createVirtualFiles` no longer reports.
  */
 export async function collectSuggestions(input: CollectSuggestionsInput): Promise<KiiraDiagnostic[]> {
 	const { cwd, files, snippets, diagnostics } = input
@@ -416,8 +426,17 @@ export async function collectSuggestions(input: CollectSuggestionsInput): Promis
 		return level === "warn" || level === "error" ? level : undefined
 	}
 
+	const languageTag: KiiraDiagnostic[] = []
 	const grouping: KiiraDiagnostic[] = []
 	const jsx: KiiraDiagnostic[] = []
+	for (const file of files) {
+		const level = enabled("language-tag", file)
+		if (level) {
+			for (const report of languageTagSuggestions(forFile(file).snippets, config)) {
+				languageTag.push(reportToDiagnostic("language-tag", level, file, report))
+			}
+		}
+	}
 	for (const file of files) {
 		const level = enabled("group", file)
 		if (level) {
@@ -434,7 +453,7 @@ export async function collectSuggestions(input: CollectSuggestionsInput): Promis
 			}
 		}
 	}
-	return [...grouping, ...jsx]
+	return [...languageTag, ...grouping, ...jsx]
 }
 
 async function parseDocuments(

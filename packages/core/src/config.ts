@@ -13,6 +13,7 @@ import type {
 	KiiraRule,
 	ResolvedKiiraConfig,
 	ResolvedRuleSetting,
+	RuleScope,
 	RuleSetting,
 	RuleSeverity,
 } from "./types"
@@ -47,6 +48,7 @@ export function defineConfig(config: KiiraConfig): KiiraConfig {
 }
 
 const RULE_SEVERITIES = new Set<RuleSeverity>(["off", "warn", "error"])
+const RULE_SCOPES = new Set<RuleScope>(["document", "program", "project"])
 
 function listKnown(ids: string[]): string {
 	return ids.length > 0 ? ids.join(", ") : "(none)"
@@ -66,6 +68,17 @@ function buildRuleRegistry(plugins: KiiraPlugin[]): Record<string, KiiraRule> {
 			}
 			if (!rule?.meta || typeof rule.create !== "function") {
 				throw new Error(`Rule "${id}" must be created with defineRule (missing meta or create).`)
+			}
+			// Plain-JS plugins skip the types, so check the two fields the runner keys on.
+			if (!RULE_SCOPES.has(rule.meta.scope)) {
+				throw new Error(
+					`Rule "${id}" has an invalid scope ${JSON.stringify(rule.meta.scope)}. Expected "document", "program", or "project".`
+				)
+			}
+			if (!RULE_SEVERITIES.has(rule.meta.defaultSeverity)) {
+				throw new Error(
+					`Rule "${id}" has an invalid defaultSeverity ${JSON.stringify(rule.meta.defaultSeverity)}. Expected "off", "warn", or "error".`
+				)
 			}
 			registry[id] = rule
 		}
@@ -89,14 +102,18 @@ function buildPresetRegistry(plugins: KiiraPlugin[]): Record<string, KiiraPreset
 
 /**
  * Resolve preset references to objects, flattening each preset's `extends`
- * in front of it (depth-first, in order). A cycle is a config error.
+ * in front of it (depth-first, in order). A preset is identified by its registry
+ * id, or by object identity when inline; each one is applied once, at its first
+ * occurrence, so a shared base cannot overwrite a sibling. A cycle is a config error.
  */
 function resolvePresets(
 	refs: (string | KiiraPreset)[],
 	registry: Record<string, KiiraPreset>,
-	stack: string[] = []
+	stack: (string | KiiraPreset)[] = [],
+	seen = new Set<string | KiiraPreset>()
 ): KiiraPreset[] {
 	const out: KiiraPreset[] = []
+	const label = (key: string | KiiraPreset) => (typeof key === "string" ? key : key.name)
 	for (const ref of refs) {
 		let preset: KiiraPreset
 		if (typeof ref === "string") {
@@ -111,11 +128,15 @@ function resolvePresets(
 			}
 			preset = ref
 		}
-		if (stack.includes(preset.name)) {
-			throw new Error(`Preset "${preset.name}" extends itself (via ${[...stack, preset.name].join(" -> ")}).`)
+		if (stack.includes(ref)) {
+			throw new Error(`Preset "${label(ref)}" extends itself (via ${[...stack, ref].map(label).join(" -> ")}).`)
 		}
+		if (seen.has(ref)) {
+			continue
+		}
+		seen.add(ref)
 		if (preset.extends && preset.extends.length > 0) {
-			out.push(...resolvePresets(preset.extends, registry, [...stack, preset.name]))
+			out.push(...resolvePresets(preset.extends, registry, [...stack, ref], seen))
 		}
 		out.push(preset)
 	}
@@ -241,7 +262,8 @@ export function resolveConfig(
 	const include = [...(config.include ?? []), ...presetIncludes]
 	const codeFenceLanguages = config.markdown?.codeFenceLanguages ??
 		[...presets].reverse().find((p) => p.codeFenceLanguages)?.codeFenceLanguages ?? [
-			// ```typescript / ```javascript fences work out of the box. // Default to each configured language plus its known aliases, so
+			// Default to each configured language plus its known aliases, so
+			// ```typescript / ```javascript fences work out of the box.
 			...new Set(languages.flatMap((l) => FENCE_ALIASES[l] ?? [l])),
 		]
 	// The two compiler-option toggles are base-level, so they see the CLI level too.

@@ -302,6 +302,17 @@ describe("resolveConfig rules", () => {
 		expect(levels(flipped).group).toBe("off")
 	})
 
+	it("applies a preset shared through extends once, at its first use", () => {
+		const base: KiiraPreset = { name: "base", rules: { group: "warn" } }
+		const left: KiiraPreset = { name: "left", extends: ["p/base"], rules: { group: "error" } }
+		const right: KiiraPreset = { name: "right", extends: ["p/base"], rules: { "jsx-framework": "error" } }
+		const plugin: KiiraPlugin = { name: "p", presets: [base, left, right] }
+		const resolved = resolveConfig({ plugins: [plugin], presets: ["p/left", "p/right"] })
+		expect(resolved.presets.map((p) => p.name)).toEqual(["base", "left", "right"])
+		// A second copy of `base` after `left` would set `group` back to "warn".
+		expect(levels(resolved)).toMatchObject({ group: "error", "jsx-framework": "error" })
+	})
+
 	it("treats the legacy toggles as the same layer as `rules`, with an explicit rule winning", () => {
 		expect(levels(resolveConfig({ checkUnusedSymbols: true }))["unused-symbols"]).toBe("error")
 		expect(levels(resolveConfig({ checkRelativeImports: true }))["relative-imports"]).toBe("error")
@@ -401,7 +412,29 @@ describe("resolveConfig errors", () => {
 				{ name: "b", extends: ["c/a"] },
 			],
 		}
-		expect(() => resolveConfig({ plugins: [plugin], presets: ["c/a"] })).toThrow(/extends itself \(via a -> b -> a\)/)
+		expect(() => resolveConfig({ plugins: [plugin], presets: ["c/a"] })).toThrow(
+			/Preset "c\/a" extends itself \(via c\/a -> c\/b -> c\/a\)/
+		)
+	})
+
+	it("does not mistake presets with the same name in different plugins for a cycle", () => {
+		const a: KiiraPlugin = { name: "a", presets: [{ name: "recommended", rules: { group: "error" } }] }
+		const b: KiiraPlugin = { name: "b", presets: [{ name: "recommended", extends: ["a/recommended"] }] }
+		const resolved = resolveConfig({ plugins: [a, b], presets: ["b/recommended"] })
+		expect(resolved.presets).toEqual([a.presets?.[0], b.presets?.[0]])
+		expect(levels(resolved).group).toBe("error")
+	})
+
+	it.each([
+		["scope", { scope: "documents", defaultSeverity: "warn" }, /Rule "bad\/r" has an invalid scope "documents"/],
+		[
+			"defaultSeverity",
+			{ scope: "document", defaultSeverity: "warning" },
+			/Rule "bad\/r" has an invalid defaultSeverity "warning"\. Expected "off", "warn", or "error"/,
+		],
+	])("rejects a rule with an invalid %s", (_field, meta, message) => {
+		const plugin = { name: "bad", rules: { r: { meta, create() {} } } } as unknown as KiiraPlugin
+		expect(() => resolveConfig({ plugins: [plugin] })).toThrow(message)
 	})
 })
 

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { checkMarkdownFiles, checkMarkdownText } from "../check"
 import { resolveConfig } from "../config"
+import { classicEngine } from "../engine"
 import { defineRule } from "../plugin"
 import { definePlugin } from "../plugin"
 import type {
@@ -153,18 +154,48 @@ describe("document rules", () => {
 		expect(diagnostics.map((d) => d.code)).toEqual(["fence-meta"])
 	})
 
-	it("name the rule and file when a rule throws", async () => {
-		const plugin = pluginWith("document", () => {
+	it("never let a report raise the configured level, only lower it", async () => {
+		const plugin = pluginWith("document", (ctx) => {
+			const at = { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }
+			for (const severity of ["error", "warning", "info"] as const) {
+				ctx.report({ range: at, message: severity, severity })
+			}
+		})
+		const severities = async (level: "warn" | "error") =>
+			(
+				await checkMarkdownText({
+					cwd: tempProject(),
+					markdownFile: "doc.md",
+					text: "x",
+					config: { ...noChecking, plugins: [plugin], rules: { "t/r": level } },
+				})
+			).diagnostics.map((d) => d.severity)
+		expect(await severities("warn")).toEqual(["warning", "warning", "info"])
+		expect(await severities("error")).toEqual(["error", "warning", "info"])
+	})
+
+	it("report a rule that throws as an error on the file and keep running the other rules", async () => {
+		const failing = pluginWith("document", (ctx) => {
+			ctx.report({ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, message: "before" })
 			throw new Error("boom")
 		})
-		await expect(
-			checkMarkdownText({
-				cwd: tempProject(),
-				markdownFile: "doc.md",
-				text: "x",
-				config: { ...noChecking, plugins: [plugin] },
-			})
-		).rejects.toThrow('Rule "t/r" failed on doc.md: boom')
+		const healthy = pluginWith(
+			"document",
+			(ctx) =>
+				ctx.report({ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, message: "ok" }),
+			"u"
+		)
+		const { diagnostics } = await checkMarkdownText({
+			cwd: tempProject(),
+			markdownFile: "doc.md",
+			text: "x",
+			config: { ...noChecking, plugins: [failing, healthy] },
+		})
+		expect(diagnostics.map((d) => [d.code, d.severity, d.message, d.markdownFile])).toEqual([
+			["t/r", "warning", "before", "doc.md"],
+			["t/r", "error", 'Rule "t/r" failed on doc.md: boom', "doc.md"],
+			["u/r", "warning", "ok", "doc.md"],
+		])
 	})
 
 	it.each(FENCE_TAGS)("see %s fences as normalized snippets, and report ranges land where given", async (tag, lang) => {
@@ -274,6 +305,25 @@ describe("program rules", () => {
 			expect(seen?.markdownRange).toEqual(typescript?.markdownRange)
 		}
 	)
+
+	it("only keep each partition's program when a program rule is enabled", async () => {
+		const collect = vi.spyOn(classicEngine, "collect")
+		try {
+			const check = (config: KiiraConfig) =>
+				checkMarkdownText({
+					cwd: tempProject(),
+					markdownFile: "doc.md",
+					text: docWithFence("ts", "const a = 1"),
+					config,
+				})
+			await check({ engine: "classic" })
+			expect(collect.mock.calls[0]?.[2]).toBeUndefined()
+			await check({ engine: "classic", plugins: [reportsTypeErrors] })
+			expect(collect.mock.calls[1]?.[2]).toBeTypeOf("function")
+		} finally {
+			collect.mockRestore()
+		}
+	})
 
 	it("maps generated fixture code to undefined and snippet code to its Markdown range", async () => {
 		const calls: Array<{ generated: unknown; snippet: unknown }> = []
@@ -524,6 +574,14 @@ describe("project and fs helpers", () => {
 	})()
 
 	it.skipIf(!hasGit)("isTracked is true for a tracked file and false for untracked or missing ones", async () => {
+		// A git hook (the pre-commit test run) exports GIT_INDEX_FILE and friends, which
+		// would point these commands at the outer repository instead of the temp one.
+		for (const name of ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"]) {
+			vi.stubEnv(name, undefined)
+		}
+		onTestFinished(() => {
+			vi.unstubAllEnvs()
+		})
 		const cwd = tempProject({ "tracked.txt": "t", "untracked.txt": "u" })
 		execFileSync("git", ["init", "-q"], { cwd })
 		execFileSync("git", ["add", "tracked.txt"], { cwd })

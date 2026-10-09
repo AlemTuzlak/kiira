@@ -25,12 +25,17 @@ import { discoverWorkspacePackages } from "../workspace"
 type Level = "warn" | "error"
 
 const SEVERITY = { warn: "warning", error: "error" } as const
+const RANK: Record<KiiraDiagnostic["severity"], number> = { info: 0, warning: 1, error: 2 }
 const START_OF_FILE: SourceRange = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }
 
-/** Turn a rule's report into a diagnostic: `code` is always the rule id. */
+/**
+ * Turn a rule's report into a diagnostic: `code` is always the rule id. A report's
+ * own severity can only lower the configured level, never raise it.
+ */
 export function reportToDiagnostic(id: string, level: Level, file: string, report: RuleReport): KiiraDiagnostic {
+	const configured = SEVERITY[level]
 	const diagnostic: KiiraDiagnostic = {
-		severity: report.severity ?? SEVERITY[level],
+		severity: report.severity && RANK[report.severity] < RANK[configured] ? report.severity : configured,
 		code: id,
 		message: report.message,
 		source: "kiira",
@@ -131,13 +136,29 @@ function enabledRules(config: ResolvedKiiraConfig, file: string | undefined, sco
 	return enabled
 }
 
-// A rule's `create` takes a scope-specific context; the runner passes the right one for the scope it enabled.
-async function callCreate(id: string, file: string, rule: KiiraRule, context: unknown): Promise<void> {
+/**
+ * Call a rule's `create`. It takes a scope-specific context; the runner passes the
+ * right one for the scope it enabled. A rule that throws does not stop the check:
+ * the failure becomes an error diagnostic on `file` and the other rules still run.
+ */
+async function callCreate(
+	id: string,
+	file: string,
+	rule: KiiraRule,
+	context: unknown,
+	out: KiiraDiagnostic[],
+	where = file
+): Promise<void> {
 	try {
 		await (rule as { create(context: unknown): void | Promise<void> }).create(context)
 	} catch (error) {
-		throw new Error(`Rule "${id}" failed on ${file}: ${error instanceof Error ? error.message : String(error)}`, {
-			cause: error,
+		out.push({
+			severity: "error",
+			code: id,
+			source: "kiira",
+			message: `Rule "${id}" failed on ${where}: ${error instanceof Error ? error.message : String(error)}`,
+			markdownFile: file,
+			markdownRange: START_OF_FILE,
 		})
 	}
 }
@@ -173,7 +194,7 @@ export async function runDocumentRules(
 ): Promise<KiiraDiagnostic[]> {
 	const out: KiiraDiagnostic[] = []
 	for (const enabled of enabledRules(run.config, doc.file, "document")) {
-		await callCreate(enabled.id, doc.file, enabled.rule, documentContext(run, doc, diagnostics, enabled, out))
+		await callCreate(enabled.id, doc.file, enabled.rule, documentContext(run, doc, diagnostics, enabled, out), out)
 	}
 	return out
 }
@@ -207,7 +228,7 @@ export async function runProgramRules(
 				return mapVirtualRange(virtualFile.mappings, from, to)
 			},
 		}
-		await callCreate(enabled.id, doc.file, enabled.rule, context)
+		await callCreate(enabled.id, doc.file, enabled.rule, context, out)
 	}
 	return out
 }
@@ -226,9 +247,21 @@ export async function runProjectRules(run: RuleRun, files: readonly string[]): P
 			report: (report: ProjectRuleReport) =>
 				out.push(reportToDiagnostic(id, level, report.file, { ...report, range: report.range ?? START_OF_FILE })),
 		}
-		await callCreate(id, "the project", rule, context)
+		// A project rule has no document of its own; anchor its failure to the first
+		// document, or to package.json when the run has none.
+		await callCreate(id, files[0] ?? "package.json", rule, context, out, "the project")
 	}
 	return out
+}
+
+/** The ids of the program rules enabled for at least one of `files`. */
+export function enabledProgramRuleIds(config: ResolvedKiiraConfig, files: readonly string[]): string[] {
+	return Object.entries(config.ruleRegistry)
+		.filter(
+			([id, rule]) =>
+				rule.meta.scope === "program" && files.some((file) => rulesForFile(config, file)[id]?.severity !== "off")
+		)
+		.map(([id]) => id)
 }
 
 /**
@@ -244,12 +277,7 @@ export function programRulesSkipped(
 	if (first === undefined) {
 		return undefined
 	}
-	const ids = Object.entries(config.ruleRegistry)
-		.filter(
-			([id, rule]) =>
-				rule.meta.scope === "program" && files.some((file) => rulesForFile(config, file)[id]?.severity !== "off")
-		)
-		.map(([id]) => id)
+	const ids = enabledProgramRuleIds(config, files)
 	if (ids.length === 0) {
 		return undefined
 	}

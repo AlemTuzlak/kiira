@@ -190,7 +190,7 @@ presets: [
 | Field | Type | What it does |
 | --- | --- | --- |
 | `name` | `string` | Required. |
-| `extends` | `string[]` | Presets applied before this one, by name. A cycle is an error. |
+| `extends` | `string[]` | Presets applied before this one, by name. Each preset is applied once, at its first use. A cycle is an error. |
 | `include` | `string[] \| (project) => string[]` | Added to the top-level `include`. The function form is called with the project (`cwd`, `packageJson`, `workspacePackages`, `isTracked`) before files are discovered. |
 | `exclude` | `string[]` | Added to the top-level `exclude`. |
 | `allowEmpty` | `boolean` | When true and no file matches, Kiira skips the run, prints `No files matched; nothing to check.`, and exits `0`. Without it, an empty match is a normal run with zero files. |

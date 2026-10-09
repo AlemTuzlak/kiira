@@ -233,7 +233,7 @@ export interface DocumentParseError {
 export interface RuleReport {
 	range: SourceRange
 	message: string
-	/** Defaults to the rule's configured severity. */
+	/** Defaults to the rule's configured severity. Can only lower it: a higher value is clamped to the configured one. */
 	severity?: KiiraDiagnostic["severity"]
 	fix?: KiiraFix
 }

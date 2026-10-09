@@ -33,7 +33,11 @@ const probes = [
 		code: `await import(${JSON.stringify(pathToFileURL(join(dist, "index.mjs")).href)})`,
 	},
 	{ entry: "dist/index.cjs", type: "commonjs", code: `require(${JSON.stringify(join(dist, "index.cjs"))})` },
-	{ entry: "dist/plugin.mjs", type: "module", code: `await import(${JSON.stringify(join(dist, "plugin.mjs"))})` },
+	{
+		entry: "dist/plugin.mjs",
+		type: "module",
+		code: `await import(${JSON.stringify(pathToFileURL(join(dist, "plugin.mjs")).href)})`,
+	},
 	{ entry: "dist/plugin.cjs", type: "commonjs", code: `require(${JSON.stringify(join(dist, "plugin.cjs"))})` },
 ]
 
