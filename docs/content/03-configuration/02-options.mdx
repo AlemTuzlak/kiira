@@ -1,14 +1,14 @@
 ---
 title: "Options reference"
 summary: "Every Kiira config option with its default"
-description: "Complete reference for Kiira config options: include, exclude, tsconfig, engine, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, overrides, externalPackages, fixtures, defaultFixture, and languages."
+description: "Complete reference for Kiira config options: include, exclude, tsconfig, engine, packageMode, defaultValidate, defaultGroup, checkUnusedSymbols, checkRelativeImports, plugins, presets, rules, overrides, externalPackages, fixtures, defaultFixture, and languages."
 ---
 
 ## Options at a glance
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `include` | `string[]` | **required** | Glob patterns for the Markdown files to check. |
+| `include` | `string[]` | `["**/*.{md,mdx}"]` | Glob patterns for the Markdown files to check. Presets can add to it. |
 | `exclude` | `string[]` | `[]` | Glob patterns to exclude from `include`. |
 | `tsconfig` | `string` | auto | Path to the tsconfig used to compile snippets. Auto-resolves `tsconfig.docs.json`, then `tsconfig.json`. |
 | `engine` | `"auto" \| "classic" \| "native"` | `"auto"` | Which TypeScript engine type-checks snippets. `"auto"` uses TypeScript 7's native compiler when your project has it, else the bundled one. |
@@ -17,15 +17,18 @@ description: "Complete reference for Kiira config options: include, exclude, tsc
 | `defaultGroup` | `"none" \| "file"` | `"none"` | Implicitly group every checkable fence in a file so later fences see earlier declarations. |
 | `checkUnusedSymbols` | `boolean` | `false` | Report unused symbols (TS6133). |
 | `checkRelativeImports` | `boolean` | `false` | Report unresolved relative imports. |
-| `overrides` | `Override[]` | `[]` | Per-glob compiler option overrides. |
+| `plugins` | `KiiraPlugin[]` | `[]` | Plugins that add rules and presets. Experimental. |
+| `presets` | `(string \| Preset)[]` | `[]` | Named or inline bundles of `include`, `exclude`, `codeFenceLanguages`, and `rules`. Experimental. |
+| `rules` | `Record<string, RuleSetting>` | `{}` | Turn rules `"off"`, `"warn"`, or `"error"`, optionally with options. Experimental. |
+| `overrides` | `Override[]` | `[]` | Per-glob compiler options, `codeFenceLanguages`, `rules`, and `presets`. |
 | `externalPackages` | `Record<string, string>` | `{}` | Doc-only packages to install into a hidden, isolated cache so fences that import them type-check. |
 | `fixtures` | `Record<string, Fixture>` | `{}` | Named prepend/wrap code applied to fences. |
 | `defaultFixture` | `string` | — | Fixture applied to every fence by default. |
 | `languages` | `string[]` | `["ts","tsx","js","jsx"]` | Fence languages Kiira checks. |
 
-## `include` (required)
+## `include`
 
-Glob patterns for the Markdown files Kiira checks. This is the only required option.
+Glob patterns for the Markdown files Kiira checks. When neither your config nor a [preset](#presets) sets one, it defaults to every `.md` and `.mdx` file.
 
 ```ts
 include: ["docs/**/*.{md,mdx}", "README.md"]
@@ -33,7 +36,7 @@ include: ["docs/**/*.{md,mdx}", "README.md"]
 
 Kiira checks both **`.md` and `.mdx`** files out of the box — `.mdx` is parsed MDX-aware, so fences nested inside JSX components (`<Tabs>`, `<Callout>`, …) and files with ESM `import`/`export` are extracted correctly. A bare glob like `"docs/**/*"` only ever picks up `.md`/`.mdx`; other files are ignored.
 
-`--entry` on the CLI overrides `include` for a single run.
+`--entry` on the CLI overrides `include`, including any preset `include`, for a single run.
 
 ## `exclude`
 
@@ -125,6 +128,8 @@ When `true`, Kiira reports unused symbols (TypeScript's `TS6133`). **Defaults to
 checkUnusedSymbols: false
 ```
 
+This is an alias for the `unused-symbols` [rule](/latest/configuration/rules): `true` means `"error"` and `false` means `"off"`. Set the rule instead if you want `"warn"`.
+
 ## `checkRelativeImports`
 
 When `true`, Kiira reports unresolved **relative** imports (e.g. `./utils`). **Defaults to `false`**, because relative paths in docs often point at files that don't exist in the docs project. Bare package imports (e.g. `your-lib`) are **always** checked regardless of this setting.
@@ -133,15 +138,126 @@ When `true`, Kiira reports unresolved **relative** imports (e.g. `./utils`). **D
 checkRelativeImports: false
 ```
 
+This is an alias for the `relative-imports` [rule](/latest/configuration/rules), the same way `checkUnusedSymbols` is for `unused-symbols`.
+
+## `plugins`
+
+<WarningAlert title="Experimental">
+The rule and plugin API can change between minor releases while it settles.
+</WarningAlert>
+
+Plugins add [rules](/latest/configuration/rules) and presets. A plugin is an object with a `name`, and optionally `rules` and `presets`. Build one with `definePlugin` from `kiira-core/plugin`.
+
+```ts
+import { defineConfig } from "kiira-core"
+import { definePlugin, defineRule } from "kiira-core/plugin"
+
+const noTodo = defineRule({
+  meta: { scope: "document", defaultSeverity: "warn" },
+  create(ctx) {
+    // ...
+  },
+})
+
+export default defineConfig({
+  plugins: [definePlugin({ name: "docs", rules: { "no-todo": noTodo } })],
+  rules: { "docs/no-todo": "error" },
+})
+```
+
+A plugin's rules are named `<plugin>/<rule>`, so `docs/no-todo` above. Plugins need a JavaScript or TypeScript config file; they can't be written in `kiira.config.json`. See [Rules](/latest/configuration/rules) for how to write one.
+
+## `presets`
+
+<WarningAlert title="Experimental">
+Presets are part of the same experimental API as plugins.
+</WarningAlert>
+
+A preset is a named bundle of settings. Reference one by name (`<plugin>/<preset>`) or write it inline:
+
+```ts
+presets: [
+  "docs/recommended",
+  {
+    name: "intent",
+    include: ["docs/**/*.md"],
+    codeFenceLanguages: ["ts", "tsx", "typescript", "js", "jsx", "javascript"],
+    rules: { group: "off" },
+  },
+]
+```
+
+| Field | Type | What it does |
+| --- | --- | --- |
+| `name` | `string` | Required. |
+| `extends` | `string[]` | Presets applied before this one, by name. Each preset is applied once, at its first use. A cycle is an error. |
+| `include` | `string[] \| (project) => string[]` | Added to the top-level `include`. The function form is called with the project (`cwd`, `packageJson`, `workspacePackages`, `isTracked`) before files are discovered. |
+| `exclude` | `string[]` | Added to the top-level `exclude`. |
+| `allowEmpty` | `boolean` | When true and no file matches, Kiira skips the run, prints `No files matched; nothing to check.`, and exits `0`. Without it, an empty match is a normal run with zero files. |
+| `codeFenceLanguages` | `string[]` | The fence identifiers to recognize. The last preset that sets it wins, unless you set `markdown.codeFenceLanguages` yourself. |
+| `rules` | `Record<string, RuleSetting>` | Rule settings, applied in the order described in [how settings merge](#how-rule-settings-merge). |
+
+`--entry` and positional paths on the CLI replace the whole `include` set, presets included.
+
+Inside `overrides[].presets`, only `rules` and `codeFenceLanguages` apply.
+
+## `rules`
+
+<WarningAlert title="Experimental">
+Rules are part of the same experimental API as plugins.
+</WarningAlert>
+
+Sets the level of each [rule](/latest/configuration/rules) by id. A level is `"off"`, `"warn"` (reports a warning), or `"error"` (reports an error). Use a `[level, options]` pair to pass options to a rule that takes them.
+
+```ts
+rules: {
+  "language-tag": "off",
+  "unused-symbols": "warn",
+  "docs/max-length": ["error", { lines: 40 }],
+}
+```
+
+An unknown rule id, an invalid level, or options a rule rejects throw an error that lists the known ids, and `kiira check` exits `2`.
+
+You can also set a level for one run with [`--rule`](/latest/cli/flags#--rule-idlevel).
+
+### How rule settings merge
+
+Each layer is applied on top of the one before it:
+
+1. Each rule's built-in default level.
+2. [`presets`](#presets), in order, with each preset's `extends` applied first.
+3. Top-level `rules`. `checkUnusedSymbols` and `checkRelativeImports` count as this layer; an explicit `rules` entry for the same rule wins.
+4. Matching [`overrides`](#overrides), in order. Within an override, its `presets` apply before its `rules`.
+5. `--rule` on the CLI.
+
+A level without options keeps the options set by an earlier layer.
+
 ## `overrides`
 
-Per-glob compiler option overrides — for example, setting a different `jsxImportSource` for docs that target another framework. Kiira runs a separate TypeScript program per distinct option set. See [Per-glob overrides](/latest/projects/per-glob-overrides).
+Per-glob overrides — for example, setting a different `jsxImportSource` for docs that target another framework. Kiira runs a separate TypeScript program per distinct option set. See [Per-glob overrides](/latest/projects/per-glob-overrides).
 
 ```ts
 overrides: [
   {
     include: ["docs/solid/**/*.mdx"],
     jsxImportSource: "solid-js",
+  },
+]
+```
+
+Besides compiler options, `defaultGroup`, and `externalPackages`, an override can set:
+
+- `codeFenceLanguages` — the fence identifiers recognized in matching files. The last matching override wins.
+- `rules` — rule levels for matching files, applied after the top-level `rules`.
+- `presets` — presets whose `rules` and `codeFenceLanguages` apply to matching files.
+
+```ts
+overrides: [
+  {
+    include: ["docs/intent/**/*.md"],
+    codeFenceLanguages: ["ts", "tsx", "typescript", "js", "jsx", "javascript"],
+    rules: { group: "off" },
   },
 ]
 ```

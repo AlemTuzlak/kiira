@@ -113,13 +113,14 @@ importers:
         version: 3.1.1(@types/debug@4.1.13)(@types/node@22.14.1)(happy-dom@17.4.4)(jiti@2.6.1)(yaml@2.8.1)
 
   packages/core:
+    dependencies:
+      '@types/mdast':
+        specifier: ^4.0.4
+        version: 4.0.4
     devDependencies:
       '@arethetypeswrong/cli':
         specifier: ^0.17.4
         version: 0.17.4
-      '@types/mdast':
-        specifier: ^4.0.4
-        version: 4.0.4
       '@types/node':
         specifier: 22.14.1
         version: 22.14.1

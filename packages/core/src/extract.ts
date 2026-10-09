@@ -1,10 +1,22 @@
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
-import type { Code, Nodes, Root } from "mdast"
+import type { Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
-import { FENCE_ALIASES, resolveConfig } from "./config"
+import { collectCodeNodes } from "./code-nodes"
+import { FENCE_ALIASES, codeFenceLanguagesForFile, resolveConfig, rulesForFile } from "./config"
 import { parseFenceMeta } from "./meta"
-import type { ExtractedSnippet, KiiraConfig, KiiraDiagnostic, KiiraLanguage, ResolvedKiiraConfig } from "./types"
+import { fenceMetaReports } from "./rules/fence-meta"
+import { parseErrorReport } from "./rules/parse-error"
+import { reportToDiagnostic } from "./rules/run"
+import type {
+	DocumentParseError,
+	ExtractedSnippet,
+	KiiraConfig,
+	KiiraDiagnostic,
+	KiiraLanguage,
+	ResolvedKiiraConfig,
+	RuleReport,
+} from "./types"
 
 export interface ExtractInput {
 	cwd: string
@@ -60,16 +72,20 @@ export async function loadMdxSupportFor(files: readonly string[]): Promise<void>
 	}
 }
 
-// Invert FENCE_ALIASES once: any recognized identifier -> its KiiraLanguage.
-const ALIAS_TO_LANG = new Map<string, KiiraLanguage>()
-for (const [lang, aliases] of Object.entries(FENCE_ALIASES) as [KiiraLanguage, string[]][]) {
-	for (const alias of aliases) {
-		ALIAS_TO_LANG.set(alias, lang)
-	}
-}
+// Invert FENCE_ALIASES lazily: `config.ts` imports the built-in rules, which reach
+// this module, so reading `FENCE_ALIASES` at load would race `config.ts` itself.
+let aliasToLang: Map<string, KiiraLanguage> | undefined
 
 function normalizeLang(raw: string): KiiraLanguage | undefined {
-	return ALIAS_TO_LANG.get(raw.toLowerCase())
+	if (!aliasToLang) {
+		aliasToLang = new Map()
+		for (const [lang, aliases] of Object.entries(FENCE_ALIASES) as [KiiraLanguage, string[]][]) {
+			for (const alias of aliases) {
+				aliasToLang.set(alias, lang)
+			}
+		}
+	}
+	return aliasToLang.get(raw.toLowerCase())
 }
 
 /**
@@ -94,72 +110,54 @@ function parseMarkdown(markdownFile: string, content: string): Root {
 	return fromMarkdown(content) as Root
 }
 
-function collectCodeNodes(node: Nodes, out: Code[]): void {
-	if (node.type === "code") {
-		out.push(node)
-	}
-	if ("children" in node && Array.isArray(node.children)) {
-		for (const child of node.children) {
-			collectCodeNodes(child, out)
-		}
-	}
+interface ParsedDocument {
+	/** The parsed tree; an empty root when `parseError` is set. */
+	mdast: Root
+	parseError?: DocumentParseError
 }
 
 /**
- * Build a Kiira diagnostic for a Markdown/MDX parse failure, anchored to the
- * failure's line/column when the thrown `VFileMessage` carries them.
+ * Parse a Markdown/MDX document once. The MDX parser (unlike CommonMark) throws on
+ * malformed input — an unclosed JSX tag or an unparseable `{…}` expression. That
+ * degrades to a `parseError` (anchored to the failure's line/column when the thrown
+ * `VFileMessage` carries them) so one bad file, e.g. mid-edit, doesn't abort the run.
  */
-function parseErrorDiagnostic(markdownFile: string, error: unknown): KiiraDiagnostic {
-	const message = error instanceof Error ? error.message : String(error)
-	// `VFileMessage` exposes 1-based `line`/`column` of the offending construct.
-	const vfile = error as { line?: number | null; column?: number | null }
-	const line = typeof vfile.line === "number" && vfile.line > 0 ? vfile.line - 1 : 0
-	const character = typeof vfile.column === "number" && vfile.column > 0 ? vfile.column - 1 : 0
-	const position = { line, character }
-	const kind = /\.mdx$/i.test(markdownFile) ? "MDX" : "Markdown"
-	return {
-		severity: "error",
-		source: "kiira",
-		message: `Failed to parse ${kind}: ${message}`,
-		markdownFile,
-		markdownRange: { start: position, end: position },
+export function parseDocument(markdownFile: string, content: string): ParsedDocument {
+	try {
+		return { mdast: parseMarkdown(markdownFile, content) }
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error)
+		// `VFileMessage` exposes 1-based `line`/`column` of the offending construct.
+		const vfile = error as { line?: number | null; column?: number | null }
+		const line = typeof vfile.line === "number" && vfile.line > 0 ? vfile.line - 1 : 0
+		const character = typeof vfile.column === "number" && vfile.column > 0 ? vfile.column - 1 : 0
+		return { mdast: { type: "root", children: [] }, parseError: { message, position: { line, character } } }
 	}
 }
 
-/**
- * Extract code-fence snippets from a single Markdown document. Pure: no file IO,
- * so it can be reused by editor integrations operating on in-memory text.
- */
-export function extractSnippetsFromContent({
+interface ExtractSnippetsInput {
+	mdast: Root
+	markdownFile: string
+	config: ResolvedKiiraConfig
+	markdownUri?: string
+}
+
+/** Extract the code-fence snippets of an already-parsed document. */
+export function extractSnippets({
+	mdast,
 	markdownFile,
-	content,
 	config,
 	markdownUri,
-}: ExtractContentInput): SnippetExtraction {
+}: ExtractSnippetsInput): ExtractedSnippet[] {
 	const snippets: ExtractedSnippet[] = []
-	const diagnostics: KiiraDiagnostic[] = []
 
-	// The MDX parser (unlike CommonMark) throws on malformed input — an unclosed
-	// JSX tag or an unparseable `{…}` expression. Degrade to a per-file diagnostic
-	// so one bad file (e.g. mid-edit) doesn't abort the whole check run.
-	let tree: Root
-	try {
-		tree = parseMarkdown(markdownFile, content)
-	} catch (error) {
-		diagnostics.push(parseErrorDiagnostic(markdownFile, error))
-		return { snippets, diagnostics }
-	}
-
-	const codeNodes: Code[] = []
-	collectCodeNodes(tree, codeNodes)
-
-	// `codeFenceLanguages` controls which fence identifiers are recognized
-	// (it defaults to each configured language plus its aliases); the identifier
-	// is then normalized to a KiiraLanguage so ```typescript maps to ts.
-	const recognized = new Set<string>(config.markdown.codeFenceLanguages.map((l) => l.toLowerCase()))
+	// The recognized fence identifiers (per file: the last matching override wins;
+	// default each configured language plus its aliases) are normalized to a
+	// KiiraLanguage so ```typescript maps to ts.
+	const recognized = new Set<string>(codeFenceLanguagesForFile(config, markdownFile).map((l) => l.toLowerCase()))
 	let index = 0
 
-	for (const node of codeNodes) {
+	for (const node of collectCodeNodes(mdast)) {
 		const rawLang = node.lang
 		if (!rawLang || !recognized.has(rawLang.toLowerCase()) || !node.position) {
 			continue
@@ -169,21 +167,18 @@ export function extractSnippetsFromContent({
 			continue
 		}
 
-		const parsed = parseFenceMeta(node.meta)
 		const start = node.position.start
 		const end = node.position.end
-		const markdownRange = {
-			start: { line: start.line - 1, character: start.column - 1 },
-			end: { line: end.line - 1, character: end.column - 1 },
-		}
-
 		const snippet: ExtractedSnippet = {
 			id: `${markdownFile}#${index}`,
 			markdownFile,
 			lang,
 			code: node.value,
-			meta: parsed.meta,
-			markdownRange,
+			meta: parseFenceMeta(node.meta).meta,
+			markdownRange: {
+				start: { line: start.line - 1, character: start.column - 1 },
+				end: { line: end.line - 1, character: end.column - 1 },
+			},
 			// `start.line` is the 1-based fence line; the code content begins on the
 			// next 1-based line, which is the same value as a zero-based index.
 			codeStart: { line: start.line, character: 0 },
@@ -193,18 +188,36 @@ export function extractSnippetsFromContent({
 		}
 		snippets.push(snippet)
 		index += 1
-
-		for (const issue of parsed.issues) {
-			diagnostics.push({
-				severity: "warning",
-				source: "kiira",
-				message: issue.message,
-				markdownFile,
-				markdownRange,
-			})
-		}
 	}
 
+	return snippets
+}
+
+/**
+ * Extract code-fence snippets from a single Markdown document, with the
+ * diagnostics of the built-in `parse-error` and `fence-meta` rules. Pure: no file
+ * IO, so it can be reused by integrations operating on in-memory text.
+ */
+export function extractSnippetsFromContent({
+	markdownFile,
+	content,
+	config,
+	markdownUri,
+}: ExtractContentInput): SnippetExtraction {
+	const { mdast, parseError } = parseDocument(markdownFile, content)
+	const snippets = extractSnippets({ mdast, markdownFile, config, markdownUri })
+	const reports: Array<[rule: string, RuleReport]> = []
+	if (parseError) {
+		reports.push(["parse-error", parseErrorReport(markdownFile, parseError)])
+	}
+	for (const report of fenceMetaReports(mdast, snippets)) {
+		reports.push(["fence-meta", report])
+	}
+	const rules = rulesForFile(config, markdownFile)
+	const diagnostics = reports.flatMap(([id, report]) => {
+		const severity = rules[id]?.severity
+		return severity && severity !== "off" ? [reportToDiagnostic(id, severity, markdownFile, report)] : []
+	})
 	return { snippets, diagnostics }
 }
 

@@ -71,6 +71,63 @@ describe("runCheck", () => {
 		}
 	})
 
+	it("prints an info line and exits 0 when allowEmpty is set and nothing matched", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-empty-"))
+		try {
+			writeFileSync(
+				join(dir, "kiira.config.json"),
+				JSON.stringify({ include: ["nothing/**/*.md"], presets: [{ name: "p", allowEmpty: true }] })
+			)
+			const pretty = capture()
+			expect(await runCheck({ cwd: dir, files: [], reporter: "pretty", raw: true, ...pretty })).toBe(0)
+			expect(pretty.logs).toEqual(["No files matched; nothing to check."])
+
+			const json = capture()
+			await runCheck({ cwd: dir, files: [], reporter: "json", ...json })
+			expect(JSON.parse(json.logs.join("\n")).stats.markdownFiles).toBe(0)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("keeps the normal empty report when nothing matched and allowEmpty is not set", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-empty-"))
+		try {
+			writeFileSync(join(dir, "kiira.config.json"), JSON.stringify({ include: ["nothing/**/*.md"] }))
+			const io = capture()
+			expect(await runCheck({ cwd: dir, files: [], reporter: "pretty", raw: true, ...io })).toBe(0)
+			expect(io.logs.join("\n")).toContain("Kiira found no errors in 0 files.")
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("replaces config and preset includes with entries, and applies --rule levels", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-entry-"))
+		try {
+			writeFileSync(
+				join(dir, "kiira.config.json"),
+				JSON.stringify({ presets: [{ name: "p", include: ["other/**/*.md"] }] })
+			)
+			mkdirSync(join(dir, "docs"))
+			mkdirSync(join(dir, "other"))
+			const md = ["# Comp", "", "```ts", "export const C = () => <div>{1}</div>", "```", ""].join("\n")
+			writeFileSync(join(dir, "docs", "a.md"), md)
+			writeFileSync(join(dir, "other", "b.md"), md)
+
+			const io = capture()
+			await runCheck({ cwd: dir, files: ["docs"], reporter: "json", rules: { "language-tag": "error" }, ...io })
+			const report = JSON.parse(io.logs.join("\n"))
+			expect(report.stats.markdownFiles).toBe(1)
+			const files = new Set(report.diagnostics.map((d: { markdownFile: string }) => d.markdownFile))
+			expect([...files]).toEqual(["docs/a.md"])
+			const tag = report.diagnostics.find((d: { code: string }) => d.code === "language-tag")
+			expect(tag).toMatchObject({ severity: "error" })
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
 	it("resolves imports of declared externalPackages from the isolated cache", async () => {
 		const dir = mkdtempSync(join(tmpdir(), "kiira-ext-cli-"))
 		try {

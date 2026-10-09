@@ -25,8 +25,15 @@ export interface RawDiagnostic {
 /** A pluggable TypeScript type-checking backend. */
 export interface CheckerEngine {
 	name: "classic" | "native"
-	/** Type-check the virtual files under `options` and return their diagnostics. */
-	collect(virtualFiles: VirtualFile[], options: ts.CompilerOptions): RawDiagnostic[] | Promise<RawDiagnostic[]>
+	/**
+	 * Type-check the virtual files under `options` and return their diagnostics.
+	 * An engine that builds an in-process `ts.Program` hands it to `onProgram`.
+	 */
+	collect(
+		virtualFiles: VirtualFile[],
+		options: ts.CompilerOptions,
+		onProgram?: (program: ts.Program) => void
+	): RawDiagnostic[] | Promise<RawDiagnostic[]>
 }
 
 // ts.DiagnosticCategory is a numeric enum with the same values in TS5 and TS7
@@ -124,10 +131,11 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 
 export const classicEngine: CheckerEngine = {
 	name: "classic",
-	collect(virtualFiles, options) {
+	collect(virtualFiles, options, onProgram) {
 		const ts = getTypescript()
 		const host = createOverlayHost(options, virtualFiles)
 		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
+		onProgram?.(program)
 
 		const diagnostics: RawDiagnostic[] = []
 		for (const vf of virtualFiles) {

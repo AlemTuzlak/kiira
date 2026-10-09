@@ -1,3 +1,5 @@
+import type { RuleSeverity } from "kiira-core"
+
 export type ReporterName = "pretty" | "json" | "github"
 
 type Command = "check" | "init" | "help" | "version"
@@ -16,10 +18,25 @@ interface ParsedArgs {
 	ignore: string[]
 	/** `--static`: disable the loading spinner. */
 	static: boolean
+	/** `--rule <id>=<level>` values (repeatable); a repeated id keeps its last level. */
+	rules: Record<string, RuleSeverity>
 }
 
 const REPORTERS: ReporterName[] = ["pretty", "json", "github"]
 const COMMANDS = new Set(["check", "init"])
+
+const RULE_LEVELS: RuleSeverity[] = ["off", "warn", "error"]
+
+/** Parse one `--rule` value (`<id>=<off|warn|error>`). Unknown ids are rejected later, by the config. */
+function parseRule(value: string): [id: string, level: RuleSeverity] {
+	const eq = value.indexOf("=")
+	const id = value.slice(0, eq)
+	const level = value.slice(eq + 1)
+	if (eq <= 0 || !(RULE_LEVELS as string[]).includes(level)) {
+		throw new Error(`Invalid --rule "${value}". Expected <id>=<${RULE_LEVELS.join("|")}>.`)
+	}
+	return [id, level as RuleSeverity]
+}
 
 function isReporter(value: string): value is ReporterName {
 	return (REPORTERS as string[]).includes(value)
@@ -37,6 +54,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 	const files: string[] = []
 	const entry: string[] = []
 	const ignore: string[] = []
+	const rules: Record<string, RuleSeverity> = {}
 
 	const base = (): Omit<ParsedArgs, "command"> => ({
 		files,
@@ -48,6 +66,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		entry,
 		ignore,
 		static: staticOutput,
+		rules,
 	})
 
 	for (let i = 0; i < argv.length; i += 1) {
@@ -72,6 +91,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
 			if (value) {
 				ignore.push(value)
 			}
+			continue
+		}
+
+		if (arg === "--rule" || arg.startsWith("--rule=")) {
+			const [id, level] = parseRule(arg.includes("=") ? arg.slice("--rule=".length) : (argv[++i] ?? ""))
+			rules[id] = level
 			continue
 		}
 

@@ -11,6 +11,8 @@ import type {
 	KiiraLanguage,
 	ResolvedKiiraConfig,
 	SourceMapping,
+	SourcePosition,
+	SourceRange,
 	VirtualFile,
 } from "./types"
 
@@ -121,6 +123,30 @@ function uniqueName(name: string, used: Set<string>): string {
 /** Resolve a virtual line to its originating Markdown line, or `null` if generated. */
 export function mapVirtualLine(mappings: SourceMapping[], virtualLine: number): number | null {
 	return mappings.find((m) => m.virtualLine === virtualLine)?.markdownLine ?? null
+}
+
+/**
+ * Map a virtual-file span to Markdown, or `undefined` when its start lands on
+ * generated lines. An end on generated lines (or before the start) has no real
+ * end column to map to, so it becomes a one-character range at the start.
+ */
+export function mapVirtualRange(
+	mappings: SourceMapping[],
+	start: SourcePosition,
+	end: SourcePosition
+): SourceRange | undefined {
+	const startLine = mapVirtualLine(mappings, start.line)
+	if (startLine === null) {
+		return undefined
+	}
+	const endLine = mapVirtualLine(mappings, end.line)
+	return {
+		start: { line: startLine, character: start.character },
+		end:
+			endLine !== null && endLine >= startLine
+				? { line: endLine, character: end.character }
+				: { line: startLine, character: start.character + 1 },
+	}
 }
 
 /** The effective validation mode for a snippet, after applying config defaults. */
@@ -279,23 +305,11 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 			}
 		}
 
-		// Detect wrong language tags (a `ts` fence that actually contains JSX) per
-		// member: warn + attach an auto-fix, and check as tsx if any member needs it.
+		// A `ts` fence that actually contains JSX is checked as tsx whether or not
+		// the `language-tag` rule is on; the rule only reports it.
 		let checkLang: KiiraLanguage = lead.lang
 		for (const member of members) {
-			const suggestion = detectLanguageTag(member.code, member.lang)
-			if (suggestion) {
-				diagnostics.push({
-					severity: "warning",
-					code: "language-tag",
-					source: "kiira",
-					message: `This \`${member.lang}\` code fence contains JSX. Change the language tag to \`${suggestion.suggested}\` (run \`kiira check --fix\` to apply).`,
-					markdownFile: member.markdownFile,
-					markdownRange: { start: member.markdownRange.start, end: member.markdownRange.start },
-					fix: { kind: "fence-language", line: member.markdownRange.start.line, language: suggestion.suggested },
-				})
-			}
-			if (member.lang === "tsx" || suggestion?.suggested === "tsx") {
+			if (member.lang === "tsx" || detectLanguageTag(member.code, member.lang)?.suggested === "tsx") {
 				checkLang = "tsx"
 			}
 		}

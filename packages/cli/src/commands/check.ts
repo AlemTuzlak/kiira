@@ -2,12 +2,15 @@ import { readFileSync } from "node:fs"
 import { isAbsolute, join, resolve } from "node:path"
 import {
 	type KiiraConfig,
+	type RuleSeverity,
 	checkMarkdownFiles,
 	collectExternalPackages,
+	discoverMarkdownFiles,
 	ensureExternalPackages,
 	findConfigFile,
 	loadConfig,
 	loadConfigFile,
+	resolveConfig,
 } from "kiira-core"
 import type { ReporterName } from "../args"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
@@ -21,6 +24,8 @@ interface RunCheckOptions {
 	entry?: string[]
 	ignore?: string[]
 	config?: string
+	/** Rule levels from `--rule`; they win over every config layer. */
+	rules?: Record<string, RuleSeverity>
 	reporter: ReporterName
 	fix?: boolean
 	verbose?: boolean
@@ -60,11 +65,19 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 		: await loadConfig(cwd)
 
 	// Positional args and `--entry` are the directories/files/globs to check; they
-	// override the config's `include`. `--ignore` adds to the config's `exclude`.
+	// replace the config's `include` and any preset includes. `--ignore` adds to
+	// the config's `exclude`.
 	const entries = [...options.files, ...(options.entry ?? [])]
-	const include = entries.length > 0 ? toIncludeGlobs(cwd, entries) : loaded.include
 	const exclude = [...(loaded.exclude ?? []), ...toIgnoreGlobs(cwd, options.ignore ?? [])]
-	const config: KiiraConfig = { ...loaded, include, exclude }
+	const config: KiiraConfig = { ...loaded, exclude }
+	const files =
+		entries.length > 0
+			? await discoverMarkdownFiles({
+					cwd,
+					include: toIncludeGlobs(cwd, entries),
+					exclude: resolveConfig(config, options.rules).exclude,
+				})
+			: undefined
 
 	// Install any declared doc-only packages into the isolated cache so their
 	// imports resolve during the check. Idempotent: a no-op when already current.
@@ -82,7 +95,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	const pending: string[] = []
 	let result: Awaited<ReturnType<typeof checkMarkdownFiles>>
 	try {
-		result = await checkMarkdownFiles({ cwd, config })
+		result = await checkMarkdownFiles({ cwd, config, files, ruleOverrides: options.rules })
 
 		// `--fix`: rewrite mistagged fences / add config overrides, then re-check so
 		// the report reflects the corrected sources.
@@ -106,7 +119,7 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 				}
 				pending.push(`Fixed ${parts.join(" and ")}.\n`)
 				config.overrides = [...(config.overrides ?? []), ...overrides.applied]
-				result = await checkMarkdownFiles({ cwd, config })
+				result = await checkMarkdownFiles({ cwd, config, files, ruleOverrides: options.rules })
 			}
 
 			if (overrides.manual.length > 0) {
@@ -125,6 +138,11 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 
 	for (const message of pending) {
 		options.log(message)
+	}
+
+	if (result.skipped && options.reporter === "pretty") {
+		options.log("No files matched; nothing to check.")
+		return 0
 	}
 
 	const output = formatReport(options.reporter, result, {

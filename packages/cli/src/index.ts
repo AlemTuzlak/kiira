@@ -29,6 +29,7 @@ async function main(argv: string[]): Promise<number> {
 				entry: parsed.entry,
 				ignore: parsed.ignore,
 				config: parsed.config,
+				rules: parsed.rules,
 				reporter: parsed.reporter,
 				fix: parsed.fix,
 				verbose: parsed.verbose,

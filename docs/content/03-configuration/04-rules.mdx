@@ -1,0 +1,91 @@
+---
+title: "Rules"
+summary: "The built-in rules and how to write your own"
+description: "Every built-in Kiira rule with its scope, default level, and what it reports, plus how to write a minimal rule and plugin with kiira-core/plugin."
+---
+
+<WarningAlert title="Experimental">
+The rule and plugin API can change between minor releases while it settles. A fuller plugin guide will follow.
+</WarningAlert>
+
+## What a rule is
+
+Everything Kiira reports besides TypeScript's own errors comes from a rule: fence metadata warnings, the `tsx` language-tag suggestion, `group=` suggestions, and so on. Each rule has an id, a scope, and a default level. Set the level in [`rules`](/latest/configuration/options#rules), or per run with [`--rule`](/latest/cli/flags#--rule-idlevel).
+
+Every diagnostic a rule reports carries the rule's id as its `code`, so the reporters and the VS Code extension show it next to the message.
+
+A rule's scope decides what it can see and when it runs:
+
+| Scope | Runs | Sees |
+| --- | --- | --- |
+| `document` | Once per Markdown file, after type-checking. | The text, the parsed Markdown tree, the fences, and the TypeScript diagnostics already produced for the file. |
+| `program` | Once per Markdown file that has checked fences, right after its document rules. | Everything a document rule sees, plus the TypeScript `Program` and type checker for the file's snippets. |
+| `project` | Once per run. | The list of files in the run, the project (`cwd`, `package.json`, workspace packages, `isTracked`), and read-only file access. It can report on any file, not only Markdown. |
+
+Program rules only run for documents that have at least one type-checked fence, and only on the classic engine, because only it builds a `ts.Program` in-process. On the native engine they are skipped, and Kiira reports one `info` diagnostic with the code `program-rules-skipped` that names them. Set [`engine: "classic"`](/latest/configuration/options#engine) to run them.
+
+## Built-in rules
+
+Built-in rule ids have no prefix. They run first, in this order, followed by plugin rules in the order the plugins are listed.
+
+| Rule | Scope | Default | What it reports |
+| --- | --- | --- | --- |
+| `parse-error` | `document` | `error` | A Markdown or MDX file that fails to parse. No fences from that file are checked. |
+| `fence-meta` | `document` | `warn` | An invalid `validate=` or `package=` value in a fence's info string. |
+| `language-tag` | `document` | `warn` | A `ts` fence that contains JSX. Suggests `tsx`, with a fix for [`--fix`](/latest/cli/fix). The fence is still checked as `tsx` when the rule is off. |
+| `group` | `document` | `warn` | Fences that continue an earlier one. Suggests a `group=` tag, with a fix. |
+| `jsx-framework` | `document` | `warn` | JSX that fails because of the wrong runtime types, in a file whose path names a framework. Suggests a `jsxImportSource` override, with a fix. |
+| `unused-symbols` | `document` | `off` | Turns on TypeScript's unused local and parameter checks. At `warn`, those diagnostics are warnings. |
+| `relative-imports` | `document` | `off` | Keeps `Cannot find module` errors for relative imports, which are dropped by default. At `warn`, they are warnings. |
+
+`unused-symbols` and `relative-imports` report nothing themselves. Their level controls the TypeScript diagnostics they own, which keep their `TS` codes. The [`checkUnusedSymbols`](/latest/configuration/options#checkunusedsymbols) and [`checkRelativeImports`](/latest/configuration/options#checkrelativeimports) options still work as aliases.
+
+## Write a rule
+
+Import `defineRule` and `definePlugin` from `kiira-core/plugin`. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
+
+This rule flags a word in the prose of every document:
+
+```ts
+import { defineConfig } from "kiira-core"
+import { definePlugin, defineRule } from "kiira-core/plugin"
+
+const noWord = defineRule({
+  meta: {
+    scope: "document",
+    defaultSeverity: "warn",
+    options: {
+      default: { word: "TODO" },
+      validate: (options) =>
+        typeof (options as { word?: unknown })?.word === "string" ? undefined : "`word` must be a string",
+    },
+  },
+  create(ctx) {
+    ctx.text.split("\n").forEach((line, index) => {
+      const character = line.indexOf(ctx.options.word)
+      if (character === -1) return
+      const start = { line: index, character }
+      const end = { line: index, character: character + ctx.options.word.length }
+      ctx.report({ range: { start, end }, message: `Remove "${ctx.options.word}" before publishing.` })
+    })
+  },
+})
+
+export default defineConfig({
+  plugins: [definePlugin({ name: "docs", rules: { "no-word": noWord } })],
+  rules: { "docs/no-word": ["error", { word: "FIXME" }] },
+})
+```
+
+The rule is registered as `docs/no-word`, and its diagnostics use that as their `code`.
+
+A few things to know:
+
+- `create` runs once per file for a `document` or `program` rule, and once per run for a `project` rule. It can be `async`.
+- Ranges are zero-based, like the rest of Kiira's diagnostics. The CLI adds one when it prints them.
+- `report` takes `range` and `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) can lower the configured level for that one report. It cannot raise it: a rule set to `warn` that reports `"error"` still gives a warning. An optional an optional `fix` is applied by `--fix` when it is one of Kiira's fix kinds. A project rule's `report` also takes the `file`, and a `range` that defaults to the start of the file.
+- `ctx.snippets` lists the fences in the file. Every fence identifier Kiira recognizes (`ts`, `typescript`, `mjs`, and so on) is normalized to `ts`, `tsx`, `js`, or `jsx` on `snippet.lang`.
+- A `program` rule also gets `ctx.program`, `ctx.checker`, and `ctx.toMarkdownRange(virtualFile, start, end)`, which maps an offset span in a snippet's generated file back to a Markdown range. It returns `undefined` for generated code.
+- A rule that throws does not stop the check. Kiira reports an `error` diagnostic with the rule id as its `code` and a message that names the rule, the file, and the error. The other rules still run. A failed `project` rule is reported on the first file of the run.
+
+Options that fail `validate`, an unknown rule id, a rule with an unknown `scope` or `defaultSeverity`, and a plugin without a `name` all fail when the config is resolved, not when the rule runs.

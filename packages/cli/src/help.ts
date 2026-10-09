@@ -14,6 +14,7 @@ Options:
   --entry <path>       Directory, file, or glob to check (repeatable).
   --ignore <path>      Directory, file, or glob to exclude (repeatable).
   --config <path>      Path to a Kiira config file.
+  --rule <id>=<level>  Set a rule to off, warn, or error (repeatable).
   --reporter <name>    Output format: pretty (default), json, or github.
   --fix                Rewrite mistagged code fences (e.g. ts -> tsx for JSX).
   --verbose            Show full error messages and code frames.
@@ -28,4 +29,5 @@ Examples:
   kiira check --entry docs --ignore docs/api
   kiira check --reporter github
   kiira check --config kiira.config.ts --reporter json
+  kiira check --rule unused-symbols=warn --rule group=off
 `

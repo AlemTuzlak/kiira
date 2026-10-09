@@ -10,7 +10,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const dist = join(root, "dist")
 const failures = []
 
-if (!existsSync(join(dist, "index.mjs"))) {
+if (!existsSync(join(dist, "index.mjs")) || !existsSync(join(dist, "plugin.mjs"))) {
 	process.stderr.write("dist is missing; run the build first.\n")
 	process.exit(1)
 }
@@ -33,6 +33,12 @@ const probes = [
 		code: `await import(${JSON.stringify(pathToFileURL(join(dist, "index.mjs")).href)})`,
 	},
 	{ entry: "dist/index.cjs", type: "commonjs", code: `require(${JSON.stringify(join(dist, "index.cjs"))})` },
+	{
+		entry: "dist/plugin.mjs",
+		type: "module",
+		code: `await import(${JSON.stringify(pathToFileURL(join(dist, "plugin.mjs")).href)})`,
+	},
+	{ entry: "dist/plugin.cjs", type: "commonjs", code: `require(${JSON.stringify(join(dist, "plugin.cjs"))})` },
 ]
 
 for (const { entry, type, code } of probes) {
@@ -60,7 +66,7 @@ const staticChunkImport =
 const mdxChunk = /micromark-extension-mdxjs/
 const acornSource = /acorn/i
 
-for (const entry of ["index.mjs", "index.cjs"]) {
+for (const entry of ["index.mjs", "index.cjs", "plugin.mjs", "plugin.cjs"]) {
 	const seen = new Set()
 	const queue = [entry]
 	while (queue.length > 0) {
@@ -77,6 +83,14 @@ for (const entry of ["index.mjs", "index.cjs"]) {
 		for (const match of source.matchAll(staticChunkImport)) {
 			queue.push(match[1].slice(2))
 		}
+	}
+}
+
+// `kiira-core/plugin` is for plugin authors: it must stay free of runtime imports.
+for (const file of ["plugin.mjs", "plugin.cjs"]) {
+	const source = readFileSync(join(dist, file), "utf8")
+	if (/^\s*import\b|\brequire\(/m.test(source)) {
+		failures.push(`dist/${file} has runtime imports`)
 	}
 }
 
