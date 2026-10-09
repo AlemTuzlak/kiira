@@ -22,8 +22,11 @@ export const maxLinesRule = defineRule<"document", MaxLinesOptions>({
 		},
 	},
 	create(ctx) {
-		// A trailing newline counts as one more (empty) line.
 		const lines = ctx.text.split(/\r?\n/)
+		// A trailing newline ends the last line; it does not start a new one.
+		if (lines.at(-1) === "") {
+			lines.pop()
+		}
 		const { max } = ctx.options
 		const firstExtra = lines[max]
 		if (firstExtra !== undefined) {

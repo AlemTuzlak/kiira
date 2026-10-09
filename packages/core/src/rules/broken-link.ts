@@ -1,4 +1,5 @@
-import { posix } from "node:path"
+import { readdirSync } from "node:fs"
+import { posix, resolve } from "node:path"
 import type { Nodes } from "mdast"
 import { loadMdxSupport, parseDocument } from "../extract"
 import { defineRule } from "../plugin"
@@ -10,6 +11,8 @@ interface BrokenLinkOptions {
 
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i
 const MARKDOWN_FILE = /\.mdx?$/i
+const CUSTOM_HEADING_ID = /\{#([^\s{}]+)\}\s*$/
+const HTML_ANCHOR = /(?<![\w-])(?:id|name)\s*=\s*["']([^"']+)["']/gi
 
 function walk(tree: Nodes, visit: (node: Nodes) => void): void {
 	visit(tree)
@@ -30,15 +33,36 @@ function textOf(node: Nodes): string {
 	return "children" in node ? (node.children as Nodes[]).map(textOf).join("") : ""
 }
 
-/** The anchors GitHub generates for a document's headings: duplicates get `-1`, `-2` in document order. */
+/**
+ * The anchors GitHub generates for a document's headings: duplicates get `-1`, `-2` in document order.
+ * Also a heading's custom `{#id}` and the `id`/`name` of HTML and JSX elements.
+ */
 function headingSlugs(tree: Nodes): Set<string> {
 	const slugs = new Set<string>()
 	const seen = new Map<string, number>()
 	walk(tree, (node) => {
+		if (node.type === "html") {
+			for (const match of node.value.matchAll(HTML_ANCHOR)) {
+				slugs.add((match[1] ?? "").toLowerCase())
+			}
+		}
+		if ("attributes" in node) {
+			for (const attribute of node.attributes) {
+				const named = attribute.type === "mdxJsxAttribute" && /^(?:id|name)$/.test(attribute.name)
+				if (named && typeof attribute.value === "string") {
+					slugs.add(attribute.value.toLowerCase())
+				}
+			}
+		}
 		if (node.type !== "heading") {
 			return
 		}
-		const base = textOf(node)
+		const text = textOf(node)
+		const custom = CUSTOM_HEADING_ID.exec(text)?.[1]
+		if (custom) {
+			slugs.add(custom.toLowerCase())
+		}
+		const base = text
 			.toLowerCase()
 			.replace(/[^\p{L}\p{N} _-]/gu, "")
 			.replace(/ /g, "-")
@@ -87,6 +111,15 @@ async function targetSlugs(
 	return parseError ? undefined : headingSlugs(mdast)
 }
 
+/** Extensionless links resolve like a docs site does: as written, then as a Markdown file, then as a folder index. */
+function candidatesOf(path: string): string[] {
+	if (posix.extname(path) !== "") {
+		return [path]
+	}
+	const bare = path.replace(/\/+$/, "")
+	return [path, `${bare}.md`, `${bare}.mdx`, `${bare}/index.md`, `${bare}/index.mdx`]
+}
+
 function validateOptions(options: unknown): string | undefined {
 	if (options === undefined) {
 		return undefined
@@ -108,6 +141,29 @@ export const brokenLinkRule = defineRule<"document", BrokenLinkOptions>({
 	async create(ctx) {
 		const anchors = ctx.options?.anchors === true
 		const slugCache = new Map<string, Set<string> | undefined>()
+		const entryCache = new Map<string, string[] | undefined>()
+		// `existsSync` ignores case on Windows and macOS, so also match the name against
+		// the folder's entries: a link that only resolves there still breaks on Linux.
+		const existsExactly = (path: string): boolean => {
+			if (!ctx.fs.exists(path)) {
+				return false
+			}
+			const name = posix.basename(path)
+			const dir = posix.dirname(path)
+			if (name === "." || name === "..") {
+				return true
+			}
+			if (!entryCache.has(dir)) {
+				let entries: string[] | undefined
+				try {
+					entries = readdirSync(resolve(ctx.project.cwd, dir))
+				} catch {
+					entries = undefined
+				}
+				entryCache.set(dir, entries)
+			}
+			return entryCache.get(dir)?.includes(name) ?? true
+		}
 		const nodes: Array<Nodes & { url: string }> = []
 		walk(ctx.mdast, (node) => {
 			if (node.type === "link" || node.type === "image" || node.type === "definition") {
@@ -116,7 +172,8 @@ export const brokenLinkRule = defineRule<"document", BrokenLinkOptions>({
 		})
 		for (const node of nodes) {
 			const url = node.url
-			if (HAS_SCHEME.test(url) || url.startsWith("//") || (url.startsWith("#") && !anchors)) {
+			// A leading `/` is a site route (`/latest/cli/fix`), not a path on disk.
+			if (HAS_SCHEME.test(url) || url.startsWith("/") || (url.startsWith("#") && !anchors)) {
 				continue
 			}
 			const hashAt = url.indexOf("#")
@@ -127,15 +184,14 @@ export const brokenLinkRule = defineRule<"document", BrokenLinkOptions>({
 				continue
 			}
 			let path = ctx.file
-			if (linkPath.startsWith("/")) {
-				path = posix.normalize(linkPath.replace(/^\/+/, ""))
-			} else if (linkPath !== "") {
-				path = posix.normalize(posix.join(posix.dirname(ctx.file), linkPath))
-			}
 			// A same-file anchor needs no disk check; the document may be an unsaved buffer.
-			if (linkPath !== "" && !ctx.fs.exists(path)) {
-				ctx.report({ range, message: `Link target not found: ${url}` })
-				continue
+			if (linkPath !== "") {
+				const found = candidatesOf(posix.normalize(posix.join(posix.dirname(ctx.file), linkPath))).find(existsExactly)
+				if (found === undefined) {
+					ctx.report({ range, message: `Link target not found: ${url}` })
+					continue
+				}
+				path = found
 			}
 			if (anchors && hash !== "" && MARKDOWN_FILE.test(path)) {
 				if (!slugCache.has(path)) {

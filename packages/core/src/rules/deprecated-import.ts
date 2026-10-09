@@ -54,7 +54,11 @@ export const deprecatedImportRule = defineRule<"program", DeprecatedImportOption
 					if (symbol && symbol.flags & ts.SymbolFlags.Alias) {
 						symbol = ctx.checker.getAliasedSymbol(symbol)
 					}
-					const tag = symbol?.getJsDocTags(ctx.checker).find((t) => t.name === "deprecated")
+					// Like TypeScript, a symbol is deprecated only when every declaration is: one
+					// deprecated overload (rxjs `combineLatest`) does not deprecate the others.
+					const declarations = symbol?.declarations ?? []
+					const deprecated = declarations.length > 0 && declarations.every((d) => ts.getJSDocDeprecatedTag(d))
+					const tag = deprecated ? symbol?.getJsDocTags(ctx.checker).find((t) => t.name === "deprecated") : undefined
 					const range = tag && ctx.toMarkdownRange(virtualFile, identifier.getStart(sourceFile), identifier.getEnd())
 					if (tag && range) {
 						const reason = ts.displayPartsToString(tag.text).trim()

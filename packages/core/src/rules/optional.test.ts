@@ -20,6 +20,10 @@ describe("broken-link", () => {
 			"docs/other.md": "# Intro\n\n## Setup\n\n## Setup\n\n## Héllo, wörld!\n\n## `code` _kept_\n",
 			"docs/page.mdx": "# Page\n\n## Deep dive\n",
 			"docs/pic.png": "",
+			"docs/plain": "",
+			"docs/sub/index.md": "# Sub\n",
+			"docs/anchors.md": "## Install {#setup-guide}\n\n<a id=\"legacy\"></a>\n\n<div name='Named'></div>\n",
+			"docs/jsx.mdx": '<a id="jsx-anchor" />\n\n# Title\n',
 		})
 
 	it("reports a missing file and accepts an existing one", async () => {
@@ -35,10 +39,22 @@ describe("broken-link", () => {
 		])
 	})
 
-	it("resolves a plain document's links relative to its directory, and a leading slash from cwd", async () => {
-		const text = "[up](../README.md) [root](/README.md) [bad](README.md)\n"
+	it("resolves links relative to the document's directory and skips root-relative site routes", async () => {
+		const text = "[up](../README.md) [root](/README.md) [route](/latest/cli/fix) [bad](README.md)\n"
 		const diagnostics = await check(project(), "docs/guide.md", text, { rules })
 		expect(messages(diagnostics)).toEqual(["Link target not found: README.md"])
+	})
+
+	it("resolves an extensionless link as written, then as .md or .mdx, then as a folder index", async () => {
+		const text = "[a](./other) [b](page) [c](./sub) [d](sub/) [e](plain) [f](./gone) [g](sub/index)\n"
+		const diagnostics = await check(project(), "docs/guide.md", text, { rules })
+		expect(messages(diagnostics)).toEqual(["Link target not found: ./gone"])
+	})
+
+	it("matches the file name's case exactly, as on a case-sensitive file system", async () => {
+		const text = "[a](./Other.md) [b](./other.md) [c](PIC.png)\n"
+		const diagnostics = await check(project(), "docs/guide.md", text, { rules })
+		expect(messages(diagnostics)).toEqual(["Link target not found: ./Other.md", "Link target not found: PIC.png"])
 	})
 
 	it("ignores URLs with a scheme, protocol-relative URLs, and anchors while anchors are off", async () => {
@@ -105,6 +121,19 @@ describe("broken-link", () => {
 			expect(messages(diagnostics)).toEqual(["Link anchor not found: #nope"])
 		})
 
+		it("accepts custom heading ids and HTML or JSX id/name anchors", async () => {
+			const text = [
+				"[a](anchors.md#setup-guide) [b](anchors.md#legacy) [c](anchors.md#named) [d](jsx.mdx#jsx-anchor)",
+				"[e](./other#setup) [f](anchors.md#nope) [g](./other#nope)",
+				"",
+			].join("\n")
+			const diagnostics = await check(project(), "docs/guide.md", text, { rules: anchors })
+			expect(messages(diagnostics)).toEqual([
+				"Link anchor not found: anchors.md#nope",
+				"Link anchor not found: ./other#nope",
+			])
+		})
+
 		it("does not check anchors into files that are not Markdown", async () => {
 			expect(await check(project(), "docs/guide.md", "[a](pic.png#frag)\n", { rules: anchors })).toEqual([])
 		})
@@ -138,13 +167,10 @@ describe("max-lines", () => {
 		])
 	})
 
-	it("counts a trailing newline as an extra line", async () => {
-		expect(await check(tempProject(), "a.md", `${lines(3)}\n`, at(3))).toMatchObject([
-			{
-				message: "File has 4 lines (max 3).",
-				markdownRange: { start: { line: 3, character: 0 }, end: { line: 3, character: 0 } },
-			},
-		])
+	it("does not count a trailing newline as an extra line", async () => {
+		expect(await check(tempProject(), "a.md", `${lines(3)}\n`, at(3))).toEqual([])
+		expect(await check(tempProject(), "a.md", `${lines(3, "\r\n")}\r\n`, at(3))).toEqual([])
+		expect(messages(await check(tempProject(), "a.md", `${lines(4)}\n`, at(3)))).toEqual(["File has 4 lines (max 3)."])
 	})
 
 	it("counts CRLF line endings as one line each", async () => {
@@ -194,6 +220,13 @@ describe("deprecated-import", () => {
 				"export default function legacy(): void {}",
 				"export { oldThing as renamed }",
 				'export { impl as reexported } from "./impl"',
+				"/** @deprecated pass an options object */",
+				"export declare function someOld(a: string): void",
+				"export declare function someOld(a: { a: string }): void",
+				"/** @deprecated use newAll */",
+				"export declare function allOld(a: string): void",
+				"/** @deprecated use newAll */",
+				"export declare function allOld(a: number): void",
 				"",
 			].join("\n"),
 			"packages/old/src/impl.ts": "/** @deprecated moved to impl2 */\nexport const impl = 1\n",
@@ -234,6 +267,11 @@ describe("deprecated-import", () => {
 			"'renamed' is deprecated: use newThing instead",
 			"'again' is deprecated: moved to impl2",
 		])
+	})
+
+	it("reports an overloaded function only when every overload is deprecated", async () => {
+		const diagnostics = await run('import { someOld, allOld } from "@demo/old"\nsomeOld("x"); allOld(1)')
+		expect(messages(diagnostics)).toEqual(["'allOld' is deprecated: use newAll"])
 	})
 
 	it("does not report imports that are not deprecated", async () => {
