@@ -117,7 +117,10 @@ describe("loadConfigFile", () => {
 	})
 
 	describe("without jiti", () => {
-		const noJiti = { loadJiti: () => Promise.reject(new Error("Cannot find package 'jiti'")) }
+		const noJiti = {
+			loadJiti: () =>
+				Promise.reject(Object.assign(new Error("Cannot find package 'jiti'"), { code: "ERR_MODULE_NOT_FOUND" })),
+		}
 		let dir: string
 
 		beforeEach(() => {
@@ -157,6 +160,17 @@ describe("loadConfigFile", () => {
 			).rejects.toThrow(
 				'Loading a TypeScript Kiira config needs the "jiti" package or a Node version that strips types natively.'
 			)
+		})
+
+		it("rethrows a jiti load error that is not a missing module", async () => {
+			const importNative = vi.fn()
+			await expect(
+				loadConfigFile(join(dir, "kiira.config.ts"), {
+					loadJiti: () => Promise.reject(new SyntaxError("broken jiti")),
+					importNative,
+				})
+			).rejects.toThrow("broken jiti")
+			expect(importNative).not.toHaveBeenCalled()
 		})
 
 		it("rethrows native import errors for non-TypeScript configs", async () => {

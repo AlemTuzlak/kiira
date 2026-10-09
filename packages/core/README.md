@@ -31,7 +31,7 @@ tooling — a custom CLI, a lint rule, a docs pipeline, or an editor integration
 pnpm add kiira-core typescript
 ```
 
-`typescript` 5 or newer is an optional peer dependency. Kiira uses the copy in your project when it has one, and throws if it can't find any. Add `jiti` as well if you load a `kiira.config.ts` with `loadConfig`; other config formats don't need it.
+`typescript` 5.4+ or 6 is an optional peer dependency. Kiira uses the copy in your project when it has one, and throws if it can't find any. Add `jiti` as well if you load a `kiira.config.ts` with `loadConfig`; other config formats don't need it.
 
 The package is published dual ESM/CJS with full type declarations.
 

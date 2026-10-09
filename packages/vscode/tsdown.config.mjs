@@ -2,7 +2,7 @@ import { defineConfig } from "tsdown"
 
 export default defineConfig({
 	entry: { extension: "src/extension.ts" },
-	sourcemap: false,
+	sourcemap: true,
 	dts: false,
 	minify: false,
 	clean: true,

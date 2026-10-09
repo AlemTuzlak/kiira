@@ -98,8 +98,12 @@ export async function loadConfigFile(filepath: string, importers: ConfigImporter
 	let jiti: Awaited<ReturnType<typeof loadJiti>> | undefined
 	try {
 		jiti = await loadJiti()
-	} catch {
-		// `jiti` is an optional peer; fall back to a native import below.
+	} catch (error) {
+		// `jiti` is an optional peer; fall back to a native import below only when it is missing.
+		const code = (error as { code?: unknown } | null)?.code
+		if (code !== "ERR_MODULE_NOT_FOUND" && code !== "MODULE_NOT_FOUND") {
+			throw error
+		}
 	}
 
 	if (jiti) {

@@ -4,7 +4,7 @@
 import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const dist = join(root, "dist")
@@ -27,7 +27,11 @@ const cache = Object.keys(createRequire(process.cwd() + "/").cache)
 process.stdout.write(JSON.stringify(cache.filter((file) => /[\\\\/]node_modules[\\\\/](typescript|jiti)[\\\\/]/.test(file))))
 `
 const probes = [
-	{ entry: "dist/index.mjs", type: "module", code: `await import(${JSON.stringify(join(dist, "index.mjs"))})` },
+	{
+		entry: "dist/index.mjs",
+		type: "module",
+		code: `await import(${JSON.stringify(pathToFileURL(join(dist, "index.mjs")).href)})`,
+	},
 	{ entry: "dist/index.cjs", type: "commonjs", code: `require(${JSON.stringify(join(dist, "index.cjs"))})` },
 ]
 

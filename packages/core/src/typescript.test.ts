@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { MISSING_TYPESCRIPT_MESSAGE, getTypescript, selectTypescript, setTypescriptModule } from "./typescript"
 import type { TypeScriptModule, TypescriptResolvers } from "./typescript"
 
-const fake = (name: string) => ({ name }) as unknown as TypeScriptModule
+const fake = (name: string, version = "5.9.0") => ({ name, version }) as unknown as TypeScriptModule
 
 function projectWithTypescript(root: string, version: string): void {
 	const dir = join(root, "node_modules", "typescript")
@@ -66,10 +66,21 @@ describe("typescript resolution", () => {
 		expect(getTypescript(resolvers(undefined, undefined))).toBe(own)
 	})
 
-	it("falls back when the project's TypeScript is older than 5", () => {
+	it("falls back when the project's TypeScript is older than 5.4", () => {
 		const own = fake("own")
-		const project = { "typescript/package.json": { version: "4.9.5" }, typescript: fake("old") }
-		expect(selectTypescript(root, resolvers(project, { typescript: own }))).toBe(own)
+		for (const version of ["4.9.5", "5.3.3"]) {
+			const project = { "typescript/package.json": { version }, typescript: fake("old", version) }
+			expect(selectTypescript(root, resolvers(project, { typescript: own }))).toBe(own)
+		}
+	})
+
+	it("throws a clear error when its own TypeScript is 7, which has no classic API", () => {
+		const native = { version: "7.0.2", versionMajorMinor: "7.0" }
+		const project = { "typescript/package.json": { version: "7.0.2" }, typescript: native }
+		expect(() => selectTypescript(root, resolvers(project, { typescript: native }))).toThrow(
+			/found TypeScript 7\.0\.2.*setTypescriptModule/
+		)
+		expect(() => getTypescript(resolvers(undefined, { typescript: native }))).toThrow(/found TypeScript 7\.0\.2/)
 	})
 
 	it("prefers an injected module over every lookup", () => {
@@ -82,6 +93,6 @@ describe("typescript resolution", () => {
 
 	it("throws a helpful error when nothing resolves", () => {
 		expect(() => selectTypescript(root, resolvers(undefined, undefined))).toThrow(MISSING_TYPESCRIPT_MESSAGE)
-		expect(MISSING_TYPESCRIPT_MESSAGE).toBe('Kiira needs TypeScript 5 or newer. Install "typescript" in your project.')
+		expect(MISSING_TYPESCRIPT_MESSAGE).toBe('Kiira needs TypeScript 5.4+ or 6. Install "typescript" in your project.')
 	})
 })
