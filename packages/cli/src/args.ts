@@ -10,6 +10,8 @@ interface ParsedArgs {
 	config?: string
 	reporter: ReporterName
 	fix: boolean
+	/** `--dry-run`: with `--fix`, print a diff instead of writing. */
+	dryRun: boolean
 	verbose: boolean
 	raw: boolean
 	/** `--entry` values: directories/files/globs to check (repeatable). */
@@ -48,6 +50,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 	let config: string | undefined
 	let reporter: ReporterName = "pretty"
 	let fix = false
+	let dryRun = false
 	let verbose = false
 	let raw = false
 	let staticOutput = false
@@ -61,6 +64,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		config,
 		reporter,
 		fix,
+		dryRun,
 		verbose,
 		raw,
 		entry,
@@ -104,6 +108,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
 			fix = true
 			continue
 		}
+		if (arg === "--dry-run") {
+			dryRun = true
+			continue
+		}
 		if (arg === "--verbose") {
 			verbose = true
 			continue
@@ -138,6 +146,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
 		} else {
 			files.push(arg)
 		}
+	}
+
+	if (dryRun && !fix) {
+		throw new Error("--dry-run only works with --fix.")
 	}
 
 	return { command: command ?? "check", ...base() }

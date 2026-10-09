@@ -16,7 +16,8 @@ Options:
   --config <path>      Path to a Kiira config file.
   --rule <id>=<level>  Set a rule to off, warn, or error (repeatable).
   --reporter <name>    Output format: pretty (default), json, or github.
-  --fix                Rewrite mistagged code fences (e.g. ts -> tsx for JSX).
+  --fix                Apply automatic fixes (e.g. rewrite ts -> tsx for JSX fences).
+  --dry-run            With --fix, print a diff and write nothing.
   --verbose            Show full error messages and code frames.
   --raw                Disable colored output (plain text).
   --static             Disable the loading spinner.
@@ -27,6 +28,7 @@ Examples:
   kiira check
   kiira check --entry docs --entry README.md
   kiira check --entry docs --ignore docs/api
+  kiira check --fix --dry-run
   kiira check --reporter github
   kiira check --config kiira.config.ts --reporter json
   kiira check --rule unused-symbols=warn --rule group=off

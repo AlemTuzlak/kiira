@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { dirname, isAbsolute, join, resolve } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import picomatch from "picomatch"
 import type ts from "typescript"
 import { loadConfig, resolveConfig, rulesForFile } from "./config"
@@ -546,7 +546,8 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	selectTypescript(cwd)
 	const userConfig = input.config ?? (await loadConfig(cwd))
 	const resolved = resolveConfig(userConfig, input.ruleOverrides)
-	const run: RuleRun = { config: resolved, project: await createProject(cwd), fs: createRuleFs(cwd).fs }
+	const { fs, reads } = createRuleFs(cwd)
+	const run: RuleRun = { config: resolved, project: await createProject(cwd), fs }
 
 	const files =
 		input.files ??
@@ -562,7 +563,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 		}))
 	if (files.length === 0 && resolved.allowEmpty) {
 		const stats = { markdownFiles: 0, snippets: 0, checked: 0, ignored: 0, errors: 0, warnings: 0 }
-		return { snippets: [], virtualFiles: [], diagnostics: [], stats, skipped: true }
+		return { snippets: [], virtualFiles: [], diagnostics: [], stats, sources: {}, skipped: true }
 	}
 
 	const documents = await parseDocuments(files, (file) => readFile(join(cwd, file), "utf8"), resolved)
@@ -570,6 +571,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	const diagnostics = [...analyzed.diagnostics, ...(await runProjectRules(run, files))]
 	const snippets = documents.flatMap((doc) => doc.snippets)
 
+	const sources = collectSources(cwd, reads, documents)
 	const errors = diagnostics.filter((d) => d.severity === "error").length
 	const warnings = diagnostics.filter((d) => d.severity === "warning").length
 
@@ -577,6 +579,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 		snippets,
 		virtualFiles: analyzed.virtualFiles,
 		diagnostics,
+		sources,
 		stats: {
 			markdownFiles: files.length,
 			snippets: snippets.length,
@@ -586,6 +589,24 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 			warnings,
 		},
 	}
+}
+
+/** The exact text of every file a run read, keyed by cwd-relative posix path. */
+function collectSources(
+	cwd: string,
+	reads: Map<string, string | undefined>,
+	documents: Array<{ file: string; text: string }>
+): Record<string, string> {
+	const sources: Record<string, string> = {}
+	for (const [path, text] of reads) {
+		if (text !== undefined) {
+			sources[relative(cwd, resolve(cwd, path)).split(sep).join("/")] = text
+		}
+	}
+	for (const doc of documents) {
+		sources[doc.file] = doc.text
+	}
+	return sources
 }
 
 export interface CheckMarkdownTextInput {
@@ -603,6 +624,8 @@ export interface CheckMarkdownTextResult {
 	diagnostics: KiiraDiagnostic[]
 	virtualFiles: VirtualFile[]
 	snippets: ExtractedSnippet[]
+	/** The text the check read: the document itself and each file a rule read through `ctx.fs`. Keys are cwd-relative posix paths. */
+	sources: Record<string, string>
 }
 
 /**
@@ -613,8 +636,14 @@ export async function checkMarkdownText(input: CheckMarkdownTextInput): Promise<
 	const { cwd, markdownFile } = input
 	selectTypescript(cwd)
 	const config = resolveConfig(input.config, input.ruleOverrides)
-	const run: RuleRun = { config, project: await createProject(cwd), fs: createRuleFs(cwd).fs }
+	const { fs, reads } = createRuleFs(cwd)
+	const run: RuleRun = { config, project: await createProject(cwd), fs }
 	const documents = await parseDocuments([markdownFile], () => input.text, config, input.markdownUri)
 	const { virtualFiles, diagnostics } = await analyzeDocuments(cwd, run, documents)
-	return { diagnostics, virtualFiles, snippets: documents.flatMap((doc) => doc.snippets) }
+	return {
+		diagnostics,
+		virtualFiles,
+		snippets: documents.flatMap((doc) => doc.snippets),
+		sources: collectSources(cwd, reads, documents),
+	}
 }

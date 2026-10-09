@@ -32,6 +32,7 @@ async function main(argv: string[]): Promise<number> {
 				rules: parsed.rules,
 				reporter: parsed.reporter,
 				fix: parsed.fix,
+				dryRun: parsed.dryRun,
 				verbose: parsed.verbose,
 				raw: parsed.raw,
 				static: parsed.static,

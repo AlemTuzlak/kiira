@@ -79,11 +79,39 @@ export default defineConfig({
 
 The rule is registered as `docs/no-word`, and its diagnostics use that as their `code`.
 
+## Return a fix
+
+A report can carry an `edits` fix, which `kiira check --fix` applies. Each edit names a `file` (relative to the project root, with `/` separators), a zero-based `range` to replace, and the `newText`. A zero-width range inserts.
+
+This `report` call replaces the flagged word with `DONE`:
+
+```ts
+ctx.report({
+  range: { start, end },
+  message: `Remove "${ctx.options.word}" before publishing.`,
+  fix: {
+    kind: "edits",
+    edits: [{ file: ctx.file, range: { start, end }, newText: "DONE" }],
+  },
+})
+```
+
+An `edits` fix can also change another file, such as one the rule read with `ctx.fs.readText`. `--fix` is careful with the files it writes:
+
+- It only edits a file the check read: a Markdown document in the run, or a file a rule read with `ctx.fs.readText`. An edit to any other file is refused.
+- It re-reads the file first and refuses it if the text changed since the check, so a fix never lands on stale ranges. It also refuses a file that is not valid UTF-8 or is read-only.
+- A fix is all or nothing. If one file of an `edits` fix is refused, the fix is dropped from every file it edits.
+- It refuses paths outside the project, inside `.git` or `node_modules`, or that reach either through a symlink.
+- It refuses every edit in a file when two of them overlap, and prints which fixes conflict. Other files are still fixed. Identical edits count once, and inserts at the same point apply in report order.
+- It keeps a file's line endings: in a file that uses CRLF, a `\n` in `newText` is written as `\r\n`. A line's characters stop before its `\r\n`.
+
+Each refusal is printed with its reason. Run `kiira check --fix --dry-run` to see the diff first.
+
 A few things to know:
 
 - `create` runs once per file for a `document` or `program` rule, and once per run for a `project` rule. It can be `async`.
 - Ranges are zero-based, like the rest of Kiira's diagnostics. The CLI adds one when it prints them.
-- `report` takes `range` and `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) can lower the configured level for that one report. It cannot raise it: a rule set to `warn` that reports `"error"` still gives a warning. An optional `fix` is applied by `--fix` when it is one of Kiira's fix kinds. A project rule's `report` also takes the `file`, and a `range` that defaults to the start of the file.
+- `report` takes `range` and `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) can lower the configured level for that one report. It cannot raise it: a rule set to `warn` that reports `"error"` still gives a warning. An optional `fix` is applied by `--fix` (see [Return a fix](#return-a-fix)). A project rule's `report` also takes the `file`, and a `range` that defaults to the start of the file.
 - `ctx.snippets` lists the fences in the file. Every fence identifier Kiira recognizes (`ts`, `typescript`, `mjs`, and so on) is normalized to `ts`, `tsx`, `js`, or `jsx` on `snippet.lang`.
 - A `program` rule also gets `ctx.program`, `ctx.checker`, and `ctx.toMarkdownRange(virtualFile, start, end)`, which maps an offset span in a snippet's generated file back to a Markdown range. It returns `undefined` for generated code.
 - A rule that throws does not stop the check. Kiira reports an `error` diagnostic with the rule id as its `code` and a message that names the rule, the file, and the error. The other rules still run. A failed `project` rule is reported on the first file of the run.

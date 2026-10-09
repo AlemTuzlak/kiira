@@ -23,6 +23,7 @@ let output: vscode.OutputChannel
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const virtualFilesByDocument = new Map<string, VirtualFile[]>()
 const diagnosticsByDocument = new Map<string, KiiraDiagnostic[]>()
+const sourcesByDocument = new Map<string, Record<string, string>>()
 
 interface KiiraSettings {
 	enable: boolean
@@ -101,7 +102,7 @@ async function checkAndPublish(document: vscode.TextDocument): Promise<void> {
 
 	const config = await loadWorkspaceConfig(ctx.cwd, settings.configPath)
 	try {
-		const { diagnostics, virtualFiles } = await checkDocument({
+		const { diagnostics, virtualFiles, sources } = await checkDocument({
 			cwd: ctx.cwd,
 			markdownFile: ctx.markdownFile,
 			text: document.getText(),
@@ -109,6 +110,7 @@ async function checkAndPublish(document: vscode.TextDocument): Promise<void> {
 			markdownUri: document.uri.toString(),
 		})
 		virtualFilesByDocument.set(document.uri.toString(), virtualFiles)
+		sourcesByDocument.set(document.uri.toString(), sources)
 		const selected = selectDiagnostics(diagnostics, { showGenerated: settings.showGeneratedDiagnostics })
 		// Keep the rich diagnostics (with their `fix` payloads) so the code-action
 		// provider can offer quick fixes for what's currently shown.
@@ -244,6 +246,7 @@ export function activate(context: vscode.ExtensionContext): void {
 			collection.delete(document.uri)
 			virtualFilesByDocument.delete(document.uri.toString())
 			diagnosticsByDocument.delete(document.uri.toString())
+			sourcesByDocument.delete(document.uri.toString())
 		}),
 		vscode.commands.registerCommand("kiira.checkCurrentFile", () => {
 			const document = vscode.window.activeTextEditor?.document
@@ -257,6 +260,7 @@ export function activate(context: vscode.ExtensionContext): void {
 			collection.clear()
 			virtualFilesByDocument.clear()
 			diagnosticsByDocument.clear()
+			sourcesByDocument.clear()
 			for (const document of vscode.workspace.textDocuments) {
 				void checkAndPublish(document)
 			}
@@ -274,6 +278,7 @@ export function activate(context: vscode.ExtensionContext): void {
 				},
 				getVirtualFiles: (uri) => virtualFilesByDocument.get(uri),
 				getDiagnostics: (uri) => diagnosticsByDocument.get(uri),
+				getSources: (uri) => sourcesByDocument.get(uri),
 			}),
 			{ providedCodeActionKinds: KiiraCodeActionProvider.providedKinds }
 		)

@@ -13,6 +13,7 @@ import {
 	resolveConfig,
 } from "kiira-core"
 import type { ReporterName } from "../args"
+import { unifiedDiff } from "../diff"
 import { toIgnoreGlobs, toIncludeGlobs } from "../entries"
 import { applyConfigOverrides, applyFixes } from "../fix"
 import { formatReport } from "../reporters"
@@ -28,6 +29,8 @@ interface RunCheckOptions {
 	rules?: Record<string, RuleSeverity>
 	reporter: ReporterName
 	fix?: boolean
+	/** With `fix`: print a diff instead of writing, and keep the exit code of the original check. */
+	dryRun?: boolean
 	verbose?: boolean
 	raw?: boolean
 	static?: boolean
@@ -51,6 +54,8 @@ function createSourceLineReader(cwd: string): (markdownFile: string) => string[]
 		return lines
 	}
 }
+
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`
 
 /**
  * Run `kiira check`. Returns the process exit code: 0 when clean, 1 when there
@@ -92,43 +97,67 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 	// Run the (slow) checking under a spinner, deferring all output until it stops
 	// so the spinner line and the report never interleave.
 	const spinner = startSpinner("Checking Markdown…", { enabled: !options.static })
-	const pending: string[] = []
+	const pending: Array<{ message: string; channel: "log" | "error" }> = []
+	const queue = (message: string, channel: "log" | "error" = "log"): void => {
+		pending.push({ message, channel })
+	}
 	let result: Awaited<ReturnType<typeof checkMarkdownFiles>>
 	try {
 		result = await checkMarkdownFiles({ cwd, config, files, ruleOverrides: options.rules })
 
-		// `--fix`: rewrite mistagged fences / add config overrides, then re-check so
-		// the report reflects the corrected sources.
+		// `--fix`: rewrite mistagged fences, apply rule edits, add config overrides,
+		// then re-check so the report reflects the corrected sources.
 		if (options.fix) {
 			const configPath = options.config
 				? isAbsolute(options.config)
 					? options.config
 					: resolve(cwd, options.config)
 				: findConfigFile(cwd)
+			const dryRun = options.dryRun === true
 
-			const fences = await applyFixes(cwd, result.diagnostics)
-			const overrides = await applyConfigOverrides(configPath, result.diagnostics)
+			const fences = await applyFixes(cwd, result.diagnostics, result.sources, { dryRun })
+			const overrides = await applyConfigOverrides(configPath, result.diagnostics, { dryRun })
 
-			if (fences.fixesApplied > 0 || overrides.applied.length > 0) {
+			for (const { file, reason } of fences.refusals) {
+				queue(`Skipped ${file}: ${reason}.`, "error")
+			}
+
+			if (dryRun) {
+				// The diff goes to stderr under the JSON reporter so stdout stays one JSON document.
+				const channel = options.reporter === "json" ? "error" : "log"
+				for (const { file, before, after } of fences.changes) {
+					queue(unifiedDiff(file, before, after).replace(/\n$/, ""), channel)
+				}
+				for (const override of overrides.applied) {
+					queue(`Would add config override: ${JSON.stringify(override)}`, channel)
+				}
+				queue(
+					`Dry run: would change ${plural(fences.filesChanged, "file")} (${plural(fences.editsApplied, "edit")}) and add ${plural(overrides.applied.length, "config override")}. Nothing was written.`,
+					channel
+				)
+			} else if (fences.editsApplied > 0 || overrides.applied.length > 0) {
 				const parts: string[] = []
-				if (fences.fixesApplied > 0) {
-					parts.push(`${fences.fixesApplied} fence${fences.fixesApplied === 1 ? "" : "s"}`)
+				if (fences.fenceEditsApplied > 0) {
+					parts.push(plural(fences.fenceEditsApplied, "fence"))
+				}
+				if (fences.editsApplied > fences.fenceEditsApplied) {
+					parts.push(plural(fences.editsApplied - fences.fenceEditsApplied, "edit"))
 				}
 				if (overrides.applied.length > 0) {
-					parts.push(`${overrides.applied.length} config override${overrides.applied.length === 1 ? "" : "s"}`)
+					parts.push(plural(overrides.applied.length, "config override"))
 				}
-				pending.push(`Fixed ${parts.join(" and ")}.\n`)
+				queue(`Fixed ${parts.join(" and ")}.\n`)
 				config.overrides = [...(config.overrides ?? []), ...overrides.applied]
 				result = await checkMarkdownFiles({ cwd, config, files, ruleOverrides: options.rules })
 			}
 
 			if (overrides.manual.length > 0) {
-				pending.push("Add these overrides to your Kiira config (config is not JSON, so apply manually):")
+				queue("Add these overrides to your Kiira config (config is not JSON, so apply manually):")
 				for (const fix of overrides.manual) {
 					const opts = Object.entries(fix.compilerOptions)
 						.map(([k, v]) => `"${k}": "${v}"`)
 						.join(", ")
-					pending.push(`  { "include": ["${fix.include}"], ${opts} }`)
+					queue(`  { "include": ["${fix.include}"], ${opts} }`)
 				}
 			}
 		}
@@ -136,8 +165,8 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 		spinner.stop()
 	}
 
-	for (const message of pending) {
-		options.log(message)
+	for (const { message, channel } of pending) {
+		options[channel](message)
 	}
 
 	if (result.skipped && options.reporter === "pretty") {

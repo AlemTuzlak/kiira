@@ -165,3 +165,156 @@ describe("runCheck", () => {
 		}
 	})
 })
+
+describe("runCheck --fix with rule edits", () => {
+	// A plain-object plugin, so the temp project needs no imports. The rule rewrites `OLD` to `NEW` inside fences.
+	const config = `export default {
+	include: ["**/*.md"],
+	plugins: [
+		{
+			name: "docs",
+			rules: {
+				rewrite: {
+					meta: { scope: "document", defaultSeverity: "warn" },
+					create(ctx) {
+						for (const snippet of ctx.snippets) {
+							snippet.code.split("\\n").forEach((text, index) => {
+								const character = text.indexOf("OLD")
+								if (character === -1) return
+								const line = snippet.codeStart.line + index
+								ctx.report({
+									range: { start: { line, character }, end: { line, character: character + 3 } },
+									message: "Use NEW.",
+									fix: {
+										kind: "edits",
+										edits: [{ file: ctx.file, range: { start: { line, character }, end: { line, character: character + 3 } }, newText: "NEW" }],
+									},
+								})
+							})
+						}
+					},
+				},
+			},
+		},
+	],
+	rules: { "docs/rewrite": "warn" },
+}
+`
+
+	function project(markdown: string): string {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-edits-"))
+		writeFileSync(join(dir, "kiira.config.mjs"), config)
+		writeFileSync(join(dir, "doc.md"), markdown)
+		return dir
+	}
+
+	it.each(["ts", "tsx", "js", "jsx", "typescript", "typescriptreact", "javascript", "mjs", "cjs", "javascriptreact"])(
+		"applies an edits fix inside a %s fence",
+		async (lang) => {
+			const dir = project(`# Doc\n\n\`\`\`${lang}\nconst value = "OLD"\n\`\`\`\n`)
+			try {
+				const io = capture()
+				await runCheck({ cwd: dir, files: [], reporter: "json", fix: true, ...io })
+
+				expect(io.errors).toEqual([])
+				expect(readFileSync(join(dir, "doc.md"), "utf8")).toBe(`# Doc\n\n\`\`\`${lang}\nconst value = "NEW"\n\`\`\`\n`)
+				expect(io.logs.join("\n")).toContain("Fixed 1 edit.")
+			} finally {
+				rmSync(dir, { recursive: true, force: true })
+			}
+		}
+	)
+
+	it("prints a unified diff and writes nothing with --dry-run, exiting as the original check did", async () => {
+		const markdown = '# Doc\n\n```ts\nconst value = "OLD"\n```\n'
+		const dir = project(markdown)
+		try {
+			const io = capture()
+			const code = await runCheck({
+				cwd: dir,
+				files: [],
+				reporter: "pretty",
+				raw: true,
+				static: true,
+				fix: true,
+				dryRun: true,
+				...io,
+			})
+
+			expect(code).toBe(0)
+			expect(readFileSync(join(dir, "doc.md"), "utf8")).toBe(markdown)
+			expect(io.logs[0]).toBe(
+				[
+					"--- a/doc.md",
+					"+++ b/doc.md",
+					"@@ -1,5 +1,5 @@",
+					" # Doc",
+					" ",
+					" ```ts",
+					'-const value = "OLD"',
+					'+const value = "NEW"',
+					" ```",
+				].join("\n")
+			)
+			expect(io.logs[1]).toBe("Dry run: would change 1 file (1 edit) and add 0 config overrides. Nothing was written.")
+			expect(io.errors).toEqual([])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("keeps stdout valid JSON with --dry-run and --reporter json, sending the diff to stderr", async () => {
+		const dir = project('```ts\nconst value = "OLD"\n```\n')
+		try {
+			const io = capture()
+			await runCheck({ cwd: dir, files: [], reporter: "json", fix: true, dryRun: true, ...io })
+
+			expect(JSON.parse(io.logs.join("\n")).stats.markdownFiles).toBe(1)
+			expect(io.errors[0]).toContain("--- a/doc.md\n+++ b/doc.md\n")
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("keeps the original exit code in a dry run when errors would be fixed away", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-dry-"))
+		try {
+			writeFileSync(join(dir, "kiira.config.json"), JSON.stringify({ rules: { "language-tag": "error" } }))
+			const markdown = "```ts\nexport const C = () => <div>{1}</div>\n```\n"
+			writeFileSync(join(dir, "doc.md"), markdown)
+			const io = capture()
+			const code = await runCheck({
+				cwd: dir,
+				files: [],
+				reporter: "pretty",
+				raw: true,
+				static: true,
+				fix: true,
+				dryRun: true,
+				...io,
+			})
+
+			expect(code).toBe(1)
+			expect(readFileSync(join(dir, "doc.md"), "utf8")).toBe(markdown)
+			expect(io.logs.join("\n")).toContain("-```ts\n+```tsx")
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("prints why a file was skipped when --fix refuses it", async () => {
+		const dir = project('```ts\nconst value = "OLD"\n```\n')
+		try {
+			// A rule edit aimed at a file the check never read.
+			writeFileSync(join(dir, "notes.txt"), "x\n")
+			writeFileSync(join(dir, "kiira.config.mjs"), config.replace("file: ctx.file,", 'file: "notes.txt",'))
+			const io = capture()
+			await runCheck({ cwd: dir, files: [], reporter: "json", fix: true, ...io })
+
+			expect(io.errors).toEqual(["Skipped notes.txt: the check did not read this file."])
+			expect(readFileSync(join(dir, "notes.txt"), "utf8")).toBe("x\n")
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+})

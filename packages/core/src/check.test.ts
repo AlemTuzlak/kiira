@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { buildBaseOptions, checkMarkdownFiles, optionsForFile } from "./check"
 import { resolveConfig } from "./config"
 import { externalCacheDir } from "./external"
+import { definePlugin, defineRule } from "./plugin"
 import type { KiiraDiagnostic } from "./types"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -15,6 +16,26 @@ function errors(diagnostics: KiiraDiagnostic[]): KiiraDiagnostic[] {
 }
 
 describe("checkMarkdownFiles", () => {
+	it("returns the exact text of every document and every file a rule read", async () => {
+		const cwd = mkdtempSync(join(tmpdir(), "kiira-sources-"))
+		const markdown = "```ts\r\nconst a = 1\r\n```\r\n"
+		writeFileSync(join(cwd, "doc.md"), markdown)
+		writeFileSync(join(cwd, "notes.txt"), "notes")
+		const reader = defineRule({
+			meta: { scope: "project", defaultSeverity: "warn" },
+			create(ctx) {
+				ctx.fs.readText("./notes.txt")
+				ctx.fs.readText("missing.txt")
+			},
+		})
+		const result = await checkMarkdownFiles({
+			cwd,
+			files: ["doc.md"],
+			config: { plugins: [definePlugin({ name: "t", rules: { reader } })], rules: { "t/reader": "warn" } },
+		})
+		expect(result.sources).toEqual({ "doc.md": markdown, "notes.txt": "notes" })
+	})
+
 	it("checks .mdx files without the caller loading the MDX parser", async () => {
 		vi.resetModules()
 		const { checkMarkdownFiles: freshCheck } = await import("./check")

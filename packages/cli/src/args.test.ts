@@ -14,6 +14,12 @@ describe("parseArgs", () => {
 		expect(parseArgs(["--fix"]).fix).toBe(true)
 	})
 
+	it("parses --dry-run with --fix and rejects it alone", () => {
+		expect(parseArgs(["check", "--fix", "--dry-run"]).dryRun).toBe(true)
+		expect(parseArgs(["--fix"]).dryRun).toBe(false)
+		expect(() => parseArgs(["check", "--dry-run"])).toThrow("--dry-run only works with --fix.")
+	})
+
 	it("parses the --verbose, --raw, and --static flags", () => {
 		expect(parseArgs(["check", "--verbose"]).verbose).toBe(true)
 		expect(parseArgs(["check", "--raw"]).raw).toBe(true)
