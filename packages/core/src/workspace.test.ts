@@ -415,6 +415,31 @@ describe("workspace cache", () => {
 		}
 	})
 
+	it("caches owner-scoped resolutions per owner, frozen, until an owner's package.json changes", async () => {
+		const dir = makeWorkspace()
+		try {
+			mkdirSync(join(dir, "packages", "b", "node_modules"), { recursive: true })
+			writeFileSync(join(dir, "packages", "b", "package.json"), JSON.stringify({ name: "@demo/b" }))
+			const owner = (file: string) =>
+				buildWorkspaceResolution(dir, { workspacePackageResolution: "owner", markdownFiles: [file] })
+			const a = await owner("packages/a/README.md")
+			expect(a).toBe(await owner("packages/a/docs/guide.md"))
+			expect(a).not.toBe(await owner("packages/b/README.md"))
+			expect(a).not.toBe(await buildWorkspaceResolution(dir))
+			expect(Object.isFrozen(a)).toBe(true)
+			expect(() => a?.paths["@demo/a/*"]?.push("x")).toThrow(TypeError)
+			const bModules = join(dir, "packages", "b", "node_modules", "*").replace(/\\/g, "/")
+			expect(a?.paths["*"] ?? []).not.toContain(bModules)
+
+			const manifest = join(dir, "packages", "a", "package.json")
+			writeFileSync(manifest, JSON.stringify({ name: "@demo/a", dependencies: { "@demo/b": "workspace:*" } }))
+			touch(manifest)
+			expect((await owner("packages/a/README.md"))?.paths["*"]).toContain(bModules)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
 	it("picks up a renamed export after its package.json changes", async () => {
 		const dir = makeWorkspace()
 		try {
