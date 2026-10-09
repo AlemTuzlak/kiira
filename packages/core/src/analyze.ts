@@ -1,11 +1,19 @@
-import ts from "typescript"
+import type ts from "typescript"
 import type { KiiraLanguage } from "./types"
+import { getTypescript } from "./typescript"
 
-const SCRIPT_KIND: Record<KiiraLanguage, ts.ScriptKind> = {
-	ts: ts.ScriptKind.TS,
-	tsx: ts.ScriptKind.TSX,
-	js: ts.ScriptKind.JS,
-	jsx: ts.ScriptKind.JSX,
+function scriptKind(lang: KiiraLanguage): ts.ScriptKind {
+	const ts = getTypescript()
+	switch (lang) {
+		case "ts":
+			return ts.ScriptKind.TS
+		case "tsx":
+			return ts.ScriptKind.TSX
+		case "js":
+			return ts.ScriptKind.JS
+		case "jsx":
+			return ts.ScriptKind.JSX
+	}
 }
 
 interface SnippetSymbols {
@@ -16,6 +24,7 @@ interface SnippetSymbols {
 }
 
 function collectBindingNames(name: ts.BindingName, out: Set<string>): void {
+	const ts = getTypescript()
 	if (ts.isIdentifier(name)) {
 		out.add(name.text)
 		return
@@ -28,6 +37,7 @@ function collectBindingNames(name: ts.BindingName, out: Set<string>): void {
 }
 
 function declarationName(node: ts.Node): string | undefined {
+	const ts = getTypescript()
 	if (
 		(ts.isFunctionDeclaration(node) ||
 			ts.isClassDeclaration(node) ||
@@ -44,6 +54,7 @@ function declarationName(node: ts.Node): string | undefined {
 }
 
 function collectImportBindings(node: ts.Node, out: Set<string>): void {
+	const ts = getTypescript()
 	if (ts.isImportClause(node) && node.name) {
 		out.add(node.name.text)
 	} else if (ts.isNamespaceImport(node) || ts.isImportSpecifier(node)) {
@@ -52,6 +63,7 @@ function collectImportBindings(node: ts.Node, out: Set<string>): void {
 }
 
 function collectTopLevelDeclares(statement: ts.Statement, out: Set<string>): void {
+	const ts = getTypescript()
 	if (ts.isVariableStatement(statement)) {
 		for (const decl of statement.declarationList.declarations) {
 			collectBindingNames(decl.name, out)
@@ -87,6 +99,7 @@ function functionBody(node: ts.SignatureDeclaration): ts.ConciseBody | undefined
 
 /** Names bound directly in a scope (params + declarations), not descending into nested scopes. */
 function collectScopeBindings(scopeNode: ts.Node, out: Set<string>): void {
+	const ts = getTypescript()
 	const walk = (node: ts.Node): void => {
 		if (ts.isVariableDeclaration(node) || ts.isBindingElement(node) || ts.isParameter(node)) {
 			collectBindingNames(node.name, out)
@@ -124,7 +137,8 @@ function collectScopeBindings(scopeNode: ts.Node, out: Set<string>): void {
  * genuine outer references. Parse-only; used to plan minimal snippet groups.
  */
 export function analyzeSnippet(code: string, lang: KiiraLanguage): SnippetSymbols {
-	const sourceFile = ts.createSourceFile("snippet", code, ts.ScriptTarget.Latest, true, SCRIPT_KIND[lang])
+	const ts = getTypescript()
+	const sourceFile = ts.createSourceFile("snippet", code, ts.ScriptTarget.Latest, true, scriptKind(lang))
 	const declares = new Set<string>()
 	for (const statement of sourceFile.statements) {
 		collectTopLevelDeclares(statement, declares)

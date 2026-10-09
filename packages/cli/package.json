@@ -41,14 +41,15 @@
 	},
 	"dependencies": {
 		"chalk": "^5.4.1",
-		"kiira-core": "workspace:*"
+		"jiti": "^2.4.2",
+		"kiira-core": "workspace:*",
+		"typescript": "^5.4.0"
 	},
 	"devDependencies": {
 		"@tanstack/intent": "^0.1.0",
 		"@types/node": "22.14.1",
 		"@vitest/coverage-v8": "^3.1.1",
 		"tsdown": "^0.22.2",
-		"typescript": "^5.4.0",
 		"vitest": "^3.1.1"
 	}
 }

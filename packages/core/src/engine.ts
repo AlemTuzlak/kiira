@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { join } from "node:path"
-import ts from "typescript"
+import type ts from "typescript"
 import type { KiiraEngine, SourcePosition, VirtualFile } from "./types"
+import { getTypescript } from "./typescript"
 
 /**
  * A diagnostic in virtual-file coordinates, normalized across the classic and
@@ -31,6 +32,7 @@ export interface CheckerEngine {
 // ts.DiagnosticCategory is a numeric enum with the same values in TS5 and TS7
 // (Warning=0, Error=1, Suggestion=2, Message=3), so both engines map by number.
 export function severityFromCategory(category: number): RawDiagnostic["severity"] {
+	const ts = getTypescript()
 	switch (category) {
 		case ts.DiagnosticCategory.Error:
 			return "error"
@@ -44,6 +46,7 @@ export function severityFromCategory(category: number): RawDiagnostic["severity"
 // --- classic engine (kiira's bundled TypeScript, in-process) ---
 
 function scriptKindFor(lang: VirtualFile["lang"]): ts.ScriptKind {
+	const ts = getTypescript()
 	switch (lang) {
 		case "tsx":
 			return ts.ScriptKind.TSX
@@ -76,6 +79,7 @@ export function applyLibDirOverride(host: {
 	if (!typescriptLibDir) {
 		return
 	}
+	const ts = getTypescript()
 	const dir = typescriptLibDir
 	host.getDefaultLibLocation = () => dir
 	host.getDefaultLibFileName = (options) => join(dir, ts.getDefaultLibFileName(options))
@@ -83,6 +87,7 @@ export function applyLibDirOverride(host: {
 
 /** Build a TS compiler host that overlays in-memory virtual files on the real filesystem. */
 function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFile[]): ts.CompilerHost {
+	const ts = getTypescript()
 	const host = ts.createCompilerHost(options, true)
 	const caseSensitive = host.useCaseSensitiveFileNames()
 	const normalize = (file: string): string => {
@@ -120,6 +125,7 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 export const classicEngine: CheckerEngine = {
 	name: "classic",
 	collect(virtualFiles, options) {
+		const ts = getTypescript()
 		const host = createOverlayHost(options, virtualFiles)
 		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
 
@@ -141,6 +147,7 @@ export const classicEngine: CheckerEngine = {
 }
 
 function fromTsDiagnostic(diagnostic: ts.Diagnostic, vf: VirtualFile): RawDiagnostic {
+	const ts = getTypescript()
 	const base: RawDiagnostic = {
 		virtualFile: vf.fileName,
 		code: typeof diagnostic.code === "number" ? diagnostic.code : undefined,

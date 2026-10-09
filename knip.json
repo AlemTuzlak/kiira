@@ -3,5 +3,11 @@
 	"ignoreBinaries": ["pkg-pr-new", "gh"],
 	"ignoreDependencies": ["@changesets/cli", "lefthook", "@tanstack/intent"],
 	"ignoreWorkspaces": ["examples/**", "packages/vscode"],
-	"ignore": ["**/tests/fixtures/**", "docs/**"]
+	"ignore": ["**/tests/fixtures/**", "docs/**"],
+	"workspaces": {
+		"packages/core": {
+			"entry": ["scripts/*.mjs"],
+			"ignoreDependencies": ["jiti"]
+		}
+	}
 }

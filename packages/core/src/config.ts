@@ -2,7 +2,6 @@ import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
-import { createJiti } from "jiti"
 import type { KiiraConfig, KiiraLanguage, ResolvedKiiraConfig } from "./types"
 
 export const DEFAULT_LANGUAGES: KiiraLanguage[] = ["ts", "tsx", "js", "jsx"]
@@ -73,19 +72,58 @@ export function findConfigFile(cwd: string): string | null {
 	return null
 }
 
+/** How a non-JSON config is imported; overridable so tests can simulate a missing `jiti`. */
+interface ConfigImporters {
+	loadJiti?: () => Promise<{
+		createJiti: (url: string) => { import: <T>(id: string, options: { default: true }) => Promise<T> }
+	}>
+	importNative?: (url: string) => Promise<unknown>
+}
+
+const TS_CONFIG_EXTENSION = /\.[cm]?ts$/
+
 /**
  * Load a Kiira config from an explicit file path. Supports
- * `.ts`/`.mts`/`.mjs`/`.js`/`.cjs` (via jiti) and `.json`.
+ * `.ts`/`.mts`/`.mjs`/`.js`/`.cjs` (via jiti when installed, else a native
+ * `import()`) and `.json`.
  */
-export async function loadConfigFile(filepath: string): Promise<KiiraConfig> {
+export async function loadConfigFile(filepath: string, importers: ConfigImporters = {}): Promise<KiiraConfig> {
 	if (filepath.endsWith(".json")) {
 		const raw = await readFile(filepath, "utf8")
 		return JSON.parse(raw) as KiiraConfig
 	}
 
-	// Resolve bare imports (e.g. `kiira-core`) relative to the config's directory.
-	const jiti = createJiti(pathToFileURL(join(dirname(filepath), "__kiira_config__.js")).href)
-	return jiti.import<KiiraConfig>(filepath, { default: true })
+	const { loadJiti = () => import("jiti"), importNative = (url) => import(url) } = importers
+
+	let jiti: Awaited<ReturnType<typeof loadJiti>> | undefined
+	try {
+		jiti = await loadJiti()
+	} catch (error) {
+		// `jiti` is an optional peer; fall back to a native import below only when it is missing.
+		const code = (error as { code?: unknown } | null)?.code
+		if (code !== "ERR_MODULE_NOT_FOUND" && code !== "MODULE_NOT_FOUND") {
+			throw error
+		}
+	}
+
+	if (jiti) {
+		// Resolve bare imports (e.g. `kiira-core`) relative to the config's directory.
+		const loader = jiti.createJiti(pathToFileURL(join(dirname(filepath), "__kiira_config__.js")).href)
+		return loader.import<KiiraConfig>(filepath, { default: true })
+	}
+
+	try {
+		const mod = (await importNative(pathToFileURL(filepath).href)) as { default?: KiiraConfig }
+		return mod.default ?? (mod as KiiraConfig)
+	} catch (error) {
+		if (TS_CONFIG_EXTENSION.test(filepath)) {
+			throw new Error(
+				'Loading a TypeScript Kiira config needs the "jiti" package or a Node version that strips types natively.',
+				{ cause: error }
+			)
+		}
+		throw error
+	}
 }
 
 /**

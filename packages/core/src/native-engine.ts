@@ -1,10 +1,11 @@
 import { createRequire } from "node:module"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
-import ts from "typescript"
+import type ts from "typescript"
 import type { CheckerEngine, RawDiagnostic } from "./engine"
 import { severityFromCategory } from "./engine"
 import type { SourcePosition, VirtualFile } from "./types"
+import { getTypescript } from "./typescript"
 
 // --- minimal shape of TypeScript 7's `unstable/sync` API (loaded from the
 // consuming project, so its real types aren't available to kiira's own build). ---
@@ -59,12 +60,15 @@ const normalize = (file: string): string => {
 
 // tsconfig `jsx` accepts kebab-case strings, but `ts.JsxEmit` enum names don't
 // match them (e.g. ReactJSX -> "react-jsx"), so map explicitly.
-const JSX_TO_TSCONFIG: Record<number, string> = {
-	[ts.JsxEmit.Preserve]: "preserve",
-	[ts.JsxEmit.React]: "react",
-	[ts.JsxEmit.ReactNative]: "react-native",
-	[ts.JsxEmit.ReactJSX]: "react-jsx",
-	[ts.JsxEmit.ReactJSXDev]: "react-jsxdev",
+const jsxToTsconfig = (): Record<number, string> => {
+	const { JsxEmit } = getTypescript()
+	return {
+		[JsxEmit.Preserve]: "preserve",
+		[JsxEmit.React]: "react",
+		[JsxEmit.ReactNative]: "react-native",
+		[JsxEmit.ReactJSX]: "react-jsx",
+		[JsxEmit.ReactJSXDev]: "react-jsxdev",
+	}
 }
 
 // Internal fields `parseJsonConfigFileContent` stamps onto the options object;
@@ -97,12 +101,15 @@ function enumToTsconfig(
 // Enum-valued compiler options kiira (or an override) may set, mapped to the
 // tsconfig string forms. Anything not listed here must not be a numeric enum, or
 // it would be emitted as a raw number the config parser rejects.
-const MODULE_RESOLUTION_FORMS: Record<number, string> = {
-	[ts.ModuleResolutionKind.Classic]: "classic",
-	[ts.ModuleResolutionKind.Node10]: "node10",
-	[ts.ModuleResolutionKind.Node16]: "node16",
-	[ts.ModuleResolutionKind.NodeNext]: "nodenext",
-	[ts.ModuleResolutionKind.Bundler]: "bundler",
+const moduleResolutionForms = (): Record<number, string> => {
+	const { ModuleResolutionKind } = getTypescript()
+	return {
+		[ModuleResolutionKind.Classic]: "classic",
+		[ModuleResolutionKind.Node10]: "node10",
+		[ModuleResolutionKind.Node16]: "node16",
+		[ModuleResolutionKind.NodeNext]: "nodenext",
+		[ModuleResolutionKind.Bundler]: "bundler",
+	}
 }
 
 /**
@@ -111,6 +118,7 @@ const MODULE_RESOLUTION_FORMS: Record<number, string> = {
  * exact same options the classic engine would.
  */
 export function compilerOptionsToTsconfigJson(options: ts.CompilerOptions): Record<string, unknown> {
+	const ts = getTypescript()
 	const out: Record<string, unknown> = {}
 	for (const [key, value] of Object.entries(options)) {
 		if (value === undefined || value === null || INTERNAL_OPTION_KEYS.has(key) || typeof value === "function") {
@@ -127,14 +135,14 @@ export function compilerOptionsToTsconfigJson(options: ts.CompilerOptions): Reco
 				out[key] = enumToTsconfig(
 					ts.ModuleResolutionKind as unknown as Record<string, unknown>,
 					value as number,
-					MODULE_RESOLUTION_FORMS
+					moduleResolutionForms()
 				)
 				break
 			case "moduleDetection":
 				out[key] = enumToTsconfig(ts.ModuleDetectionKind as unknown as Record<string, unknown>, value as number)
 				break
 			case "jsx":
-				out[key] = JSX_TO_TSCONFIG[value as number]
+				out[key] = jsxToTsconfig()[value as number]
 				break
 			case "lib":
 				out[key] = (value as string[]).map(libToShort)

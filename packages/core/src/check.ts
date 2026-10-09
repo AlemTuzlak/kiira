@@ -2,14 +2,15 @@ import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { dirname, isAbsolute, join, resolve } from "node:path"
 import picomatch from "picomatch"
-import ts from "typescript"
+import type ts from "typescript"
 import { analyzeSnippet } from "./analyze"
 import { loadConfig, resolveConfig } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { type RawDiagnostic, resolveEngine } from "./engine"
 import { collectExternalPackages, externalResolution } from "./external"
-import { extractSnippetsFromContent } from "./extract"
+import { extractSnippetsFromContent, loadMdxSupportFor } from "./extract"
 import type { KiiraCheckResult, KiiraConfig, KiiraDiagnostic, VirtualFile } from "./types"
+import { getTypescript, selectTypescript } from "./typescript"
 import { createVirtualFiles, effectiveGroup, isCheckable, mapVirtualLine } from "./virtual"
 import { buildWorkspaceResolution } from "./workspace"
 
@@ -17,6 +18,7 @@ import { buildWorkspaceResolution } from "./workspace"
 // the classic engine; re-export the host-facing hooks so consumers (index, vscode)
 // keep importing them from `check`.
 export { applyLibDirOverride, setTypescriptLibDir } from "./engine"
+export { setTypescriptModule } from "./typescript"
 
 /** TS codes meaning "cannot find name X" — the signature of a continuation snippet. */
 const CANNOT_FIND_NAME = new Set([2304, 2552])
@@ -31,22 +33,25 @@ function groupSlug(markdownFile: string): string {
 	)
 }
 
-const DEFAULT_COMPILER_OPTIONS: ts.CompilerOptions = {
-	target: ts.ScriptTarget.ES2022,
-	module: ts.ModuleKind.ESNext,
-	moduleResolution: ts.ModuleResolutionKind.Bundler,
-	jsx: ts.JsxEmit.ReactJSX,
-	// Doc snippets routinely use both ES and web globals (`console`, `fetch`, `Date`,
-	// `JSON`). Without a project tsconfig to specify `lib`, include DOM so these
-	// resolve instead of being reported as undefined names.
-	lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
-	strict: true,
-	esModuleInterop: true,
-	forceConsistentCasingInFileNames: true,
-	allowJs: true,
-	checkJs: true,
-	skipLibCheck: true,
-	noEmit: true,
+function defaultCompilerOptions(): ts.CompilerOptions {
+	const ts = getTypescript()
+	return {
+		target: ts.ScriptTarget.ES2022,
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler,
+		jsx: ts.JsxEmit.ReactJSX,
+		// Doc snippets routinely use both ES and web globals (`console`, `fetch`, `Date`,
+		// `JSON`). Without a project tsconfig to specify `lib`, include DOM so these
+		// resolve instead of being reported as undefined names.
+		lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
+		strict: true,
+		esModuleInterop: true,
+		forceConsistentCasingInFileNames: true,
+		allowJs: true,
+		checkJs: true,
+		skipLibCheck: true,
+		noEmit: true,
+	}
 }
 
 /** Resolve which tsconfig to use: explicit config, then tsconfig.docs.json, then tsconfig.json. */
@@ -66,12 +71,13 @@ export function resolveTsconfigPath(cwd: string, tsconfig?: string): string | un
 }
 
 function loadCompilerOptions(tsconfigPath: string | undefined): ts.CompilerOptions {
+	const ts = getTypescript()
 	if (!tsconfigPath) {
-		return { ...DEFAULT_COMPILER_OPTIONS }
+		return defaultCompilerOptions()
 	}
 	const read = ts.readConfigFile(tsconfigPath, ts.sys.readFile)
 	if (read.error || !read.config) {
-		return { ...DEFAULT_COMPILER_OPTIONS }
+		return defaultCompilerOptions()
 	}
 	const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, dirname(tsconfigPath))
 	// We never emit, and lib checking is the consumer's concern, not the docs'.
@@ -140,6 +146,7 @@ export async function buildBaseOptions(
 	cwd: string,
 	resolved: ReturnType<typeof resolveConfig>
 ): Promise<ts.CompilerOptions> {
+	selectTypescript(cwd)
 	const tsconfigPath = resolveTsconfigPath(cwd, resolved.tsconfig)
 	const options = loadCompilerOptions(tsconfigPath)
 
@@ -191,6 +198,7 @@ export async function checkVirtualFiles({
 	if (virtualFiles.length === 0) {
 		return []
 	}
+	selectTypescript(cwd)
 
 	const resolved = resolveConfig(config)
 	const options = await buildBaseOptions(cwd, resolved)
@@ -233,6 +241,7 @@ function convertOverrideOptions(
 	cwd: string,
 	override: ReturnType<typeof resolveConfig>["overrides"][number]
 ): ts.CompilerOptions {
+	const ts = getTypescript()
 	// `include` (the glob), `defaultGroup` (a Kiira grouping concept) and
 	// `externalPackages` (doc-only deps) are not tsconfig options; strip them so
 	// only real compiler options are converted.
@@ -563,6 +572,7 @@ export interface CollectSuggestionsInput {
  */
 export async function collectSuggestions(input: CollectSuggestionsInput): Promise<KiiraDiagnostic[]> {
 	const { cwd, files, snippets, diagnostics, config } = input
+	selectTypescript(cwd)
 	const resolved = resolveConfig(config)
 	const grouping = await suggestGrouping({ cwd, files, snippets, diagnostics, config, resolved })
 	const jsx = suggestFrameworkJsx(files, snippets, diagnostics, resolved)
@@ -578,6 +588,7 @@ export interface CheckMarkdownFilesInput {
 /** End-to-end: discover, extract, virtualize, and type-check Markdown files. */
 export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promise<KiiraCheckResult> {
 	const { cwd } = input
+	selectTypescript(cwd)
 	const userConfig = input.config ?? (await loadConfig(cwd))
 	const resolved = resolveConfig(userConfig)
 	const files =
@@ -586,6 +597,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	const snippets: KiiraCheckResult["snippets"] = []
 	const diagnostics: KiiraDiagnostic[] = []
 
+	await loadMdxSupportFor(files)
 	for (const file of files) {
 		const content = await readFile(join(cwd, file), "utf8")
 		const extraction = extractSnippetsFromContent({ markdownFile: file, content, config: resolved })

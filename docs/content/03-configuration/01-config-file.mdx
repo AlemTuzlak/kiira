@@ -29,6 +29,8 @@ Kiira auto-discovers a config file with any of these extensions:
 - `kiira.config.cjs`
 - `kiira.config.json`
 
+The CLI loads TypeScript configs for you. If you call `loadConfig` from `kiira-core` yourself, install `jiti` to load a `.ts` config. Without it, Kiira imports the file natively, which works for `.mjs`, `.js`, and `.cjs` configs, and for `.ts` configs on a Node version that strips types.
+
 You can also point at a specific file with `--config`:
 
 ```bash
