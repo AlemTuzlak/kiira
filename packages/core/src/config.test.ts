@@ -106,6 +106,24 @@ describe("resolveConfig", () => {
 	it("passes through an explicit defaultGroup", () => {
 		expect(resolveConfig({ defaultGroup: "file" }).defaultGroup).toBe("file")
 	})
+
+	it("accepts valid packageMode and workspacePackageResolution values", () => {
+		const resolved = resolveConfig({ packageMode: "packed", workspacePackageResolution: "owner" })
+		expect(resolved.packageMode).toBe("packed")
+		expect(resolved.workspacePackageResolution).toBe("owner")
+	})
+
+	it("throws on an unknown workspacePackageResolution instead of silently using exhaustive", () => {
+		expect(() => resolveConfig({ workspacePackageResolution: "owners" as unknown as "owner" })).toThrow(
+			/workspacePackageResolution must be one of "exhaustive", "owner", got "owners"/
+		)
+	})
+
+	it("throws on an unknown packageMode", () => {
+		expect(() => resolveConfig({ packageMode: "pack" as unknown as "packed" })).toThrow(
+			/packageMode must be one of "workspace", "packed", got "pack"/
+		)
+	})
 })
 
 describe("findConfigFile", () => {

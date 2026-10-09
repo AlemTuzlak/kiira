@@ -47,7 +47,7 @@ import {
 	stableStringify,
 } from "./typescript-hook"
 import { createVirtualFiles, mapVirtualRange } from "./virtual"
-import { buildWorkspaceResolution } from "./workspace"
+import { buildWorkspaceResolution, discoverWorkspacePackages, markdownOwnerKey } from "./workspace"
 
 // The lib-dir override and the classic overlay host live in `engine.ts` alongside
 // the classic engine; re-export the host-facing hooks so consumers (index, vscode)
@@ -280,8 +280,8 @@ export function documentFromVirtualFiles(file: string, virtualFiles: VirtualFile
 /**
  * Resolves the compiler options each Markdown file is checked with, running the
  * TypeScript hooks. Shared by checking and code fixes so both see identical options.
- * Base options are built once per `replaceTsconfig` value (and per file with owner-scoped
- * workspace resolution).
+ * Base options are built once per `replaceTsconfig` value (and per owner package with
+ * owner-scoped workspace resolution).
  */
 export function createOptionsResolver(
 	cwd: string,
@@ -290,8 +290,21 @@ export function createOptionsResolver(
 ) {
 	const bases = new Map<string, Promise<ts.CompilerOptions>>()
 	const ownerScoped = resolved.packageMode === "workspace" && resolved.workspacePackageResolution === "owner"
+	let packages: ReturnType<typeof discoverWorkspacePackages> | undefined
 	let env = shared
+	/**
+	 * The owner-scope key of a document (see {@link markdownOwnerKey}), or `""` when
+	 * workspace resolution is not owner-scoped. Docs with different keys never share options.
+	 */
+	const scopeFor = async (file: string): Promise<string> => {
+		if (!ownerScoped) {
+			return ""
+		}
+		packages ??= discoverWorkspacePackages(cwd)
+		return markdownOwnerKey(cwd, await packages, file)
+	}
 	return {
+		scopeFor,
 		/** The merged hook result for a document, or `undefined` when no hook applies. */
 		async hookFor(file: string, doc: HookDocument): Promise<TypescriptHookOutcome | undefined> {
 			if (!hasTypescriptHooks(resolved)) {
@@ -303,12 +316,12 @@ export function createOptionsResolver(
 		},
 		async optionsFor(file: string, hook?: TypescriptHookOutcome): Promise<ts.CompilerOptions> {
 			const replaceTsconfig = hook?.replaceTsconfig ?? false
-			// Owner-scoped workspace resolution depends on the file, so build its base per file.
-			const markdownFiles = ownerScoped ? [file] : undefined
-			const key = `${replaceTsconfig}\0${markdownFiles?.[0] ?? ""}`
+			// Owner-scoped workspace resolution depends on the package that owns the file,
+			// so build one base per owner. Every file of an owner gets the same scope.
+			const key = `${replaceTsconfig}\0${await scopeFor(file)}`
 			let base = bases.get(key)
 			if (!base) {
-				base = buildBaseOptions(cwd, resolved, { replaceTsconfig, markdownFiles })
+				base = buildBaseOptions(cwd, resolved, { replaceTsconfig, markdownFiles: ownerScoped ? [file] : undefined })
 				bases.set(key, base)
 			}
 			return optionsForFile(cwd, await base, resolved, file, hook)
@@ -365,7 +378,10 @@ async function runChecker(
 		const hook = await resolver.hookFor(file, doc)
 		hooks.set(file, hook)
 		const options = await resolver.optionsFor(file, hook)
-		const key = stableStringify(options)
+		// With owner-scoped workspace resolution, each owner package's docs are checked in
+		// their own programs, so a doc gets the same result whether it is checked alone
+		// (the editor, the group= probe) or with the whole repo (the CLI).
+		const key = `${await resolver.scopeFor(file)}\0${stableStringify(options)}`
 		let partition = partitions.get(key)
 		if (!partition) {
 			partition = { options, virtualFiles: [] }

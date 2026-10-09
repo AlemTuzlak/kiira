@@ -310,6 +310,34 @@ function toSourceIfPresent(absTarget: string): string | undefined {
 	return src !== absTarget && existsSync(src) ? src : undefined
 }
 
+/** True when `file` is `dir` itself or lies inside it. */
+function isInside(dir: string, file: string): boolean {
+	const rel = relative(dir, file)
+	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+/** The deepest workspace package containing `file`, or `root` when none does. */
+function ownerDirectory(root: string, packages: readonly WorkspacePackage[], file: string): string {
+	return (
+		packages
+			.filter((pkg) => isInside(resolve(pkg.dir), file))
+			.sort((left, right) => right.dir.length - left.dir.length)[0]?.dir ?? root
+	)
+}
+
+const ownerFallbackWarnings = new Set<string>()
+
+/** Warn (once per kind of cause) that owner scoping could not be applied. */
+function warnOwnerFallback(kind: string, reason: string): void {
+	if (ownerFallbackWarnings.has(kind)) {
+		return
+	}
+	ownerFallbackWarnings.add(kind)
+	process.emitWarning(
+		`Kiira: workspacePackageResolution "owner" fell back to "exhaustive" because ${reason}. Every workspace package's dependencies are resolvable for this check.`
+	)
+}
+
 /**
  * Build TypeScript `paths` that make a workspace's packages resolvable when
  * type-checking docs from the repo root — which a pnpm isolated `node_modules`
@@ -321,10 +349,13 @@ function toSourceIfPresent(absTarget: string): string | undefined {
  * package's root and its subpaths on the *same* side of the src/dist line, avoiding
  * "two copies of the same type" errors when an export key is renamed (e.g.
  * `./adapters` -> `dist/esm/activities`). Every package's `node_modules` is added
- * as a `*` fallback so third-party deps resolve too.
+ * as a `*` fallback so third-party deps resolve too. In owner mode only the owners',
+ * the root's and the owners' direct workspace dependencies' `node_modules` are added;
+ * other packages add just their `@types`.
  *
  * Returns `undefined` when `cwd` is not a workspace. Cached with the workspace
- * snapshot (see {@link discoverWorkspacePackages}) and frozen, so callers cannot mutate it.
+ * snapshot (see {@link discoverWorkspacePackages}), per set of owners in owner mode,
+ * and frozen, so callers cannot mutate it.
  */
 export async function buildWorkspaceResolution(
 	cwd: string,
@@ -355,6 +386,20 @@ export async function buildWorkspaceResolution(
 	return scoped
 }
 
+/**
+ * The owner-scope key of a Markdown file: the directory of the workspace package that
+ * owns it, `cwd` when no package does, or `""` when the file is outside `cwd`. Docs
+ * with the same key are checked with the same scope, so owner-scoped resolution gives
+ * a document the same result whether it is checked alone (the editor) or with the
+ * whole repo (the CLI).
+ */
+export function markdownOwnerKey(cwd: string, packages: readonly WorkspacePackage[], markdownFile: string): string {
+	const root = resolve(cwd)
+	const file = resolve(root, markdownFile)
+	return isInside(root, file) ? ownerDirectory(root, packages, file) : ""
+}
+
+/** Find the owner packages of `markdownFiles` and their declared dependencies; `undefined` means "do not scope". */
 async function resolveWorkspaceOwners(
 	cwd: string,
 	packages: readonly WorkspacePackage[],
@@ -367,28 +412,18 @@ async function resolveWorkspaceOwners(
 	const directories = new Set<string>()
 	const directDependencies = new Set<string>()
 	for (const markdownFile of markdownFiles) {
-		if (isAbsolute(markdownFile)) {
-			return undefined
-		}
+		// Absolute paths resolve as-is; relative ones resolve against `cwd`.
 		const file = resolve(root, markdownFile)
-		const relativeToRoot = relative(root, file)
-		if (relativeToRoot === ".." || relativeToRoot.startsWith(`..${sep}`) || isAbsolute(relativeToRoot)) {
+		if (!isInside(root, file)) {
+			warnOwnerFallback("outside", `${markdownFile} is outside ${root}`)
 			return undefined
 		}
-		const owner =
-			packages
-				.filter((pkg) => {
-					const relativeToPackage = relative(resolve(pkg.dir), file)
-					return (
-						relativeToPackage === "" ||
-						(relativeToPackage !== ".." && !relativeToPackage.startsWith(`..${sep}`) && !isAbsolute(relativeToPackage))
-					)
-				})
-				.sort((left, right) => right.dir.length - left.dir.length)[0]?.dir ?? root
+		const owner = ownerDirectory(root, packages, file)
 		let manifest: Record<string, unknown>
 		try {
 			manifest = JSON.parse(await readFile(join(owner, "package.json"), "utf8")) as Record<string, unknown>
 		} catch {
+			warnOwnerFallback("manifest", `${join(owner, "package.json")} (the owner of ${markdownFile}) could not be read`)
 			return undefined
 		}
 		directories.add(resolve(owner))
@@ -470,11 +505,10 @@ async function resolveWorkspace(
 			}
 		}
 		addNodeModulesFallback(cwd)
+		// Other packages add their full `node_modules` only when the owner depends on
+		// them; otherwise they contribute just their `@types` (added below).
 		for (const pkg of packages) {
-			if (
-				!owners.directories.has(resolve(pkg.dir)) &&
-				(existsSync(join(pkg.dir, "node_modules", "@types")) || owners.directDependencies.has(pkg.name))
-			) {
+			if (owners.directDependencies.has(pkg.name)) {
 				addNodeModulesFallback(pkg.dir)
 			}
 		}
@@ -509,16 +543,8 @@ async function resolveWorkspace(
 		}
 		if (!scoped) {
 			addNodeModulesFallback(pkg.dir)
-		} else if (
-			owners.directories.has(resolve(pkg.dir)) ||
-			existsSync(join(pkg.dir, "node_modules", "@types")) ||
-			owners.directDependencies.has(pkg.name)
-		) {
-			addNodeModulesFallback(pkg.dir)
 		}
-		if (!scoped || owners.directories.has(resolve(pkg.dir)) || existsSync(join(pkg.dir, "node_modules", "@types"))) {
-			addTypeRoot(pkg.dir)
-		}
+		addTypeRoot(pkg.dir)
 	}
 
 	if (nodeModulesFallbacks.length > 0) {

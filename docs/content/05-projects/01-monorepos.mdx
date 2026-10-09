@@ -29,9 +29,10 @@ The result: docs that import your `@your-scope/*` packages **and** their third-p
 
 Workspace dependency lookup is exhaustive by default. For large workspaces, set
 `workspacePackageResolution: "owner"` to try the package that owns each Markdown file, then the
-workspace root, then packages with `@types` or a direct dependency declared by an owner. This
-can miss undeclared workspace dependencies. A check that spans several packages uses the union
-of their candidates and keeps the same shared program.
+workspace root, then the workspace packages that the owner declares as dependencies. Other
+packages add only their `@types`. This can miss undeclared workspace dependencies. Kiira checks
+the docs of each owner package in a separate program, so a doc gets the same result in the CLI
+and in the editor.
 
 ## Example
 

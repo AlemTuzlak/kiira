@@ -91,7 +91,7 @@ console.log(result.stats) // { markdownFiles, snippets, checked, ignored, errors
 > `config` accepts a `Partial<KiiraConfig>`; omit it to load the nearest `kiira.config.*`.
 > Every input/result shape is fully typed — let your editor guide you, or read the exports below.
 
-Workspace dependency lookup is exhaustive by default. Set `workspacePackageResolution: "owner"` to try the package that owns each Markdown file, the workspace root, then workspace packages that declare `@types` or are direct dependencies of an owner. This can miss imports from undeclared workspace dependencies. A check that contains files from several packages keeps one shared program and uses the union of their candidates.
+Workspace dependency lookup is exhaustive by default. Set `workspacePackageResolution: "owner"` to try the package that owns each Markdown file, the workspace root, then the workspace packages that the owner declares as dependencies. Other packages add only their `@types`. This can miss imports from undeclared workspace dependencies. Kiira checks the files of each owner package in a separate program, so a file gets the same result whether you check it alone or with the whole repo.
 
 ## Public API
 

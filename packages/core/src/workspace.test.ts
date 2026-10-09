@@ -146,42 +146,60 @@ describe("owner-scoped workspace resolution", () => {
 				markdownFiles: ["packages/owner/README.md"],
 			})
 			expect(new Set(checkOptions.paths?.["*"] ?? [])).toEqual(new Set(fallbacks))
-			expect(fallbacks[0]).toBe(join(dir, "packages", "owner", "node_modules", "*"))
-			expect(fallbacks[1]).toBe(join(dir, "node_modules", "*"))
-			for (const name of ["direct", "dev", "peer", "optional", "types"]) {
-				expect(fallbacks).toContain(join(dir, "packages", name, "node_modules", "*"))
+			const posix = (...parts: string[]): string => join(...parts).replace(/\\/g, "/")
+			expect(fallbacks[0]).toBe(posix(dir, "packages", "owner", "node_modules", "*"))
+			expect(fallbacks[1]).toBe(posix(dir, "node_modules", "*"))
+			for (const name of ["direct", "dev", "peer", "optional"]) {
+				expect(fallbacks).toContain(posix(dir, "packages", name, "node_modules", "*"))
 			}
-			expect(fallbacks).not.toContain(join(dir, "packages", "transitive", "node_modules", "*"))
+			// A package the owner does not depend on adds only its @types, not its node_modules.
+			expect(fallbacks).not.toContain(posix(dir, "packages", "types", "node_modules", "*"))
+			expect(fallbacks).not.toContain(posix(dir, "packages", "transitive", "node_modules", "*"))
 			expect(new Set(fallbacks).size).toBe(fallbacks.length)
 			expect(owner?.paths["@demo/transitive/*"]).toBeDefined()
-			expect(owner?.paths["@demo/direct"]?.[0]).toBe(join(dir, "packages", "direct", "types", "index.d.ts"))
+			expect(owner?.paths["@demo/direct"]?.[0]).toBe(posix(dir, "packages", "direct", "types", "index.d.ts"))
 			expect(owner?.typeRoots).toEqual([
-				join(dir, "packages", "owner", "node_modules", "@types").replace(/\\/g, "/"),
-				join(dir, "node_modules", "@types").replace(/\\/g, "/"),
-				join(dir, "packages", "types", "node_modules", "@types").replace(/\\/g, "/"),
+				posix(dir, "packages", "owner", "node_modules", "@types"),
+				posix(dir, "node_modules", "@types"),
+				posix(dir, "packages", "types", "node_modules", "@types"),
 			])
+
+			// An absolute Markdown path inside cwd scopes exactly like its relative form.
+			const absolute = await buildWorkspaceResolution(dir, {
+				workspacePackageResolution: "owner",
+				markdownFiles: [join(dir, "packages", "owner", "README.md")],
+			})
+			expect(new Set(absolute?.paths["*"] ?? [])).toEqual(new Set(fallbacks))
+			expect(absolute?.typeRoots).toEqual(owner?.typeRoots)
 
 			const mixed = await buildWorkspaceResolution(dir, {
 				workspacePackageResolution: "owner",
 				markdownFiles: ["packages/owner/README.md", "packages/direct/README.md"],
 			})
-			expect(mixed?.paths["*"]).toContain(join(dir, "packages", "direct", "node_modules", "*"))
+			expect(mixed?.paths["*"]).toContain(posix(dir, "packages", "direct", "node_modules", "*"))
 
 			const rootOwner = await buildWorkspaceResolution(dir, {
 				workspacePackageResolution: "owner",
 				markdownFiles: ["README.md"],
 			})
-			expect(rootOwner?.paths["*"]?.[0]).toBe(join(dir, "node_modules", "*"))
-			expect(rootOwner?.paths["*"]).toContain(join(dir, "packages", "root-dep", "node_modules", "*"))
+			expect(rootOwner?.paths["*"]?.[0]).toBe(posix(dir, "node_modules", "*"))
+			expect(rootOwner?.paths["*"]).toContain(posix(dir, "packages", "root-dep", "node_modules", "*"))
 
-			const unknown = await buildWorkspaceResolution(dir, {
-				workspacePackageResolution: "owner",
-				markdownFiles: ["../outside.md"],
-			})
-			expect(unknown?.baseUrl).toBe(exhaustive?.baseUrl)
-			expect(new Set(unknown?.paths["*"] ?? [])).toEqual(new Set(exhaustive?.paths["*"] ?? []))
-			expect(unknown?.typeRoots).toEqual(exhaustive?.typeRoots)
-			expect(Object.keys(unknown?.paths ?? {}).sort()).toEqual(Object.keys(exhaustive?.paths ?? {}).sort())
+			const warn = vi.spyOn(process, "emitWarning").mockImplementation(() => {})
+			try {
+				const unknown = await buildWorkspaceResolution(dir, {
+					workspacePackageResolution: "owner",
+					markdownFiles: ["../outside.md"],
+				})
+				expect(unknown?.baseUrl).toBe(exhaustive?.baseUrl)
+				expect(new Set(unknown?.paths["*"] ?? [])).toEqual(new Set(exhaustive?.paths["*"] ?? []))
+				expect(unknown?.typeRoots).toEqual(exhaustive?.typeRoots)
+				expect(Object.keys(unknown?.paths ?? {}).sort()).toEqual(Object.keys(exhaustive?.paths ?? {}).sort())
+				expect(warn).toHaveBeenCalledTimes(1)
+				expect(warn.mock.calls[0]?.[0]).toMatch(/fell back to "exhaustive" because \.\.\/outside\.md is outside/)
+			} finally {
+				warn.mockRestore()
+			}
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}
@@ -212,8 +230,48 @@ describe("owner-scoped workspace resolution", () => {
 			})
 			expect(options.paths?.["*"]).toEqual(["user/*"])
 			expect(options.paths?.["@demo/owner"]).toEqual(["user/owner"])
-			expect(options.typeRoots).toContain(join(dir, "custom-types"))
+			expect(options.typeRoots?.map((root) => root.replace(/\\/g, "/"))).toContain(
+				join(dir, "custom-types").replace(/\\/g, "/")
+			)
 			expect(options.typeRoots).toContain(join(dir, "packages", "owner", "node_modules", "@types").replace(/\\/g, "/"))
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("checks each doc with its own owner's scope, alone or together with other docs", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-ws-partition-"))
+		try {
+			writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
+			writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "workspace-root" }))
+			for (const name of ["a", "b"]) {
+				mkdirSync(join(dir, "packages", name), { recursive: true })
+				writeFileSync(join(dir, "packages", name, "package.json"), JSON.stringify({ name: `@demo/${name}` }))
+				writeFileSync(
+					join(dir, "packages", name, "README.md"),
+					'```ts\nimport { only } from "only-b"\nconst n: number = only\n```\n'
+				)
+			}
+			// `only-b` is installed in package b only.
+			const lib = join(dir, "packages", "b", "node_modules", "only-b")
+			mkdirSync(lib, { recursive: true })
+			writeFileSync(join(lib, "package.json"), JSON.stringify({ name: "only-b", types: "index.d.ts" }))
+			writeFileSync(join(lib, "index.d.ts"), "export declare const only: number\n")
+
+			const config = { include: ["**/*.md"], workspacePackageResolution: "owner" as const }
+			const errorFiles = (diagnostics: KiiraDiagnostic[]): string[] =>
+				[...new Set(diagnostics.filter((d) => d.severity === "error").map((d) => d.markdownFile))].sort()
+
+			const together = await checkMarkdownFiles({
+				cwd: dir,
+				files: ["packages/a/README.md", "packages/b/README.md"],
+				config,
+			})
+			const aloneA = await checkMarkdownFiles({ cwd: dir, files: ["packages/a/README.md"], config })
+			const aloneB = await checkMarkdownFiles({ cwd: dir, files: ["packages/b/README.md"], config })
+			expect(errorFiles(together.diagnostics)).toEqual(["packages/a/README.md"])
+			expect(errorFiles(aloneA.diagnostics)).toEqual(["packages/a/README.md"])
+			expect(errorFiles(aloneB.diagnostics)).toEqual([])
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}

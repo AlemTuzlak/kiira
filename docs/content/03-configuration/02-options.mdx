@@ -95,11 +95,13 @@ packageMode: "workspace"
 ## `workspacePackageResolution`
 
 Workspace dependency lookup is exhaustive by default. Set this option to `"owner"` to try the
-package that owns each Markdown file first, then the workspace root, then packages with `@types`
-or a direct dependency declared by an owner. This can miss undeclared workspace dependencies.
-When a check includes Markdown files from several packages, Kiira keeps one shared TypeScript
-program and uses the union of their candidates. Workspace package exports, user `paths`, and
-`typeRoots` remain in effect.
+package that owns each Markdown file first, then the workspace root, then the workspace packages
+that the owner declares as dependencies. Other packages add only their `@types`. This can miss
+undeclared workspace dependencies. Kiira checks the Markdown files of each owner package in a
+separate TypeScript program, so a file gets the same result in the CLI and in the editor.
+Workspace package exports, user `paths`, and `typeRoots` remain in effect. If Kiira cannot find
+the owner (a file outside the project root, or an unreadable `package.json`), it prints a
+warning and uses exhaustive lookup. Kiira rejects values other than `"exhaustive"` and `"owner"`.
 
 ## `defaultValidate`
 

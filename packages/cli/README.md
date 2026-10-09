@@ -221,11 +221,13 @@ fallback. So docs that import `@your-scope/*` **and** third-party libs resolve o
 no hand-written `tsconfig` `paths` required.
 
 For large workspaces, set `workspacePackageResolution: "owner"` to check the owning package's
-`node_modules` first, then the workspace root, followed by packages with `@types` or a direct
-dependency declared by the owner. The default `"exhaustive"` mode keeps the existing lookup
-across every package. Owner mode can miss undeclared workspace dependencies; checks that span
-several packages use the union of their candidates. User `paths`, declaration exports, and
-`typeRoots` remain in effect.
+`node_modules` first, then the workspace root, then the workspace packages that the owner
+declares as dependencies. Other packages add only their `@types`. Kiira checks the docs of each
+owner package in a separate program, so a doc gets the same result in the CLI and in the editor.
+The default `"exhaustive"` mode keeps the existing lookup across every package. Owner mode can
+miss undeclared workspace dependencies. User `paths`, declaration exports, and `typeRoots` remain
+in effect. If Kiira cannot find the owner (a file outside the project root, or an unreadable
+`package.json`), it prints a warning and uses exhaustive lookup.
 
 ## Per-glob overrides & language detection
 
