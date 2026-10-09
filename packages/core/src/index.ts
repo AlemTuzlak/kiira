@@ -66,6 +66,7 @@ export {
 	buildWorkspaceResolution,
 	discoverWorkspacePackages,
 	parsePnpmWorkspacePackages,
+	resetWorkspaceCache,
 	type WorkspacePackage,
 	type WorkspaceResolution,
 } from "./workspace"

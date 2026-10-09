@@ -212,7 +212,7 @@ export interface KiiraProject {
 	/** The parsed `package.json` at `cwd`, if any. */
 	packageJson: Record<string, unknown> | undefined
 	/** Named packages of the pnpm/npm/yarn workspace rooted at `cwd` (empty when not a workspace). */
-	workspacePackages: Array<{ name: string; dir: string }>
+	workspacePackages: ReadonlyArray<{ readonly name: string; readonly dir: string }>
 	/** Whether git tracks `path` (cwd-relative or absolute). `false` when git is unavailable. */
 	isTracked: (path: string) => boolean
 }

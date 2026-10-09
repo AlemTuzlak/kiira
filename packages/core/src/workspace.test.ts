@@ -1,10 +1,30 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { checkMarkdownFiles } from "./check"
 import type { KiiraDiagnostic } from "./types"
-import { buildWorkspaceResolution, discoverWorkspacePackages, parsePnpmWorkspacePackages } from "./workspace"
+import {
+	buildWorkspaceResolution,
+	discoverWorkspacePackages,
+	parsePnpmWorkspacePackages,
+	resetWorkspaceCache,
+} from "./workspace"
+
+/** Lets a test change the workspace right after a glob finishes, before the cache stores its result. */
+const globHook = vi.hoisted(() => ({ after: undefined as (() => void) | undefined }))
+
+vi.mock("tinyglobby", async (importOriginal) => {
+	const original = await importOriginal<typeof import("tinyglobby")>()
+	return {
+		...original,
+		glob: async (...args: Parameters<typeof original.glob>) => {
+			const result = await original.glob(...args)
+			globHook.after?.()
+			return result
+		},
+	}
+})
 
 const here = dirname(fileURLToPath(import.meta.url))
 const workspace = resolve(here, "../tests/fixtures/workspace")
@@ -78,5 +98,142 @@ describe("checkMarkdownFiles with workspace resolution", () => {
 		// proving `@demo/lib` resolved rather than failing as a missing module (TS2307).
 		expect(errors(result.diagnostics).some((d) => d.code === 2305)).toBe(true)
 		expect(errors(result.diagnostics).some((d) => d.code === 2307)).toBe(false)
+	})
+})
+
+describe("workspace cache", () => {
+	/** Force a path's mtime forward so a change made within the same millisecond is still detectable. */
+	function touch(path: string): void {
+		const later = new Date(Date.now() + 5_000)
+		utimesSync(path, later, later)
+	}
+
+	function makeWorkspace(): string {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-ws-cache-"))
+		writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/*'\n")
+		mkdirSync(join(dir, "packages", "a"), { recursive: true })
+		writeFileSync(join(dir, "packages", "a", "package.json"), JSON.stringify({ name: "@demo/a" }))
+		return dir
+	}
+
+	beforeEach(() => {
+		resetWorkspaceCache()
+	})
+
+	it("returns the same resolution object while the workspace is unchanged", async () => {
+		const dir = makeWorkspace()
+		try {
+			const first = await buildWorkspaceResolution(dir)
+			expect(first).toBe(await buildWorkspaceResolution(dir))
+			expect(await discoverWorkspacePackages(dir)).toEqual(await discoverWorkspacePackages(dir))
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up a package added under a workspace glob", async () => {
+		const dir = makeWorkspace()
+		try {
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name)).toEqual(["@demo/a"])
+			mkdirSync(join(dir, "packages", "b"))
+			writeFileSync(join(dir, "packages", "b", "package.json"), JSON.stringify({ name: "@demo/b" }))
+			touch(join(dir, "packages"))
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name).sort()).toEqual(["@demo/a", "@demo/b"])
+			expect(await buildWorkspaceResolution(dir)).toHaveProperty(["paths", "@demo/b/*"])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up @types installed into a package after the first resolution", async () => {
+		const dir = makeWorkspace()
+		try {
+			const types = join(dir, "packages", "a", "node_modules", "@types")
+			mkdirSync(types, { recursive: true })
+			expect((await buildWorkspaceResolution(dir))?.paths).not.toHaveProperty("react")
+			mkdirSync(join(types, "react"))
+			touch(types)
+			expect((await buildWorkspaceResolution(dir))?.paths.react?.[0]?.endsWith("node_modules/@types/react")).toBe(true)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up a package.json added to an existing empty directory", async () => {
+		const dir = makeWorkspace()
+		try {
+			mkdirSync(join(dir, "packages", "b"))
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name)).toEqual(["@demo/a"])
+			writeFileSync(join(dir, "packages", "b", "package.json"), JSON.stringify({ name: "@demo/b" }))
+			touch(join(dir, "packages", "b"))
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name).sort()).toEqual(["@demo/a", "@demo/b"])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up a package added to an existing subfolder of a nested glob", async () => {
+		const dir = mkdtempSync(join(tmpdir(), "kiira-ws-cache-"))
+		try {
+			writeFileSync(join(dir, "pnpm-workspace.yaml"), "packages:\n  - 'packages/**'\n")
+			mkdirSync(join(dir, "packages", "group", "a"), { recursive: true })
+			writeFileSync(join(dir, "packages", "group", "a", "package.json"), JSON.stringify({ name: "@demo/a" }))
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name)).toEqual(["@demo/a"])
+			mkdirSync(join(dir, "packages", "group", "b"))
+			writeFileSync(join(dir, "packages", "group", "b", "package.json"), JSON.stringify({ name: "@demo/b" }))
+			touch(join(dir, "packages", "group"))
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name).sort()).toEqual(["@demo/a", "@demo/b"])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("does not cache a package added while the workspace is being scanned", async () => {
+		const dir = makeWorkspace()
+		globHook.after = () => {
+			globHook.after = undefined
+			mkdirSync(join(dir, "packages", "b"))
+			writeFileSync(join(dir, "packages", "b", "package.json"), JSON.stringify({ name: "@demo/b" }))
+			touch(join(dir, "packages"))
+		}
+		try {
+			await discoverWorkspacePackages(dir)
+			expect((await discoverWorkspacePackages(dir)).map((p) => p.name).sort()).toEqual(["@demo/a", "@demo/b"])
+		} finally {
+			globHook.after = undefined
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("keeps the cache intact when a caller mutates what it got", async () => {
+		const dir = makeWorkspace()
+		try {
+			const packages = await discoverWorkspacePackages(dir)
+			packages.push({ name: "@demo/fake", dir })
+			packages.sort().reverse()
+			Object.assign(packages[1] ?? {}, { name: "@demo/renamed" })
+			expect(await discoverWorkspacePackages(dir)).toEqual([{ name: "@demo/a", dir: join(dir, "packages", "a") }])
+			const resolution = await buildWorkspaceResolution(dir)
+			const targets = resolution?.paths["@demo/a/*"] ?? []
+			const expected = [...targets]
+			expect(() => targets.push("x")).toThrow(TypeError)
+			expect(() => resolution?.typeRoots.push("x")).toThrow(TypeError)
+			expect((await buildWorkspaceResolution(dir))?.paths["@demo/a/*"]).toEqual(expected)
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
+	})
+
+	it("picks up a renamed export after its package.json changes", async () => {
+		const dir = makeWorkspace()
+		try {
+			expect(await buildWorkspaceResolution(dir)).not.toHaveProperty(["paths", "@demo/a/sub"])
+			const manifest = join(dir, "packages", "a", "package.json")
+			writeFileSync(manifest, JSON.stringify({ name: "@demo/a", exports: { ".": "./index.js", "./sub": "./sub.js" } }))
+			touch(manifest)
+			expect(await buildWorkspaceResolution(dir)).toHaveProperty(["paths", "@demo/a/sub"])
+		} finally {
+			rmSync(dir, { recursive: true, force: true })
+		}
 	})
 })
