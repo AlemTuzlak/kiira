@@ -161,7 +161,7 @@ export function compilerOptionsToTsconfigJson(options: ts.CompilerOptions): Reco
 }
 
 /** Offsets at which each line of `content` starts; computed once per file, then shared by every diagnostic. */
-function lineStartsOf(content: string): number[] {
+export function lineStartsOf(content: string): number[] {
 	const starts = [0]
 	for (let i = 0; i < content.length; i += 1) {
 		if (content.charCodeAt(i) === 10 /* \n */) {
@@ -172,7 +172,7 @@ function lineStartsOf(content: string): number[] {
 }
 
 /** Zero-based line/character for a UTF-16 offset (matches classic coords); binary search over `lineStarts`. */
-function offsetToPosition(lineStarts: number[], contentLength: number, offset: number): SourcePosition {
+export function offsetToPosition(lineStarts: number[], contentLength: number, offset: number): SourcePosition {
 	const clamped = Math.max(0, Math.min(offset, contentLength))
 	let low = 0
 	let high = lineStarts.length - 1
