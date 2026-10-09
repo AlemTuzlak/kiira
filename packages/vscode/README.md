@@ -17,7 +17,7 @@ exact line inside the fence.
 
 ## Requirements
 
-The extension checks with the workspace's own TypeScript (5 or 6) when one is installed, so diagnostics match your project, and otherwise uses the TypeScript that VS Code ships for its built-in TypeScript features. It does not bundle a copy of TypeScript.
+The extension needs TypeScript 5.4 or newer (below 7). It checks each workspace folder with the folder's own TypeScript when one is installed, so diagnostics match your project, and otherwise uses the TypeScript that VS Code ships for its built-in TypeScript features. It does not bundle a copy of TypeScript. When you install or update TypeScript in the workspace, reload the window to use it.
 
 ## Features
 

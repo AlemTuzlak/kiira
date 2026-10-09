@@ -53,7 +53,7 @@ import { buildWorkspaceResolution } from "./workspace"
 // the classic engine; re-export the host-facing hooks so consumers (index, vscode)
 // keep importing them from `check`.
 export { applyLibDirOverride, resetClassicEngineCache, setTypescriptLibDir } from "./engine"
-export { setTypescriptModule } from "./typescript"
+export { setFallbackTypescriptModule, setTypescriptModule } from "./typescript"
 
 function defaultCompilerOptions(): ts.CompilerOptions {
 	const ts = getTypescript()

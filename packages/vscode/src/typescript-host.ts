@@ -1,19 +1,24 @@
 import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import type ts from "typescript"
 
-/** A TypeScript the extension can hand to kiira-core, and where it came from. */
-export interface FoundTypescript {
-	module: typeof ts
-	/** Absolute path of the loaded `typescript.js`; its directory holds the `lib.*.d.ts` files. */
+/** An installed TypeScript kiira-core can use. */
+export interface InstalledTypescript {
+	/** Absolute path of `typescript.js`; its directory holds the `lib.*.d.ts` files. */
 	path: string
 	version: string
-	source: "workspace" | "vscode"
+}
+
+export interface TypescriptSetup {
+	/** Workspace folders with their own TypeScript. kiira-core loads these itself, per folder. */
+	workspace: Array<InstalledTypescript & { folder: string }>
+	/** VS Code's TypeScript, loaded only when a folder has none of its own. */
+	fallback: (InstalledTypescript & { module: typeof ts }) | undefined
 }
 
 export interface FindTypescriptInput {
-	/** Workspace folder paths, in order; the first with a usable TypeScript wins. */
+	/** Workspace folder paths. */
 	workspaceFolders: readonly string[]
 	/** `vscode.env.appRoot`: VS Code ships TypeScript for its own language features under here. */
 	appRoot: string
@@ -21,72 +26,50 @@ export interface FindTypescriptInput {
 	load?: (path: string) => typeof ts
 }
 
-const classicMajor = (version: string): boolean => {
-	const major = Number.parseInt(version.split(".")[0] ?? "", 10)
-	// TypeScript 7 is the native port: `require("typescript")` has no classic compiler API.
-	return major === 5 || major === 6
+/** kiira-core needs TypeScript 5.4+; TypeScript 7 is the native port with no classic compiler API. */
+export function isSupportedTypescript(version: string): boolean {
+	const [major, minor] = version.split(".").map((part) => Number.parseInt(part, 10))
+	return (major === 5 && (minor ?? 0) >= 4) || major === 6
+}
+
+/** The supported TypeScript installed in `packageDir`, if any. */
+function installedTypescript(packageDir: string): InstalledTypescript | undefined {
+	const entry = join(packageDir, "lib", "typescript.js")
+	try {
+		const { version } = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as { version?: string }
+		return version && isSupportedTypescript(version) && existsSync(entry) ? { path: entry, version } : undefined
+	} catch {
+		return undefined
+	}
 }
 
 /**
- * The workspace's TypeScript: `node_modules/typescript` in `folder` or any parent
- * (a monorepo hoists it to the root). A manual walk rather than `require.resolve`,
- * which would also consult Node's global folders and NODE_PATH.
+ * The workspace folder's own TypeScript. Only the folder itself is searched: a
+ * walk up past it could run a `node_modules/typescript` planted outside the
+ * workspace (for example `C:\node_modules`).
  */
-function workspaceTypescript(folder: string): { path: string; version: string } | undefined {
-	let dir = folder
-	for (;;) {
-		const manifestPath = join(dir, "node_modules", "typescript", "package.json")
-		if (existsSync(manifestPath)) {
-			try {
-				const { version } = JSON.parse(readFileSync(manifestPath, "utf8")) as { version?: string }
-				const entry = join(dirname(manifestPath), "lib", "typescript.js")
-				return version && classicMajor(version) && existsSync(entry) ? { path: entry, version } : undefined
-			} catch {
-				return undefined
-			}
-		}
-		const parent = dirname(dir)
-		if (parent === dir) {
-			return undefined
-		}
-		dir = parent
-	}
+function workspaceTypescript(folder: string): InstalledTypescript | undefined {
+	return installedTypescript(join(folder, "node_modules", "typescript"))
 }
 
-function vscodeTypescript(appRoot: string): { path: string; version: string } | undefined {
-	const dir = join(appRoot, "extensions", "node_modules", "typescript")
-	const entry = join(dir, "lib", "typescript.js")
-	if (!existsSync(entry)) {
-		return undefined
-	}
-	try {
-		const { version } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { version?: string }
-		return { path: entry, version: version ?? "unknown" }
-	} catch {
-		return { path: entry, version: "unknown" }
-	}
+function vscodeTypescript(appRoot: string): InstalledTypescript | undefined {
+	return installedTypescript(join(appRoot, "extensions", "node_modules", "typescript"))
 }
 
 const defaultLoad = (path: string): typeof ts => createRequire(__filename)(path) as typeof ts
 
 /**
- * Pick the TypeScript the extension checks with, instead of bundling one: the
- * first workspace folder's own TypeScript 5/6 (so diagnostics match the project),
- * else the copy VS Code ships for its built-in TypeScript features. `undefined`
- * when neither exists, which only happens with the built-in extension disabled
- * and no project TypeScript.
+ * Find the TypeScript the extension checks with, instead of bundling one: each
+ * workspace folder's own TypeScript (so diagnostics match the project), and the
+ * copy VS Code ships for its built-in TypeScript features as the fallback for
+ * folders without one. Both pass the same version check.
  */
-export function findTypescript(input: FindTypescriptInput): FoundTypescript | undefined {
+export function findTypescript(input: FindTypescriptInput): TypescriptSetup {
 	const load = input.load ?? defaultLoad
-	for (const folder of input.workspaceFolders) {
+	const workspace = input.workspaceFolders.flatMap((folder) => {
 		const found = workspaceTypescript(folder)
-		if (found) {
-			return { module: load(found.path), ...found, source: "workspace" }
-		}
-	}
-	const builtin = vscodeTypescript(input.appRoot)
-	if (builtin) {
-		return { module: load(builtin.path), ...builtin, source: "vscode" }
-	}
-	return undefined
+		return found ? [{ ...found, folder }] : []
+	})
+	const builtin = workspace.length < input.workspaceFolders.length ? vscodeTypescript(input.appRoot) : undefined
+	return { workspace, fallback: builtin ? { ...builtin, module: load(builtin.path) } : undefined }
 }

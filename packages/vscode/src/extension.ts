@@ -7,8 +7,8 @@ import {
 	checkMarkdownFiles,
 	loadConfig,
 	loadConfigFile,
+	setFallbackTypescriptModule,
 	setTypescriptLibDir,
-	setTypescriptModule,
 } from "kiira-core"
 import * as vscode from "vscode"
 import { checkDocument } from "./check-document"
@@ -214,36 +214,78 @@ async function openVirtualFileCommand(provider: VirtualContentProvider): Promise
 	await vscode.window.showTextDocument(virtualDocument, { preview: true })
 }
 
+/**
+ * TypeScript is loaded once, so ask for a reload when a workspace folder's
+ * `node_modules/typescript` is installed, replaced, or updated. Non-recursive
+ * watchers, because `files.watcherExclude` hides `node_modules` from recursive ones.
+ */
+function watchTypescriptInstalls(folders: readonly string[]): vscode.Disposable[] {
+	let prompted = false
+	const promptReload = (): void => {
+		if (prompted) {
+			return
+		}
+		prompted = true
+		void vscode.window
+			.showInformationMessage(
+				"Kiira: TypeScript changed in the workspace. Reload the window to use it.",
+				"Reload Window"
+			)
+			.then((choice) => {
+				prompted = false
+				if (choice === "Reload Window") {
+					void vscode.commands.executeCommand("workbench.action.reloadWindow")
+				}
+			})
+	}
+	const watch = (base: string, pattern: string, ignoreChange = false): vscode.FileSystemWatcher => {
+		const pathPattern = new vscode.RelativePattern(vscode.Uri.file(base), pattern)
+		const watcher = vscode.workspace.createFileSystemWatcher(pathPattern, false, ignoreChange, false)
+		watcher.onDidCreate(promptReload)
+		watcher.onDidChange(promptReload)
+		watcher.onDidDelete(promptReload)
+		return watcher
+	}
+	return folders.flatMap((folder) => [
+		// Changes to `node_modules` itself come from any package, so only its creation counts.
+		watch(folder, "node_modules", true),
+		watch(join(folder, "node_modules"), "typescript"),
+		watch(join(folder, "node_modules", "typescript"), "package.json"),
+	])
+}
+
 export function activate(context: vscode.ExtensionContext): void {
 	collection = vscode.languages.createDiagnosticCollection("kiira")
 	output = vscode.window.createOutputChannel("Kiira")
 
-	// The extension does not bundle TypeScript (it was ~10 MB of the install): it
-	// checks with the workspace's own TypeScript, so diagnostics match the project,
-	// and falls back to the copy VS Code ships for its built-in TypeScript features.
-	// Either is a real on-disk install, so TypeScript finds its own `lib.*.d.ts`.
-	const found = findTypescript({
-		workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath),
-		appRoot: vscode.env.appRoot,
-	})
-	if (!found) {
+	// The extension does not bundle TypeScript (it was ~10 MB of the install).
+	// kiira-core checks each folder with that folder's own TypeScript, so
+	// diagnostics match the project; the copy VS Code ships for its built-in
+	// TypeScript features is the fallback. Either is a real on-disk install, so
+	// TypeScript finds its own `lib.*.d.ts`.
+	const folders = (vscode.workspace.workspaceFolders ?? []).map((folder) => folder.uri.fsPath)
+	const setup = findTypescript({ workspaceFolders: folders, appRoot: vscode.env.appRoot })
+	context.subscriptions.push(collection, output, ...watchTypescriptInstalls(folders))
+	if (folders.length > 0 && setup.workspace.length === 0 && !setup.fallback) {
 		const message =
-			"Kiira needs TypeScript 5 or 6: install `typescript` in the workspace, or enable VS Code's built-in TypeScript extension."
+			"Kiira needs TypeScript 5.4 or newer (below 7): install `typescript` in the workspace, or enable VS Code's built-in TypeScript extension."
 		output.appendLine(message)
 		void vscode.window.showErrorMessage(message)
-		context.subscriptions.push(collection, output)
 		return
 	}
-	output.appendLine(
-		`Using TypeScript ${found.version} from ${found.source === "workspace" ? "the workspace" : "VS Code"} (${found.path})`
-	)
-	setTypescriptModule(found.module)
+	for (const found of setup.workspace) {
+		output.appendLine(`Using TypeScript ${found.version} for ${found.folder} (${found.path})`)
+	}
+	if (setup.fallback) {
+		output.appendLine(
+			`Using TypeScript ${setup.fallback.version} from VS Code for folders without their own (${setup.fallback.path})`
+		)
+	}
+	setFallbackTypescriptModule(setup.fallback?.module)
 	setTypescriptLibDir(undefined)
 	const provider = new VirtualContentProvider()
 
 	context.subscriptions.push(
-		collection,
-		output,
 		vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_SCHEME, provider),
 		vscode.workspace.onDidOpenTextDocument((document) => void checkAndPublish(document)),
 		vscode.workspace.onDidChangeTextDocument((event) => {
