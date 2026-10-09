@@ -17,6 +17,8 @@ export type {
 	RuleScope,
 	RuleSetting,
 	RuleSeverity,
+	TypescriptHookContext,
+	TypescriptHookResult,
 } from "./types"
 
 /** Identity helper that types a rule's `create` context from `meta.scope` and its options from `meta.options`. */

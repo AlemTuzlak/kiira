@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import { getCodeFixes } from "./codefix"
 import { resolveConfig } from "./config"
 import { extractSnippetsFromContent } from "./extract"
+import { definePlugin } from "./plugin"
 import { createVirtualFiles } from "./virtual"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -60,5 +61,86 @@ describe("getCodeFixes", () => {
 		const edit = importFix?.edits[0]
 		expect(edit?.markdownFile).toBe("autoimport.md")
 		expect(edit?.range.start.line).toBe(8)
+	})
+})
+
+describe("getCodeFixes with a TypeScript hook", () => {
+	const input = {
+		cwd,
+		markdownFile: "spelling.md",
+		range: { start: { line: 3, character: 0 }, end: { line: 3, character: 6 } },
+		errorCodes: [2552],
+	}
+	const offersConsole = (actions: Awaited<ReturnType<typeof getCodeFixes>>) =>
+		actions.some((a) => a.edits.some((e) => e.newText === "console"))
+
+	it("checks with the hook's options, so a fix that depends on them goes away", async () => {
+		const virtualFiles = await virtualFilesFor("spelling.md")
+		const seen: string[] = []
+		// Without DOM or node types there is no `console` to suggest.
+		const plugin = definePlugin({
+			name: "hook",
+			typescript: (_file, ctx) => {
+				seen.push(ctx.text)
+				return { compilerOptions: { lib: ["es2022"], types: [] } }
+			},
+		})
+		const withHook = await getCodeFixes({
+			...input,
+			virtualFiles,
+			config: { ...config, plugins: [plugin] },
+			text: "# document text",
+		})
+		expect(offersConsole(withHook)).toBe(false)
+		expect(offersConsole(await getCodeFixes({ ...input, virtualFiles, config }))).toBe(true)
+		expect(seen).toEqual(["# document text"])
+	})
+
+	it("hands the hook the checked fences' code when the caller passes no text", async () => {
+		const virtualFiles = await virtualFilesFor("spelling.md")
+		const seen: string[] = []
+		const plugin = definePlugin({
+			name: "hook",
+			typescript: (_file, ctx) => {
+				seen.push(ctx.text)
+				return undefined
+			},
+		})
+		await getCodeFixes({ ...input, virtualFiles, config: { ...config, plugins: [plugin] } })
+		expect(seen).toEqual(['consle.log("hello")'])
+	})
+
+	it("hands the hook every fence parsed from the text, as checking does", async () => {
+		const virtualFiles = await virtualFilesFor("spelling.md")
+		const seen: string[][] = []
+		const plugin = definePlugin({
+			name: "hook",
+			typescript: (_file, ctx) => {
+				seen.push(ctx.snippets.map((s) => s.code))
+				return undefined
+			},
+		})
+		const text = `${await readFile(resolve(cwd, "spelling.md"), "utf8")}\n\`\`\`ts ignore\nconst skipped = 1\n\`\`\`\n`
+		await getCodeFixes({ ...input, virtualFiles, config: { ...config, plugins: [plugin] }, text })
+		expect(seen).toEqual([['consle.log("hello")', "const skipped = 1"]])
+	})
+
+	it("reuses the hook's project while the document is unchanged", async () => {
+		const virtualFiles = await virtualFilesFor("spelling.md")
+		const projects: unknown[] = []
+		const plugin = definePlugin({
+			name: "hook",
+			typescript: (_file, ctx) => {
+				projects.push(ctx.project)
+				return undefined
+			},
+		})
+		const run = (text: string) =>
+			getCodeFixes({ ...input, virtualFiles, config: { ...config, plugins: [plugin] }, text })
+		await run("# one")
+		await run("# one")
+		await run("# two")
+		expect(projects[1]).toBe(projects[0])
+		expect(projects[2]).not.toBe(projects[0])
 	})
 })
