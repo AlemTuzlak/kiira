@@ -403,7 +403,7 @@ describe("classic module resolution cache", () => {
 		}
 	})
 
-	it("keeps one cache per cwd and caps how many cwds are cached", async () => {
+	it("keeps one cache per cwd and option set and caps how many are cached", async () => {
 		const workspace = mkdtempSync(join(tmpdir(), "kiira-resolution-cap-"))
 		const roots = Array.from({ length: 9 }, (_, index) => join(workspace, `root-${index}`))
 		const otherOptions = { ...OPTIONS, strict: false }
@@ -414,14 +414,16 @@ describe("classic module resolution cache", () => {
 			const [first, ...rest] = roots as [string, ...string[]]
 			await check(first, OPTIONS)
 			await check(first, otherOptions)
-			expect(getClassicResolutionCache(first, OPTIONS)).toBeUndefined()
+			expect(getClassicResolutionCache(first, OPTIONS)).toBeDefined()
 			expect(getClassicResolutionCache(first, otherOptions)).toBeDefined()
 
-			for (const root of rest) {
+			for (const root of rest.slice(0, 7)) {
 				await check(root, OPTIONS)
 			}
-			expect(getClassicResolutionCache(first, otherOptions)).toBeUndefined()
-			for (const root of rest) {
+			// 2 + 7 entries: the oldest (first, OPTIONS) is dropped.
+			expect(getClassicResolutionCache(first, OPTIONS)).toBeUndefined()
+			expect(getClassicResolutionCache(first, otherOptions)).toBeDefined()
+			for (const root of rest.slice(0, 7)) {
 				expect(getClassicResolutionCache(root, OPTIONS)).toBeDefined()
 			}
 		} finally {

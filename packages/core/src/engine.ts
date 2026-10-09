@@ -81,11 +81,16 @@ interface ClassicResolutionCache {
 	virtualFiles: Set<string>
 }
 
-// One cache per cwd (replaced when the options change), kept in least recently
-// used order. A long-lived host (the VS Code extension) can check many
-// workspaces, so the map is capped: past this ceiling the oldest cwd is dropped.
+// One cache per cwd and option set (a check with overrides or TypeScript hooks
+// runs several option sets), kept in least recently used order. A long-lived host
+// (the VS Code extension) can check many workspaces, so the map is capped: past
+// this ceiling the oldest entry is dropped.
 const MAX_CLASSIC_RESOLUTION_CACHES = 8
 const classicResolutionCaches = new Map<string, ClassicResolutionCache>()
+
+function resolutionKey(cwd: string, optionsKey: string): string {
+	return `${resolutionPath(cwd)}\n${optionsKey}`
+}
 
 function resolutionPath(path: string): string {
 	const absolute = resolve(path).replace(/\\/g, "/")
@@ -96,8 +101,7 @@ export function getClassicResolutionCache(
 	cwd: string,
 	options: ts.CompilerOptions
 ): ts.ModuleResolutionCache | undefined {
-	const entry = classicResolutionCaches.get(resolutionPath(cwd))
-	return entry?.optionsKey === JSON.stringify(options) ? entry.cache : undefined
+	return classicResolutionCaches.get(resolutionKey(cwd, JSON.stringify(options)))?.cache
 }
 
 // Missing paths map to `undefined`. Any other stat error (EACCES, EPERM, ...)
@@ -261,13 +265,13 @@ function createOverlayHost(cwd: string, options: ts.CompilerOptions, virtualFile
 		}
 	}
 
-	const cwdKey = resolutionPath(cwd)
 	const resolutionOptionsKey = JSON.stringify(options)
+	const cacheKey = resolutionKey(cwd, resolutionOptionsKey)
 	const virtualFileNames = new Set(overlay.keys())
-	let resolutionCache = classicResolutionCaches.get(cwdKey)
+	let resolutionCache = classicResolutionCaches.get(cacheKey)
 	// Delete and re-insert below, so the map stays in least recently used order.
-	classicResolutionCaches.delete(cwdKey)
-	if (resolutionCache?.optionsKey !== resolutionOptionsKey) {
+	classicResolutionCaches.delete(cacheKey)
+	if (!resolutionCache) {
 		resolutionCache = {
 			optionsKey: resolutionOptionsKey,
 			cache: ts.createModuleResolutionCache(resolve(cwd), host.getCanonicalFileName, options),
@@ -288,7 +292,7 @@ function createOverlayHost(cwd: string, options: ts.CompilerOptions, virtualFile
 		resolutionCache.files.clear()
 		resolutionCache.virtualFiles = virtualFileNames
 	}
-	classicResolutionCaches.set(cwdKey, resolutionCache)
+	classicResolutionCaches.set(cacheKey, resolutionCache)
 
 	// package.json checks are recorded even outside module resolution: TS also
 	// reads them through the shared package.json cache to compute a file's
