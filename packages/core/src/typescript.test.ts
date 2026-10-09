@@ -1,7 +1,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { MISSING_TYPESCRIPT_MESSAGE, getTypescript, selectTypescript, setTypescriptModule } from "./typescript"
+import {
+	MISSING_TYPESCRIPT_MESSAGE,
+	getTypescript,
+	selectTypescript,
+	setFallbackTypescriptModule,
+	setTypescriptModule,
+} from "./typescript"
 import type { TypeScriptModule, TypescriptResolvers } from "./typescript"
 
 const fake = (name: string, version = "5.9.0") => ({ name, version }) as unknown as TypeScriptModule
@@ -33,9 +39,11 @@ describe("typescript resolution", () => {
 	beforeEach(() => {
 		root = mkdtempSync(join(tmpdir(), "kiira-ts-"))
 		setTypescriptModule(undefined)
+		setFallbackTypescriptModule(undefined)
 	})
 	afterEach(() => {
 		setTypescriptModule(undefined)
+		setFallbackTypescriptModule(undefined)
 		rmSync(root, { recursive: true, force: true })
 	})
 
@@ -81,6 +89,24 @@ describe("typescript resolution", () => {
 			/found TypeScript 7\.0\.2.*setTypescriptModule/
 		)
 		expect(() => getTypescript(resolvers(undefined, { typescript: native }))).toThrow(/found TypeScript 7\.0\.2/)
+	})
+
+	it("uses the host's fallback only when the project has no TypeScript of its own", () => {
+		const host = fake("host")
+		const own = fake("own")
+		const projectTs = fake("project")
+		setFallbackTypescriptModule(host)
+		const project = { "typescript/package.json": { version: "5.9.0" }, typescript: projectTs }
+		expect(selectTypescript(root, resolvers(project, { typescript: own }))).toBe(projectTs)
+		expect(selectTypescript(root, resolvers(undefined, { typescript: own }))).toBe(host)
+	})
+
+	it("skips a host fallback whose version is not supported", () => {
+		const own = fake("own")
+		for (const version of ["5.3.3", "7.0.2"]) {
+			setFallbackTypescriptModule(fake("host", version))
+			expect(selectTypescript(root, resolvers(undefined, { typescript: own }))).toBe(own)
+		}
 	})
 
 	it("prefers an injected module over every lookup", () => {

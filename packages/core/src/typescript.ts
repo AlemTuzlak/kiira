@@ -21,6 +21,7 @@ const defaultResolvers: TypescriptResolvers = {
 export const MISSING_TYPESCRIPT_MESSAGE = 'Kiira needs TypeScript 5.4+ or 6. Install "typescript" in your project.'
 
 let injected: TypeScriptModule | undefined
+let fallback: TypeScriptModule | undefined
 let selected: TypeScriptModule | undefined
 
 /** Let a host that bundles TypeScript (the VS Code extension) hand kiira its copy. Wins over every lookup. */
@@ -29,10 +30,25 @@ export function setTypescriptModule(module: TypeScriptModule | undefined): void 
 	selected = undefined
 }
 
+/**
+ * Let a host (the VS Code extension) hand kiira a TypeScript for projects that
+ * have no usable one of their own. Tried before the one kiira-core resolves itself.
+ * Ignored when its version is not supported.
+ */
+export function setFallbackTypescriptModule(module: TypeScriptModule | undefined): void {
+	fallback = module
+	selected = undefined
+}
+
 /** TypeScript 5.4+ and 6 ship the classic API. TypeScript 7 is the native port: `require("typescript")` has no classic API. */
 function isSupported(version: string | undefined): boolean {
 	const [major, minor] = (version ?? "").split(".").map((part) => Number.parseInt(part, 10))
 	return major === 6 || (major === 5 && (minor ?? 0) >= 4)
+}
+
+/** The host's fallback TypeScript, when one is set and its version is supported. */
+function fallbackModule(): TypeScriptModule | undefined {
+	return fallback && isSupported(fallback.version) ? fallback : undefined
 }
 
 function load(require: (id: string) => unknown): TypeScriptModule | undefined {
@@ -70,21 +86,21 @@ function selfModule(resolvers: TypescriptResolvers): TypeScriptModule {
 /**
  * Pick the TypeScript to use for the project at `cwd` and remember it for
  * {@link getTypescript}. Order: host-injected, the project's own TypeScript 5.4+/6,
- * then the one kiira-core resolves itself.
+ * the host's fallback (if supported), then the one kiira-core resolves itself.
  */
 export function selectTypescript(cwd: string, resolvers: TypescriptResolvers = defaultResolvers): TypeScriptModule {
 	if (injected) {
 		return injected
 	}
-	selected = projectModule(cwd, resolvers) ?? selfModule(resolvers)
+	selected = projectModule(cwd, resolvers) ?? fallbackModule() ?? selfModule(resolvers)
 	return selected
 }
 
-/** The last TypeScript chosen by {@link selectTypescript}, or the one kiira-core resolves itself. */
+/** The last TypeScript chosen by {@link selectTypescript}, else the host's fallback or the one kiira-core resolves itself. */
 export function getTypescript(resolvers: TypescriptResolvers = defaultResolvers): TypeScriptModule {
 	if (injected) {
 		return injected
 	}
-	selected ??= selfModule(resolvers)
+	selected ??= fallbackModule() ?? selfModule(resolvers)
 	return selected
 }

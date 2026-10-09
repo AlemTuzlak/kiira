@@ -53,6 +53,7 @@ export {
 	optionsForFile,
 	resolveTsconfigPath,
 	resetClassicEngineCache,
+	setFallbackTypescriptModule,
 	setTypescriptLibDir,
 	setTypescriptModule,
 } from "./check"

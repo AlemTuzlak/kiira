@@ -80,7 +80,7 @@
 		}
 	},
 	"scripts": {
-		"build": "tsdown && node scripts/copy-ts-lib.mjs",
+		"build": "tsdown",
 		"vscode:prepublish": "pnpm run build",
 		"package": "vsce package --no-dependencies",
 		"test:unit": "vitest run --passWithNoTests",
