@@ -571,16 +571,7 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	const diagnostics = [...analyzed.diagnostics, ...(await runProjectRules(run, files))]
 	const snippets = documents.flatMap((doc) => doc.snippets)
 
-	const sources: Record<string, string> = {}
-	for (const [path, text] of reads) {
-		if (text !== undefined) {
-			sources[relative(cwd, resolve(cwd, path)).split(sep).join("/")] = text
-		}
-	}
-	for (const doc of documents) {
-		sources[doc.file] = doc.text
-	}
-
+	const sources = collectSources(cwd, reads, documents)
 	const errors = diagnostics.filter((d) => d.severity === "error").length
 	const warnings = diagnostics.filter((d) => d.severity === "warning").length
 
@@ -600,6 +591,24 @@ export async function checkMarkdownFiles(input: CheckMarkdownFilesInput): Promis
 	}
 }
 
+/** The exact text of every file a run read, keyed by cwd-relative posix path. */
+function collectSources(
+	cwd: string,
+	reads: Map<string, string | undefined>,
+	documents: Array<{ file: string; text: string }>
+): Record<string, string> {
+	const sources: Record<string, string> = {}
+	for (const [path, text] of reads) {
+		if (text !== undefined) {
+			sources[relative(cwd, resolve(cwd, path)).split(sep).join("/")] = text
+		}
+	}
+	for (const doc of documents) {
+		sources[doc.file] = doc.text
+	}
+	return sources
+}
+
 export interface CheckMarkdownTextInput {
 	cwd: string
 	/** Document path relative to `cwd` (posix), used in diagnostics and naming. */
@@ -615,6 +624,8 @@ export interface CheckMarkdownTextResult {
 	diagnostics: KiiraDiagnostic[]
 	virtualFiles: VirtualFile[]
 	snippets: ExtractedSnippet[]
+	/** The text the check read: the document itself and each file a rule read through `ctx.fs`. Keys are cwd-relative posix paths. */
+	sources: Record<string, string>
 }
 
 /**
@@ -625,8 +636,14 @@ export async function checkMarkdownText(input: CheckMarkdownTextInput): Promise<
 	const { cwd, markdownFile } = input
 	selectTypescript(cwd)
 	const config = resolveConfig(input.config, input.ruleOverrides)
-	const run: RuleRun = { config, project: await createProject(cwd), fs: createRuleFs(cwd).fs }
+	const { fs, reads } = createRuleFs(cwd)
+	const run: RuleRun = { config, project: await createProject(cwd), fs }
 	const documents = await parseDocuments([markdownFile], () => input.text, config, input.markdownUri)
 	const { virtualFiles, diagnostics } = await analyzeDocuments(cwd, run, documents)
-	return { diagnostics, virtualFiles, snippets: documents.flatMap((doc) => doc.snippets) }
+	return {
+		diagnostics,
+		virtualFiles,
+		snippets: documents.flatMap((doc) => doc.snippets),
+		sources: collectSources(cwd, reads, documents),
+	}
 }

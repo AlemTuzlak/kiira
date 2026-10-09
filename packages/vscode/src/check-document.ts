@@ -14,6 +14,8 @@ export interface CheckDocumentInput {
 export interface CheckDocumentResult {
 	diagnostics: KiiraDiagnostic[]
 	virtualFiles: VirtualFile[]
+	/** The text the check read, keyed by cwd-relative posix path. A quick fix applies only while a file still has this text. */
+	sources: Record<string, string>
 }
 
 /**
@@ -22,6 +24,6 @@ export interface CheckDocumentResult {
  * The result includes the same rule diagnostics (and their fixes) the CLI produces.
  */
 export async function checkDocument(input: CheckDocumentInput): Promise<CheckDocumentResult> {
-	const { diagnostics, virtualFiles } = await checkMarkdownText(input)
-	return { diagnostics, virtualFiles }
+	const { diagnostics, virtualFiles, sources } = await checkMarkdownText(input)
+	return { diagnostics, virtualFiles, sources }
 }

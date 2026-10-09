@@ -99,7 +99,8 @@ ctx.report({
 An `edits` fix can also change another file, such as one the rule read with `ctx.fs.readText`. `--fix` is careful with the files it writes:
 
 - It only edits a file the check read: a Markdown document in the run, or a file a rule read with `ctx.fs.readText`. An edit to any other file is refused.
-- It re-reads the file first and refuses it if the text changed since the check, so a fix never lands on stale ranges.
+- It re-reads the file first and refuses it if the text changed since the check, so a fix never lands on stale ranges. It also refuses a file that is not valid UTF-8 or is read-only.
+- A fix is all or nothing. If one file of an `edits` fix is refused, the fix is dropped from every file it edits.
 - It refuses paths outside the project, inside `.git` or `node_modules`, or that reach either through a symlink.
 - It refuses every edit in a file when two of them overlap, and prints which fixes conflict. Other files are still fixed. Identical edits count once, and inserts at the same point apply in report order.
 - It keeps a file's line endings: in a file that uses CRLF, a `\n` in `newText` is written as `\r\n`. A line's characters stop before its `\r\n`.

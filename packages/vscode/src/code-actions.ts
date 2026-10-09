@@ -1,4 +1,5 @@
-import { isAbsolute, join, relative } from "node:path"
+import { readFile } from "node:fs/promises"
+import { isAbsolute, join, relative, resolve, sep } from "node:path"
 import {
 	type CodeFixEdit,
 	type KiiraConfig,
@@ -28,6 +29,8 @@ export interface KiiraCodeActionDeps {
 	getVirtualFiles: (uri: string) => VirtualFile[] | undefined
 	/** The Kiira diagnostics (with their `fix` payloads) from the most recent check. */
 	getDiagnostics: (uri: string) => KiiraDiagnostic[] | undefined
+	/** The text this document's most recent check read, keyed by cwd-relative posix path. */
+	getSources: (uri: string) => Record<string, string> | undefined
 }
 
 function overlaps(a: KiiraDiagnostic["markdownRange"], b: vscode.Range): boolean {
@@ -50,23 +53,42 @@ function editsToWorkspaceEdit(uri: vscode.Uri, edits: CodeFixEdit[]): vscode.Wor
 	return edit
 }
 
+/** A file's text as an edit would see it: the open (possibly unsaved) buffer, else the file on disk. */
+async function currentText(uri: vscode.Uri): Promise<string | undefined> {
+	const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString())
+	if (open) {
+		return open.getText()
+	}
+	try {
+		return await readFile(uri.fsPath, "utf8")
+	} catch {
+		return undefined
+	}
+}
+
 /**
  * A rule's `edits` fix as a workspace edit. The current document's edits apply to
  * the open (possibly unsaved) text; other files are addressed from the workspace
- * root. Refused when a file path leaves the workspace.
+ * root. Refused when a file path leaves the workspace, or when any file's text is
+ * not what the check read, since the ranges would then be stale.
  */
-function textEditsToWorkspaceEdit(
+async function textEditsToWorkspaceEdit(
 	document: vscode.TextDocument,
 	ctx: CodeActionContext,
-	fix: KiiraEditsFix
-): vscode.WorkspaceEdit | undefined {
+	fix: KiiraEditsFix,
+	sources: Record<string, string>
+): Promise<vscode.WorkspaceEdit | undefined> {
 	const edit = new vscode.WorkspaceEdit()
 	for (const e of fix.edits) {
-		const outside = relative(ctx.cwd, join(ctx.cwd, e.file)).startsWith("..") || isAbsolute(e.file)
-		if (outside) {
+		const file = relative(ctx.cwd, resolve(ctx.cwd, e.file)).split(sep).join("/")
+		if (file.startsWith("..") || isAbsolute(e.file)) {
 			return undefined
 		}
-		const uri = e.file === ctx.markdownFile ? document.uri : vscode.Uri.file(join(ctx.cwd, e.file))
+		const uri = file === ctx.markdownFile ? document.uri : vscode.Uri.file(join(ctx.cwd, file))
+		const source = sources[file]
+		if (source === undefined || (await currentText(uri)) !== source) {
+			return undefined
+		}
 		edit.replace(
 			uri,
 			new vscode.Range(e.range.start.line, e.range.start.character, e.range.end.line, e.range.end.character),
@@ -125,7 +147,8 @@ export class KiiraCodeActionProvider implements vscode.CodeActionProvider {
 			let edit: vscode.WorkspaceEdit | undefined
 			if (fix.kind === "edits") {
 				const ctx = await this.deps.resolveContext(document)
-				edit = ctx && textEditsToWorkspaceEdit(document, ctx, fix)
+				const sources = this.deps.getSources(uri)
+				edit = ctx && sources && (await textEditsToWorkspaceEdit(document, ctx, fix, sources))
 			} else {
 				edit = kiiraFixEdit(document, fix)
 			}

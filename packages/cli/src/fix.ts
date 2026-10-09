@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto"
-import { chmod, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
+import { constants } from "node:fs"
+import { access, chmod, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises"
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import type {
 	KiiraConfigOverrideFix,
@@ -41,6 +42,8 @@ interface Candidate {
 	/** Names the fix in a conflict report. */
 	label: string
 	fence: boolean
+	/** The index of the diagnostic whose fix this edit is part of. */
+	fix: number
 }
 
 function textEdit(file: string, line: number, from: number, to: number, newText: string): KiiraTextEdit {
@@ -81,22 +84,30 @@ const isForbidden = (relativePath: string): boolean =>
 const isOutside = (relativePath: string): boolean =>
 	relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)
 
-/**
- * The real path to write for `file`, or why it is refused. The file must be inside
- * `cwd` and outside `.git` and `node_modules`, both as written and after following
- * every symlink on the way (`realpath` resolves each component).
- */
-async function resolveTarget(cwd: string, file: string): Promise<{ target: string } | { reason: string }> {
+/** `file` as a cwd-relative posix path, the way the check keys `sources`. Absolute paths stay as written. */
+const normalizePath = (cwd: string, file: string): string =>
+	isAbsolute(file) ? file : relative(cwd, resolve(cwd, file)).split(sep).join("/")
+
+/** Why `file` is refused as written: it must be inside `cwd` and outside `.git` and `node_modules`. */
+function unsafePath(cwd: string, file: string): string | undefined {
 	if (isAbsolute(file)) {
-		return { reason: "the path must be relative to the project" }
+		return "the path must be relative to the project"
 	}
 	const lexical = relative(cwd, resolve(cwd, file))
 	if (lexical === "" || isOutside(lexical)) {
-		return { reason: "the path is outside the project" }
+		return "the path is outside the project"
 	}
 	if (isForbidden(lexical)) {
-		return { reason: "the path is inside .git or node_modules" }
+		return "the path is inside .git or node_modules"
 	}
+	return undefined
+}
+
+/**
+ * The real path to write for `file`, or why it is refused. Like `unsafePath`, but
+ * after following every symlink on the way (`realpath` resolves each component).
+ */
+async function resolveTarget(cwd: string, file: string): Promise<{ target: string } | { reason: string }> {
 	let target: string
 	let root: string
 	try {
@@ -185,13 +196,65 @@ function applyEdits(text: string, candidates: Candidate[]): { text: string } | {
 	return { text: out + text.slice(cursor) }
 }
 
-async function writeAtomic(target: string, content: string): Promise<void> {
+/** Why `target` must not be replaced with edits to `before`, or `undefined` when it can be. */
+async function staleReason(target: string, before: string): Promise<string | undefined> {
+	let bytes: Buffer
+	try {
+		bytes = await readFile(target)
+	} catch {
+		return "the file cannot be read"
+	}
+	const text = bytes.toString("utf8")
+	// Decoding replaces invalid bytes, so writing the text back would corrupt the file.
+	if (!Buffer.from(text, "utf8").equals(bytes)) {
+		return "the file is not valid UTF-8"
+	}
+	if (text !== before) {
+		return "the file changed since the check read it"
+	}
+	// `rename` replaces a read-only file without asking, so check first.
+	try {
+		await access(target, constants.W_OK)
+	} catch {
+		return "the file is not writable"
+	}
+	return undefined
+}
+
+/** The checks on `file` before any edit is planned: a safe path, read by the check, and unchanged since. */
+async function inspectFile(
+	cwd: string,
+	file: string,
+	sources: Record<string, string>
+): Promise<{ target: string; before: string } | { reason: string }> {
+	const unsafe = unsafePath(cwd, file)
+	if (unsafe) {
+		return { reason: unsafe }
+	}
+	const before = sources[file]
+	if (before === undefined) {
+		return { reason: "the check did not read this file" }
+	}
+	const resolved = await resolveTarget(cwd, file)
+	if ("reason" in resolved) {
+		return resolved
+	}
+	const reason = await staleReason(resolved.target, before)
+	return reason ? { reason } : { target: resolved.target, before }
+}
+
+async function writeAtomic(target: string, before: string, content: string): Promise<void> {
 	const { mode } = await stat(target)
 	const temp = join(dirname(target), `.${basename(target)}.${randomBytes(6).toString("hex")}.tmp`)
 	try {
 		await writeFile(temp, content, { flag: "wx", mode })
 		// `writeFile` applies the umask; restore the original mode exactly.
 		await chmod(temp, mode & 0o7777)
+		// Check again just before the swap, so a save made since the plan is not lost.
+		const reason = await staleReason(target, before)
+		if (reason) {
+			throw new Error(reason)
+		}
 		await rename(temp, target)
 	} catch (error) {
 		await rm(temp, { force: true })
@@ -204,8 +267,10 @@ async function writeAtomic(target: string, content: string): Promise<void> {
  * fixes (rewrite a mistagged language, append `group=`), which become edits first.
  *
  * `sources` is what the check read. A file is refused, and left untouched, when
- * the check did not read it, it changed since, its path is unsafe, or its edits
- * overlap. Other files still apply. With `dryRun` nothing is written.
+ * the check did not read it, it changed since, it is not UTF-8 or not writable,
+ * its path is unsafe, or its edits overlap. A fix is all or nothing: when one of
+ * its files is refused, its edits to the other files are dropped too. Other fixes
+ * still apply. Every check runs before the first write. With `dryRun` nothing is written.
  */
 export async function applyFixes(
 	cwd: string,
@@ -213,60 +278,76 @@ export async function applyFixes(
 	sources: Record<string, string>,
 	options: { dryRun?: boolean } = {}
 ): Promise<FixSummary> {
-	const byFile = new Map<string, Candidate[]>()
-	const add = (file: string, candidate?: Candidate): void => {
-		const list = byFile.get(file) ?? []
-		if (candidate) {
-			list.push(candidate)
-		}
-		byFile.set(file, list)
-	}
-	for (const d of diagnostics) {
+	const candidates: Candidate[] = []
+	const refused = new Map<string, string>()
+	diagnostics.forEach((d, index) => {
 		const fix = d.fix
 		if (!fix || fix.kind === "config-override") {
-			continue
+			return
 		}
 		const label = `${d.code ?? d.source} at ${d.markdownFile}:${d.markdownRange.start.line + 1}:${d.markdownRange.start.character + 1}`
 		if (fix.kind === "edits") {
 			for (const edit of fix.edits) {
-				add(edit.file, { edit, label, fence: false })
+				candidates.push({ edit: { ...edit, file: normalizePath(cwd, edit.file) }, label, fence: false, fix: index })
 			}
-		} else {
-			const source = sources[d.markdownFile]
-			const edit = source === undefined ? undefined : fenceFixToEdit(d.markdownFile, fix, source)
-			add(d.markdownFile, edit && { edit, label, fence: true })
+			return
+		}
+		const source = sources[d.markdownFile]
+		if (source === undefined) {
+			refused.set(d.markdownFile, "the check did not read this file")
+			return
+		}
+		const edit = fenceFixToEdit(d.markdownFile, fix, source)
+		if (edit) {
+			candidates.push({ edit, label, fence: true, fix: index })
+		}
+	})
+
+	const files = new Map<string, { target: string; before: string }>()
+	for (const file of new Set(candidates.map(({ edit }) => edit.file))) {
+		const inspected = refused.has(file) ? undefined : await inspectFile(cwd, file, sources)
+		if (inspected && "reason" in inspected) {
+			refused.set(file, inspected.reason)
+		} else if (inspected) {
+			files.set(file, inspected)
 		}
 	}
 
-	const refusals: FixRefusal[] = []
-	const planned: Array<FileChange & { target: string; candidates: Candidate[] }> = []
-	for (const [file, candidates] of byFile) {
-		const before = sources[file]
-		if (before === undefined) {
-			refusals.push({ file, reason: "the check did not read this file" })
-			continue
+	// A fix is all or nothing: drop every fix that edits a refused file. A file
+	// refused while planning drops more fixes, so plan again until none is.
+	const dropped = new Set<number>()
+	let planned: Array<FileChange & { target: string; candidates: Candidate[] }> = []
+	for (let replan = true; replan; ) {
+		replan = false
+		for (const c of candidates) {
+			if (refused.has(c.edit.file)) {
+				dropped.add(c.fix)
+			}
 		}
-		if (candidates.length === 0) {
-			continue
+		planned = []
+		for (const [file, { target, before }] of files) {
+			const mine = candidates.filter((c) => c.edit.file === file && !dropped.has(c.fix))
+			if (refused.has(file) || mine.length === 0) {
+				continue
+			}
+			const applied = applyEdits(before, mine)
+			if ("reason" in applied) {
+				refused.set(file, applied.reason)
+				replan = true
+			} else if (applied.text !== before) {
+				planned.push({ file, before, after: applied.text, target, candidates: mine })
+			}
 		}
-		const resolved = await resolveTarget(cwd, file)
-		if ("reason" in resolved) {
-			refusals.push({ file, reason: resolved.reason })
-			continue
-		}
-		const current = await readFile(resolved.target, "utf8").catch(() => undefined)
-		if (current !== before) {
-			refusals.push({
-				file,
-				reason: current === undefined ? "the file cannot be read" : "the file changed since the check read it",
-			})
-			continue
-		}
-		const applied = applyEdits(before, candidates)
-		if ("reason" in applied) {
-			refusals.push({ file, reason: applied.reason })
-		} else if (applied.text !== before) {
-			planned.push({ file, before, after: applied.text, target: resolved.target, candidates })
+	}
+
+	const refusals: FixRefusal[] = [...refused].map(([file, reason]) => ({ file, reason }))
+	for (const fix of dropped) {
+		const edits = candidates.filter((c) => c.fix === fix)
+		const cause = edits.find((c) => refused.has(c.edit.file))?.edit.file
+		for (const file of new Set(edits.map(({ edit }) => edit.file))) {
+			if (!refused.has(file)) {
+				refusals.push({ file, reason: `the fix from ${edits[0].label} also edits ${cause}, which was skipped` })
+			}
 		}
 	}
 
@@ -276,7 +357,7 @@ export async function applyFixes(
 	for (const { target, candidates, ...change } of planned) {
 		if (!options.dryRun) {
 			try {
-				await writeAtomic(target, change.after)
+				await writeAtomic(target, change.before, change.after)
 			} catch (error) {
 				refusals.push({ file: change.file, reason: `could not write the file: ${(error as Error).message}` })
 				continue

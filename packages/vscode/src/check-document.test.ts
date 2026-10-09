@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { definePlugin, defineRule } from "kiira-core/plugin"
@@ -63,5 +64,25 @@ describe("checkDocument", () => {
 		const todo = shown.find((d) => d.code === "docs/no-todo")
 		expect(todo).toMatchObject({ severity: "warning", source: "kiira", markdownRange: { start: { line: 2 } } })
 		expect(diagnosticCodeLabel(todo?.code)).toBe("docs/no-todo")
+	})
+
+	it("returns the text it read, so a quick fix can tell when a file changed since", async () => {
+		const reader = defineRule({
+			meta: { scope: "document", defaultSeverity: "warn" },
+			create(ctx) {
+				ctx.fs.readText("./good.md")
+			},
+		})
+		const text = "# Unsaved\n"
+		const result = await checkDocument({
+			cwd,
+			markdownFile: "inline.md",
+			text,
+			config: { include: ["**/*.md"], plugins: [definePlugin({ name: "t", rules: { reader } })] },
+		})
+		expect(result.sources).toEqual({
+			"inline.md": text,
+			"good.md": readFileSync(resolve(cwd, "good.md"), "utf8"),
+		})
 	})
 })

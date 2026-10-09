@@ -82,10 +82,13 @@ Prints a unified diff for every file `--fix` would change and writes nothing, no
 
 - the file changed since the check read it
 - the check did not read it
+- the file is not valid UTF-8, or it is read-only
 - its path is outside the project, inside `.git` or `node_modules`, or reaches either through a symlink
 - two fixes edit overlapping ranges
 
-Files are written atomically and keep their permissions and line endings.
+A fix is all or nothing. When a fix edits more than one file and one of them is skipped, `--fix` drops that fix from every file and prints why. Other fixes still apply.
+
+`--fix` runs every check before it writes the first file. Files are written atomically and keep their permissions and line endings. Just before it replaces a file, `--fix` reads it again, so it does not overwrite a save made in the meantime.
 
 ## What it never touches
 

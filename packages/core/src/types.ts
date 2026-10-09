@@ -407,6 +407,7 @@ export interface KiiraTextEdit {
 /**
  * An auto-fix made of text edits, in any file the check read. `kiira check --fix`
  * applies them only if the file is unchanged since the check, and refuses overlapping edits.
+ * A fix is all or nothing: if one of its files is refused, none of its edits apply.
  */
 export interface KiiraEditsFix {
 	kind: "edits"

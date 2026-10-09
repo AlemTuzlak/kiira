@@ -13,8 +13,21 @@ import {
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { KiiraDiagnostic } from "kiira-core"
-import { afterEach, beforeEach } from "vitest"
+import { afterEach, beforeEach, vi } from "vitest"
 import { applyConfigOverrides, applyFixes } from "./fix"
+
+// Lets a test act between the temp file write and the rename in the atomic writer.
+const hooks = vi.hoisted(() => ({ beforeChmod: undefined as (() => void) | undefined }))
+vi.mock("node:fs/promises", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:fs/promises")>()
+	return {
+		...actual,
+		chmod: (...args: Parameters<typeof actual.chmod>) => {
+			hooks.beforeChmod?.()
+			return actual.chmod(...args)
+		},
+	}
+})
 
 let dir: string
 
@@ -23,6 +36,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+	hooks.beforeChmod = undefined
 	rmSync(dir, { recursive: true, force: true })
 })
 
@@ -160,29 +174,88 @@ describe("applyFixes", () => {
 		expect(summary).toMatchObject({ filesChanged: 2, editsApplied: 2, fenceEditsApplied: 0 })
 		expect(read("doc.md")).toBe("one\nTWO\n")
 		expect(read("other.txt")).toBe("a-c")
-		expect(statSync(join(dir, "doc.md")).mode & 0o777).toBe(0o640)
+		// Windows only has a read-only bit, so there is no 0o640 to keep.
+		if (process.platform !== "win32") {
+			expect(statSync(join(dir, "doc.md")).mode & 0o777).toBe(0o640)
+		}
 		// No temp file is left behind.
 		expect(readdirSync(dir).sort()).toEqual(["doc.md", "other.txt"])
 	})
 
-	it("refuses a file that changed since the check and still applies the others", async () => {
+	it("drops a whole multi-file fix when one of its files changed, and still applies other fixes", async () => {
 		const sources = seed({ "doc.md": "one\n", "other.md": "two\n" })
 		writeFileSync(join(dir, "doc.md"), "one, edited\n")
 
 		const summary = await applyFixes(
 			dir,
 			[
-				editDiag([
-					{ from: [0, 0], to: [0, 3], newText: "1" },
-					{ file: "other.md", from: [0, 0], to: [0, 3], newText: "2" },
-				]),
+				editDiag(
+					[
+						{ from: [0, 0], to: [0, 3], newText: "1" },
+						{ file: "other.md", from: [0, 0], to: [0, 3], newText: "2" },
+					],
+					"docs/a"
+				),
+				editDiag([{ file: "other.md", from: [0, 3], to: [0, 3], newText: "!" }], "docs/b"),
 			],
 			sources
 		)
 
-		expect(summary.refusals).toEqual([{ file: "doc.md", reason: "the file changed since the check read it" }])
+		expect(summary.refusals).toEqual([
+			{ file: "doc.md", reason: "the file changed since the check read it" },
+			{ file: "other.md", reason: "the fix from docs/a at doc.md:1:1 also edits doc.md, which was skipped" },
+		])
+		expect(summary).toMatchObject({ filesChanged: 1, editsApplied: 1 })
 		expect(read("doc.md")).toBe("one, edited\n")
-		expect(read("other.md")).toBe("2\n")
+		expect(read("other.md")).toBe("two!\n")
+	})
+
+	it("matches an edit's file to the sources however the path is written", async () => {
+		const sources = seed({ "notes.txt": "abc" })
+
+		const summary = await applyFixes(
+			dir,
+			[editDiag([{ file: "./notes.txt", from: [0, 0], to: [0, 1], newText: "X" }])],
+			sources
+		)
+
+		expect(summary.refusals).toEqual([])
+		expect(read("notes.txt")).toBe("Xbc")
+	})
+
+	it.skipIf(process.getuid?.() === 0)("refuses a read-only file", async () => {
+		const sources = seed({ "doc.md": "abc" })
+		chmodSync(join(dir, "doc.md"), 0o444)
+
+		const summary = await applyFixes(dir, [editDiag([{ from: [0, 0], to: [0, 1], newText: "X" }])], sources)
+
+		expect(summary.refusals).toEqual([{ file: "doc.md", reason: "the file is not writable" }])
+		expect(read("doc.md")).toBe("abc")
+	})
+
+	it("refuses a file that is not valid UTF-8", async () => {
+		const bytes = Buffer.from([0x61, 0xff, 0x62])
+		writeFileSync(join(dir, "doc.md"), bytes)
+
+		const summary = await applyFixes(dir, [editDiag([{ from: [0, 0], to: [0, 1], newText: "X" }])], {
+			"doc.md": bytes.toString("utf8"),
+		})
+
+		expect(summary.refusals).toEqual([{ file: "doc.md", reason: "the file is not valid UTF-8" }])
+		expect(readFileSync(join(dir, "doc.md"))).toEqual(bytes)
+	})
+
+	it("does not overwrite a save made after the plan, just before the rename", async () => {
+		const sources = seed({ "doc.md": "abc" })
+		hooks.beforeChmod = () => writeFileSync(join(dir, "doc.md"), "saved in an editor")
+
+		const summary = await applyFixes(dir, [editDiag([{ from: [0, 0], to: [0, 1], newText: "X" }])], sources)
+
+		expect(summary.refusals).toEqual([
+			{ file: "doc.md", reason: "could not write the file: the file changed since the check read it" },
+		])
+		expect(read("doc.md")).toBe("saved in an editor")
+		expect(readdirSync(dir)).toEqual(["doc.md"])
 	})
 
 	it("refuses a file the check did not read", async () => {
@@ -198,16 +271,16 @@ describe("applyFixes", () => {
 
 	describe("unsafe paths", () => {
 		it.each([
-			["../outside.txt", "the path is outside the project"],
-			["sub/../../outside.txt", "the path is outside the project"],
-			[".git/config", "the path is inside .git or node_modules"],
-			["node_modules/x.txt", "the path is inside .git or node_modules"],
-			["packages/node_modules/x.txt", "the path is inside .git or node_modules"],
-		])("refuses %s", async (file, reason) => {
+			["../outside.txt", "../outside.txt", "the path is outside the project"],
+			["sub/../../outside.txt", "../outside.txt", "the path is outside the project"],
+			[".git/config", ".git/config", "the path is inside .git or node_modules"],
+			["node_modules/x.txt", "node_modules/x.txt", "the path is inside .git or node_modules"],
+			["packages/node_modules/x.txt", "packages/node_modules/x.txt", "the path is inside .git or node_modules"],
+		])("refuses %s", async (file, normalized, reason) => {
 			const summary = await applyFixes(dir, [editDiag([{ file, from: [0, 0], to: [0, 1], newText: "y" }])], {
-				[file]: "x",
+				[normalized]: "x",
 			})
-			expect(summary.refusals).toEqual([{ file, reason }])
+			expect(summary.refusals).toEqual([{ file: normalized, reason }])
 			expect(summary.filesChanged).toBe(0)
 		})
 
@@ -292,7 +365,7 @@ describe("applyFixes", () => {
 		expect(rejected.refusals[0].reason).toContain("outside the file")
 	})
 
-	it("refuses every edit in a file whose edits overlap, naming the fixes", async () => {
+	it("refuses every edit in a file whose edits overlap, naming the fixes, and their edits elsewhere", async () => {
 		const sources = seed({ "doc.md": "abcdef\n", "other.md": "xyz\n" })
 
 		const summary = await applyFixes(
@@ -312,9 +385,10 @@ describe("applyFixes", () => {
 
 		expect(summary.refusals).toEqual([
 			{ file: "doc.md", reason: "overlapping edits from docs/a at doc.md:1:1 and docs/b at doc.md:1:1; none applied" },
+			{ file: "other.md", reason: "the fix from docs/b at doc.md:1:1 also edits doc.md, which was skipped" },
 		])
 		expect(read("doc.md")).toBe("abcdef\n")
-		expect(read("other.md")).toBe("Xyz\n")
+		expect(read("other.md")).toBe("xyz\n")
 	})
 
 	it("treats an insert inside a replaced range as an overlap, and touching edits as fine", async () => {
