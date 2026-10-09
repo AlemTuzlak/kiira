@@ -564,6 +564,16 @@ describe("project and fs helpers", () => {
 		expect((await createProject(tempProject({ "package.json": "[1]" }))).packageJson).toBeUndefined()
 	})
 
+	// Inside a git hook these point at the outer repository; clear them so git in a temp dir sees only that dir.
+	beforeEach(() => {
+		for (const name of ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"]) {
+			vi.stubEnv(name, undefined)
+		}
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+	})
+
 	const hasGit = (() => {
 		try {
 			execFileSync("git", ["--version"], { stdio: "ignore" })
