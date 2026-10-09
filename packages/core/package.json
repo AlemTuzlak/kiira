@@ -1,13 +1,15 @@
 {
 	"name": "kiira-core",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"description": "Core engine for Kiira: extract code fences from Markdown, type-check them, and map diagnostics back to source.",
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.mts",
 	"typesVersions": {
 		"*": {
-			"plugin": ["./dist/plugin.d.mts"]
+			"plugin": [
+				"./dist/plugin.d.mts"
+			]
 		}
 	},
 	"type": "module",
@@ -54,7 +56,9 @@
 	"bugs": {
 		"url": "https://github.com/AlemTuzlak/kiira/issues"
 	},
-	"files": ["dist"],
+	"files": [
+		"dist"
+	],
 	"homepage": "https://github.com/AlemTuzlak/kiira#readme",
 	"publishConfig": {
 		"provenance": true

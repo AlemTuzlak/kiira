@@ -11,7 +11,11 @@
 	"nx": {
 		"targets": {
 			"test:unit": {
-				"inputs": ["default", "^production", "{projectRoot}/docs/**/*.md"]
+				"inputs": [
+					"default",
+					"^production",
+					"{projectRoot}/docs/**/*.md"
+				]
 			}
 		}
 	},
