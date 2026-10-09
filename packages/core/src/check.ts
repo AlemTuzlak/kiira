@@ -6,7 +6,7 @@ import type ts from "typescript"
 import { loadConfig, resolveConfig, rulesForFile } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { type CheckerEngine, type RawDiagnostic, resolveEngine } from "./engine"
-import { collectExternalPackages, externalResolution } from "./external"
+import { collectExternalPackages, ensureExternalPackages, externalResolution } from "./external"
 import { extractSnippets, loadMdxSupportFor, parseDocument } from "./extract"
 import { groupSuggestions } from "./rules/group"
 import { jsxFrameworkSuggestions } from "./rules/jsx-framework"
@@ -30,6 +30,7 @@ import type {
 	KiiraConfig,
 	KiiraDiagnostic,
 	KiiraFs,
+	KiiraPlugin,
 	KiiraProject,
 	ResolvedKiiraConfig,
 	RuleSeverity,
@@ -688,6 +689,28 @@ function collectSources(
 		sources[doc.file] = doc.text
 	}
 	return sources
+}
+
+export interface CheckInput {
+	cwd: string
+	/** Markdown files relative to `cwd`; defaults to the config's `include`. */
+	files?: string[]
+	/** Used as is; when omitted, the config is loaded from `cwd`. */
+	config?: Partial<KiiraConfig>
+	/** Added to the config's plugins; one with the same `name` replaces the config's. */
+	plugins?: KiiraPlugin[]
+}
+
+/** Check Markdown files and run every rule: document, program and project. Experimental. */
+export async function check(input: CheckInput): Promise<KiiraCheckResult> {
+	const cwd = resolve(input.cwd)
+	const config = input.config ?? (await loadConfig(cwd))
+	const added = input.plugins ?? []
+	const names = new Set(added.map((plugin) => plugin.name))
+	const plugins = [...(config.plugins ?? []).filter((plugin) => !names.has(plugin.name)), ...added]
+	// Like `kiira check`: install declared doc-only packages so their imports resolve.
+	await ensureExternalPackages(cwd, collectExternalPackages(config), { warn: console.warn })
+	return checkMarkdownFiles({ cwd, files: input.files, config: { ...config, plugins } })
 }
 
 export interface CheckMarkdownTextInput {

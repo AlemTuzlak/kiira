@@ -59,7 +59,11 @@ export function formatJson(result: KiiraCheckResult): string {
 		},
 		generated: d.generated ?? false,
 	}))
-	return JSON.stringify({ stats: { ...result.stats, fixable: fixableCount(result) }, diagnostics }, null, 2)
+	return JSON.stringify(
+		{ schemaVersion: 1, stats: { ...result.stats, fixable: fixableCount(result) }, diagnostics },
+		null,
+		2
+	)
 }
 
 // --- GitHub ---------------------------------------------------------------
@@ -89,6 +93,50 @@ export function formatGithub(result: KiiraCheckResult): string {
 			return `::${githubSeverity(d.severity)} file=${d.markdownFile},line=${line},col=${col}${titlePart}::${escapeGithubData(d.message)}`
 		})
 		.join("\n")
+}
+
+const SUMMARY_ERROR_LIMIT = 10
+const SUMMARY_MESSAGE_LIMIT = 200
+
+/** A code span whose fence is longer than any backtick run in `text`. */
+function codeSpan(text: string): string {
+	const longestRun = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+	const fence = "`".repeat(longestRun + 1)
+	const pad = text.startsWith("`") || text.endsWith("`") ? " " : ""
+	return `${fence}${pad}${text}${pad}${fence}`
+}
+
+/** The first line of a message, capped and escaped so Markdown and HTML show as plain text. */
+function summaryMessage(message: string): string {
+	const line = message.split("\n")[0]
+	const capped = line.length > SUMMARY_MESSAGE_LIMIT ? `${line.slice(0, SUMMARY_MESSAGE_LIMIT - 1)}…` : line
+	return capped.replace(/[\\`*_[\]<>|&]/g, "\\$&")
+}
+
+/** Markdown for `$GITHUB_STEP_SUMMARY`: outcome, counts, and the first errors. */
+export function formatGithubSummary(result: KiiraCheckResult): string {
+	const { stats } = result
+	const errors = result.diagnostics.filter((d) => d.severity === "error")
+	const lines = [
+		"### Kiira",
+		"",
+		stats.errors === 0 ? "Passed" : "Failed",
+		"",
+		`- Files: ${stats.markdownFiles}`,
+		`- Snippets checked: ${stats.checked}`,
+		`- Errors: ${stats.errors}`,
+		`- Warnings: ${stats.warnings}`,
+	]
+	if (errors.length > 0) {
+		lines.push("")
+		for (const d of errors.slice(0, SUMMARY_ERROR_LIMIT)) {
+			lines.push(`- ${codeSpan(`${d.markdownFile}:${d.markdownRange.start.line + 1}`)} ${summaryMessage(d.message)}`)
+		}
+		if (errors.length > SUMMARY_ERROR_LIMIT) {
+			lines.push(`- and ${errors.length - SUMMARY_ERROR_LIMIT} more`)
+		}
+	}
+	return `${lines.join("\n")}\n`
 }
 
 // --- Pretty ---------------------------------------------------------------

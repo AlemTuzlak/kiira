@@ -1,0 +1,71 @@
+---
+title: "Programmatic API"
+summary: "Run Kiira from your own code with check()"
+description: "Call check() from kiira-core to type-check Markdown and run every rule from a script or test, optionally with extra plugins passed inline."
+---
+
+<WarningAlert title="Experimental">
+`check()` can change between minor releases while it settles.
+</WarningAlert>
+
+## Running a check from code
+
+`check()` does what `kiira check` does and returns the result instead of printing it. It also installs the `externalPackages` from the config. Install `typescript` 5 or newer next to `kiira-core`, and `jiti` if your config is a `.ts` file.
+
+```ts
+import { check } from "kiira-core"
+
+const result = await check({ cwd: process.cwd() })
+
+console.log(result.stats.errors)
+```
+
+It takes these options:
+
+| Option | Description |
+| --- | --- |
+| `cwd` | The directory to run in. A relative path is resolved from the current directory. |
+| `files` | Markdown files to check, relative to `cwd`. Defaults to the config's `include`. |
+| `config` | A config object, used as is. When you leave it out, Kiira loads the config file from `cwd`. |
+| `plugins` | Plugins added to the config's `plugins`. A plugin with the same `name` as one in the config replaces it. |
+
+The result is close to the output of the [JSON reporter](/latest/cli/reporters#json), with these differences:
+
+- Positions are zero-based.
+- `stats` has no `fixable` count.
+- A diagnostic can also have a `virtualFile` and a `fix`.
+
+Document, program and project rules all run.
+
+## Passing a plugin inline
+
+Pass a plugin without putting it in a config file. Set its rule levels in `rules`, or rely on the rule's default level.
+
+```ts
+import { check } from "kiira-core"
+import { definePlugin, defineRule } from "kiira-core/plugin"
+
+const noTodo = defineRule({
+  meta: { scope: "document", defaultSeverity: "error" },
+  create(ctx) {
+    ctx.text.split("\n").forEach((line, index) => {
+      const character = line.indexOf("TODO")
+      if (character === -1) return
+      const start = { line: index, character }
+      const end = { line: index, character: character + 4 }
+      ctx.report({ range: { start, end }, message: "Remove TODO before publishing." })
+    })
+  },
+})
+
+const result = await check({
+  cwd: process.cwd(),
+  plugins: [definePlugin({ name: "docs", rules: { "no-todo": noTodo } })],
+})
+
+for (const diagnostic of result.diagnostics) {
+  console.log(diagnostic.markdownFile, diagnostic.code, diagnostic.message)
+}
+```
+
+See [Rules](/latest/configuration/rules) for what a rule can do.

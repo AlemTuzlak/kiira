@@ -42,6 +42,57 @@ kiira check --reporter json
 kiira check --reporter json > kiira-report.json
 ```
 
+### Output shape
+
+```json
+{
+  "schemaVersion": 1,
+  "stats": {
+    "markdownFiles": 1,
+    "snippets": 2,
+    "checked": 2,
+    "ignored": 0,
+    "errors": 1,
+    "warnings": 0,
+    "fixable": 0
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2322,
+      "message": "Type 'string' is not assignable to type 'number'.",
+      "markdownFile": "docs/intro.md",
+      "markdownRange": {
+        "start": { "line": 12, "character": 7 },
+        "end": { "line": 12, "character": 8 }
+      },
+      "generated": false
+    }
+  ]
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `schemaVersion` | The version of this shape. Always the first key. Currently `1`. |
+| `stats.markdownFiles` | Markdown files in the run. |
+| `stats.snippets` | Code fences found. |
+| `stats.checked` | Fences that were type-checked. |
+| `stats.ignored` | Fences that were skipped. |
+| `stats.errors` | Diagnostics with `severity` `error`. A non-zero count makes the exit code 1. |
+| `stats.warnings` | Diagnostics with `severity` `warning`. |
+| `stats.fixable` | Diagnostics that [`--fix`](/latest/cli/fix) can resolve. |
+| `diagnostics[].severity` | `error`, `warning`, or `info`. |
+| `diagnostics[].source` | Where the diagnostic came from: `typescript` for compiler errors, `kiira` for rules. |
+| `diagnostics[].code` | The TypeScript error number, such as `2322`, or the rule id, such as `docs/no-word`. Omitted when there is none. |
+| `diagnostics[].message` | The full message, which can span several lines. |
+| `diagnostics[].markdownFile` | The Markdown file, relative to the working directory, with `/` separators. |
+| `diagnostics[].markdownRange` | `start` and `end`, each with a `line` and a `character`. Both are 1-based. |
+| `diagnostics[].generated` | `true` when the diagnostic lands on code Kiira generated rather than code you wrote. |
+
+Within `schemaVersion` 1, fields are only ever added, so parsers that ignore unknown fields keep working. A change that removes or renames a field, or changes its meaning, bumps `schemaVersion`.
+
 ## `github`
 
 Emits [GitHub Actions workflow commands](https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions) so failures appear as inline annotations on the changed lines in a pull request. Use this in any GitHub Actions workflow:
@@ -51,3 +102,7 @@ kiira check --reporter github
 ```
 
 When you use the official [Kiira GitHub Action](/latest/ci/github-action), `github` is already the default reporter, so annotations work out of the box.
+
+### Step summary
+
+When the `GITHUB_STEP_SUMMARY` environment variable is set, which GitHub Actions does for every step, the `github` reporter also appends a Markdown summary to that file. It shows on the workflow run's page. It has a `### Kiira` heading, a pass or fail line, the number of files, snippets checked, errors and warnings, and the first 10 errors as `` `file:line` message `` with "and N more" after that. Each message shows its first line only, up to 200 characters, as plain text. Other reporters never write it. When Kiira cannot write the file, it prints a warning and the exit code does not change.

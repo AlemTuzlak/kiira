@@ -318,3 +318,55 @@ describe("runCheck --fix with rule edits", () => {
 		}
 	})
 })
+
+describe("runCheck GitHub step summary", () => {
+	const summaryPath = join(mkdtempSync(join(tmpdir(), "kiira-summary-")), "summary.md")
+
+	function run(reporter: "github" | "pretty" | "json", env: Record<string, string | undefined>) {
+		return runCheck({ cwd: fixtures, files: ["bad.md"], reporter, static: true, raw: true, env, ...capture() })
+	}
+
+	it("appends a summary for the github reporter, keeping existing content", async () => {
+		writeFileSync(summaryPath, "earlier step\n")
+		await run("github", { GITHUB_STEP_SUMMARY: summaryPath })
+		expect(readFileSync(summaryPath, "utf8")).toBe(
+			[
+				"earlier step",
+				"### Kiira",
+				"",
+				"Failed",
+				"",
+				"- Files: 1",
+				"- Snippets checked: 1",
+				"- Errors: 1",
+				"- Warnings: 0",
+				"",
+				"- `bad.md:4` Type 'string' is not assignable to type 'number'.",
+				"",
+			].join("\n")
+		)
+	})
+
+	it("warns and keeps the exit code when the summary cannot be written", async () => {
+		const io = capture()
+		const notAFile = dirname(summaryPath)
+		const code = await runCheck({
+			cwd: fixtures,
+			files: ["bad.md"],
+			reporter: "github",
+			static: true,
+			env: { GITHUB_STEP_SUMMARY: notAFile },
+			...io,
+		})
+		expect(code).toBe(1)
+		expect(io.errors.join("\n")).toContain(`could not write the step summary to ${notAFile}`)
+	})
+
+	it("writes nothing for other reporters or without the variable", async () => {
+		writeFileSync(summaryPath, "")
+		await run("pretty", { GITHUB_STEP_SUMMARY: summaryPath })
+		await run("json", { GITHUB_STEP_SUMMARY: summaryPath })
+		await run("github", {})
+		expect(readFileSync(summaryPath, "utf8")).toBe("")
+	})
+})

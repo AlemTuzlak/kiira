@@ -1,5 +1,5 @@
 import type { KiiraCheckResult } from "kiira-core"
-import { formatGithub, formatJson, formatPretty } from "./reporters"
+import { formatGithub, formatGithubSummary, formatJson, formatPretty } from "./reporters"
 
 function result(): KiiraCheckResult {
 	return {
@@ -63,7 +63,7 @@ describe("formatJson", () => {
 	it("leaves the sources the run read out of the output", () => {
 		const output = formatJson(result())
 		expect(output).not.toContain("SOURCE-TEXT")
-		expect(Object.keys(JSON.parse(output))).toEqual(["stats", "diagnostics"])
+		expect(Object.keys(JSON.parse(output))).toEqual(["schemaVersion", "stats", "diagnostics"])
 	})
 })
 
@@ -165,5 +165,69 @@ describe("formatPretty", () => {
 			stats: { markdownFiles: 2, snippets: 3, checked: 3, ignored: 0, errors: 0, warnings: 0 },
 		}
 		expect(formatPretty(clean, { cwd: "/repo" })).toMatch(/no (errors|problems)/i)
+	})
+})
+
+describe("formatJson schema", () => {
+	it("puts schemaVersion first", () => {
+		const report = JSON.parse(formatJson(result()))
+		expect(Object.keys(report)[0]).toBe("schemaVersion")
+		expect(report.schemaVersion).toBe(1)
+	})
+})
+
+describe("formatGithubSummary", () => {
+	it("lists the errors with 1-based lines and the first message line only", () => {
+		const r = result()
+		r.diagnostics[0].message = "first line\nsecond line"
+		expect(formatGithubSummary(r)).toBe(
+			[
+				"### Kiira",
+				"",
+				"Failed",
+				"",
+				"- Files: 1",
+				"- Snippets checked: 4",
+				"- Errors: 1",
+				"- Warnings: 0",
+				"",
+				"- `docs/quickstart.md:42` first line",
+				"",
+			].join("\n")
+		)
+	})
+
+	it("escapes Markdown in messages, fences backticks in paths, and caps long messages", () => {
+		const r = result()
+		r.diagnostics[0].markdownFile = "docs/`odd`.md"
+		r.diagnostics[0].message = "Type 'Promise<string>' is not `a_b` | [x] *y* & \\z"
+		expect(formatGithubSummary(r)).toContain(
+			"- ``docs/`odd`.md:42`` Type 'Promise\\<string\\>' is not \\`a\\_b\\` \\| \\[x\\] \\*y\\* \\& \\\\z\n"
+		)
+
+		r.diagnostics[0].message = "x".repeat(300)
+		expect(formatGithubSummary(r)).toContain(` ${"x".repeat(199)}…\n`)
+	})
+
+	it("says Passed and lists nothing for a clean run", () => {
+		const stats = { ...result().stats, errors: 0 }
+		const clean: KiiraCheckResult = { snippets: [], virtualFiles: [], diagnostics: [], stats, sources: {} }
+		expect(formatGithubSummary(clean)).toContain("\nPassed\n")
+		expect(formatGithubSummary(clean)).not.toContain("`")
+	})
+
+	it("truncates after 10 errors", () => {
+		const r = result()
+		const [first] = r.diagnostics
+		r.diagnostics = Array.from({ length: 13 }, (_, i) => ({
+			...first,
+			markdownRange: { start: { line: i, character: 0 }, end: { line: i, character: 1 } },
+		}))
+		r.stats.errors = 13
+		const out = formatGithubSummary(r)
+		expect(out.match(/^- `/gm)).toHaveLength(10)
+		expect(out).toContain("`docs/quickstart.md:10`")
+		expect(out).not.toContain("`docs/quickstart.md:11`")
+		expect(out.endsWith("- and 3 more\n")).toBe(true)
 	})
 })
