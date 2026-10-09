@@ -10,17 +10,8 @@
 	"engines": {
 		"vscode": "^1.85.0"
 	},
-	"categories": [
-		"Linters",
-		"Programming Languages"
-	],
-	"keywords": [
-		"markdown",
-		"typescript",
-		"docs",
-		"kiira",
-		"validation"
-	],
+	"categories": ["Linters", "Programming Languages"],
+	"keywords": ["markdown", "typescript", "docs", "kiira", "validation"],
 	"galleryBanner": {
 		"color": "#0d1117",
 		"theme": "dark"
@@ -32,9 +23,7 @@
 	},
 	"qna": "marketplace",
 	"main": "./out/extension.cjs",
-	"activationEvents": [
-		"onLanguage:markdown"
-	],
+	"activationEvents": ["onLanguage:markdown"],
 	"contributes": {
 		"commands": [
 			{
