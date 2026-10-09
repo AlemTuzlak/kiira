@@ -3,7 +3,7 @@ import { createRequire } from "node:module"
 import { join } from "node:path"
 import type ts from "typescript"
 import type { KiiraEngine, SourcePosition, VirtualFile } from "./types"
-import { getTypescript } from "./typescript"
+import { type TypeScriptModule, getTypescript } from "./typescript"
 
 /**
  * A diagnostic in virtual-file coordinates, normalized across the classic and
@@ -85,38 +85,39 @@ export function setTypescriptLibDir(dir: string | undefined): void {
 // file it reaches; that is most of a check's cost and none of it changes between
 // checks. Real (on-disk) source files are cached here and served to every later
 // program; the virtual files are tiny and always parsed fresh. Each hit is
-// validated against the file's current mtime, so an edited declaration file or a
-// changed install is picked up on the next check without any explicit invalidation.
-// The previous program is also handed back to `createProgram` as `oldProgram`, which
-// lets TypeScript keep module resolutions and bound files it already has.
+// validated by reading the file again and comparing its text with the cached
+// parse (reading is far cheaper than parsing). An mtime check is not enough: npm
+// installs every file with the same fixed mtime, and so can `cp -p`, rsync and tar.
 
-interface CachedSourceFile {
-	sourceFile: ts.SourceFile
-	/** The file's modification time when it was parsed, in ms; `undefined` when unknown. */
-	mtime: number | undefined
-}
+/**
+ * Cap on cached source files, dropped least recently used first. A large project's
+ * libs plus `node_modules` types stay well under it.
+ */
+const SOURCE_FILE_CACHE_LIMIT = 5000
 
-const sourceFileCache = new Map<string, CachedSourceFile>()
-let oldProgram: ts.Program | undefined
+/** Cached source files, in least-recently-used-first order. */
+const sourceFileCache = new Map<string, ts.SourceFile>()
 /** The TypeScript module the cached files were parsed with; a different one (a project's own) invalidates them. */
 let cacheOwner: unknown
+/** Only used for its `getKeyForCompilationSettings`; it never holds a document. */
+let settingsKeys: ts.DocumentRegistry | undefined
 
 /** Make sure the cache belongs to the TypeScript module in use. */
-function ensureCacheOwner(ts: unknown): void {
+function ensureCacheOwner(ts: TypeScriptModule): void {
 	if (cacheOwner !== ts) {
 		resetClassicEngineCache()
 		cacheOwner = ts
+		settingsKeys = ts.createDocumentRegistry()
 	}
 }
 
 /**
- * Drop every cached source file and the previous program. Call when the TypeScript
- * module or lib directory changes (a cached `SourceFile` belongs to the TypeScript
- * that parsed it) or to release memory in a long-lived host.
+ * Drop every cached source file. Call when the TypeScript module or lib directory
+ * changes (a cached `SourceFile` belongs to the TypeScript that parsed it) or to
+ * release memory in a long-lived host.
  */
 export function resetClassicEngineCache(): void {
 	sourceFileCache.clear()
-	oldProgram = undefined
 }
 
 /** Number of real source files currently held by the classic engine's cache. */
@@ -133,8 +134,15 @@ function parseKey(languageVersionOrOptions: ts.ScriptTarget | ts.CreateSourceFil
 	return `${languageVersion}|${impliedNodeFormat ?? ""}|${jsDocParsingMode ?? ""}`
 }
 
-function modifiedTime(fileName: string): number | undefined {
-	return getTypescript().sys.getModifiedTime?.(fileName)?.getTime()
+function cacheSourceFile(key: string, sourceFile: ts.SourceFile): void {
+	sourceFileCache.delete(key)
+	sourceFileCache.set(key, sourceFile)
+	if (sourceFileCache.size > SOURCE_FILE_CACHE_LIMIT) {
+		const oldest = sourceFileCache.keys().next().value
+		if (oldest !== undefined) {
+			sourceFileCache.delete(oldest)
+		}
+	}
 }
 
 /** Apply the configured lib-directory override to a compiler/language-service host. */
@@ -166,9 +174,18 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 		overlay.set(normalize(vf.fileName), vf)
 	}
 
-	// `moduleDetection` drives `setExternalModuleIndicator`, which the host bakes into
-	// the parse, so files parsed under a different setting are not interchangeable.
-	const optionsKey = `${options.moduleDetection ?? ""}`
+	const originalReadFile = host.readFile.bind(host)
+	host.readFile = (fileName) => {
+		const vf = overlay.get(normalize(fileName))
+		return vf ? vf.content : originalReadFile(fileName)
+	}
+
+	const originalFileExists = host.fileExists.bind(host)
+	host.fileExists = (fileName) => overlay.has(normalize(fileName)) || originalFileExists(fileName)
+
+	// The settings that change how a file parses or binds (TypeScript binds a
+	// `SourceFile` only once), so files from different settings never mix.
+	const optionsKey = settingsKeys?.getKeyForCompilationSettings(options) ?? ""
 	const originalGetSourceFile = host.getSourceFile.bind(host)
 	host.getSourceFile = (fileName, languageVersionOrOptions, onError, shouldCreate) => {
 		const vf = overlay.get(normalize(fileName))
@@ -176,27 +193,18 @@ function createOverlayHost(options: ts.CompilerOptions, virtualFiles: VirtualFil
 			return ts.createSourceFile(fileName, vf.content, languageVersionOrOptions, true, scriptKindFor(vf.lang))
 		}
 		const key = `${normalize(fileName)}|${parseKey(languageVersionOrOptions)}|${optionsKey}`
-		const mtime = modifiedTime(fileName)
 		const cached = sourceFileCache.get(key)
-		if (cached && cached.mtime !== undefined && cached.mtime === mtime) {
-			return cached.sourceFile
+		if (cached && cached.text === originalReadFile(fileName)) {
+			cacheSourceFile(key, cached)
+			return cached
 		}
 		const sourceFile = originalGetSourceFile(fileName, languageVersionOrOptions, onError, shouldCreate)
-		if (sourceFile && mtime !== undefined) {
-			sourceFileCache.set(key, { sourceFile, mtime })
+		if (sourceFile) {
+			cacheSourceFile(key, sourceFile)
 		} else {
 			sourceFileCache.delete(key)
 		}
 		return sourceFile
-	}
-
-	const originalFileExists = host.fileExists.bind(host)
-	host.fileExists = (fileName) => overlay.has(normalize(fileName)) || originalFileExists(fileName)
-
-	const originalReadFile = host.readFile.bind(host)
-	host.readFile = (fileName) => {
-		const vf = overlay.get(normalize(fileName))
-		return vf ? vf.content : originalReadFile(fileName)
 	}
 
 	applyLibDirOverride(host)
@@ -209,8 +217,7 @@ export const classicEngine: CheckerEngine = {
 		const ts = getTypescript()
 		ensureCacheOwner(ts)
 		const host = createOverlayHost(options, virtualFiles)
-		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host, oldProgram })
-		oldProgram = program
+		const program = ts.createProgram({ rootNames: virtualFiles.map((v) => v.fileName), options, host })
 		onProgram?.(program)
 
 		const diagnostics: RawDiagnostic[] = []

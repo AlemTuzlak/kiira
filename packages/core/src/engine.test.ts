@@ -1,9 +1,9 @@
-import fs, { mkdtempSync, utimesSync, writeFileSync } from "node:fs"
+import { mkdtempSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest"
 import {
 	classicEngine,
 	classicEngineCacheSize,
@@ -63,8 +63,8 @@ describe("classic engine reuse across checks", () => {
 		}
 	}
 
-	const libReads = (spy: { mock: { calls: unknown[][] } }): number =>
-		spy.mock.calls.filter(([path]) => typeof path === "string" && /lib\.[^/\\]*\.d\.ts$/.test(path)).length
+	const libFiles = (program: ts.Program | undefined): ts.SourceFile[] =>
+		program?.getSourceFiles().filter((file) => /lib\.[^/\\]*\.d\.ts$/.test(file.fileName)) ?? []
 
 	beforeEach(() => {
 		resetClassicEngineCache()
@@ -72,33 +72,55 @@ describe("classic engine reuse across checks", () => {
 
 	it("parses the lib files once and serves them to later programs", async () => {
 		const { vf } = project()
-		const spy = vi.spyOn(fs, "readFileSync")
-		expect(await classicEngine.collect([vf("const n: number = 1")], options())).toEqual([])
-		const first = libReads(spy)
-		expect(first).toBeGreaterThan(0)
+		let first: ts.Program | undefined
+		let second: ts.Program | undefined
+		const keepFirst = (program: ts.Program): void => {
+			first = program
+		}
+		const keepSecond = (program: ts.Program): void => {
+			second = program
+		}
+		expect(await classicEngine.collect([vf("const n: number = 1")], options(), keepFirst)).toEqual([])
+		expect(libFiles(first).length).toBeGreaterThan(0)
 		expect(classicEngineCacheSize()).toBeGreaterThan(0)
 
-		const diagnostics = await classicEngine.collect([vf('const n: number = "x"')], options())
+		const diagnostics = await classicEngine.collect([vf('const n: number = "x"')], options(), keepSecond)
 		expect(diagnostics.map((d) => d.code)).toEqual([2322])
-		expect(libReads(spy)).toBe(first)
-		spy.mockRestore()
+		// The very same parsed objects, not re-parsed copies.
+		const reused = libFiles(first)
+		expect(libFiles(second).length).toBe(reused.length)
+		expect(libFiles(second).every((file, i) => file === reused[i])).toBe(true)
 	})
 
-	it("re-reads a declaration file when it changes on disk", async () => {
+	it("re-reads a declaration file whose content changes but whose mtime does not", async () => {
 		const { dir, vf } = project()
 		const decl = join(dir, "globals.d.ts")
+		// npm installs every file with this fixed mtime, so a version bump keeps it.
+		const npmTime = new Date("1985-10-26T08:15:00Z")
 		writeFileSync(decl, "declare const answer: number\n")
+		utimesSync(decl, npmTime, npmTime)
 		const snippet = vf('/// <reference path="../../globals.d.ts" />\nconst n: number = answer')
 
 		expect(await classicEngine.collect([snippet], options())).toEqual([])
 
-		// Bump the mtime past the cached one so the change is detectable even within the same second.
 		writeFileSync(decl, "declare const answer: string\n")
-		const later = new Date(Date.now() + 5_000)
-		utimesSync(decl, later, later)
+		utimesSync(decl, npmTime, npmTime)
 
 		const diagnostics = await classicEngine.collect([snippet], options())
 		expect(diagnostics.map((d) => d.code)).toEqual([2322])
+	})
+
+	it("keeps files parsed under different module settings apart", async () => {
+		const { vf } = project()
+		await classicEngine.collect([vf("export const a = 1")], options())
+		const first = classicEngineCacheSize()
+
+		await classicEngine.collect([vf("export const a = 1")], {
+			...options(),
+			module: ts.ModuleKind.NodeNext,
+			moduleResolution: ts.ModuleResolutionKind.NodeNext,
+		})
+		expect(classicEngineCacheSize()).toBe(first * 2)
 	})
 
 	it("resetClassicEngineCache empties the cache", async () => {
