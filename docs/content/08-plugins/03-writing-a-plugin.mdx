@@ -51,8 +51,8 @@ A few things to know:
 
 - `create` runs once per file for a `document` or `program` rule, and once per run for a `project` rule. It can be `async`.
 - Ranges are zero-based, like the rest of Kiira's diagnostics. The CLI adds one when it prints them.
-- A rule that throws fails the run with an error that names the rule and the file.
-- Options that fail `validate`, an unknown rule id, and a plugin without a `name` all fail when the config is resolved, not when the rule runs.
+- A rule that throws does not stop the check. Kiira reports an `error` diagnostic with the rule id as its `code` and a message that names the rule, the file, and the error. The other rules still run. A failed `project` rule is reported on the first file of the run.
+- Options that fail `validate`, an unknown rule id, a rule with an unknown `scope` or `defaultSeverity`, and a plugin without a `name` all fail when the config is resolved, not when the rule runs.
 
 ## Scopes
 
@@ -134,11 +134,11 @@ export const docsIndex = defineRule({
 
 ## Reporting and fixes
 
-`report` takes a `range` and a `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) replaces the configured level for that one report, and an optional `fix` is applied by `--fix`.
+`report` takes a `range` and a `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) can lower the configured level for that one report. It cannot raise it: a rule set to `warn` that reports `"error"` still gives a warning. An optional `fix` is applied by `--fix`.
 
 ### Return a fix
 
-An `edits` fix is a list of text edits. Each edit names a `file` (relative to the project root, with `/` separators), a zero-based `range` to replace, and the `newText`. A zero-width range inserts.
+An `edits` fix is a list of text edits. Each edit names a `file` (relative to the project root, with `/` separators), a zero-based `range` to replace, and the `newText`. A zero-width range inserts. Kiira normalizes the `file`, so `./docs/a.md` and `docs/a.md` are the same file.
 
 This `report` call replaces the flagged word with `DONE`:
 
@@ -168,10 +168,11 @@ const rewrite = defineRule({
 export const plugin = definePlugin({ name: "docs", rules: { rewrite } })
 ```
 
-An `edits` fix can also change another file, such as one the rule read with `ctx.fs.readText`. The safe writer behind `--fix` is careful with the files it writes:
+An `edits` fix can also change another file, such as one the rule read with `ctx.fs.readText`. `--fix` is careful with the files it writes:
 
 - It only edits a file the check read: a Markdown document in the run, or a file a rule read with `ctx.fs.readText`. An edit to any other file is refused.
-- It re-reads the file first and refuses it if the text changed since the check, so a fix never lands on stale ranges.
+- It re-reads the file first and refuses it if the text changed since the check, so a fix never lands on stale ranges. It also refuses a file that is not valid UTF-8 or is read-only.
+- A fix is all or nothing. If one file of an `edits` fix is refused, the fix is dropped from every file it edits.
 - It refuses paths outside the project, inside `.git` or `node_modules`, or that reach either through a symlink.
 - It refuses every edit in a file when two of them overlap, and prints which fixes conflict. Other files are still fixed. Identical edits count once, and inserts at the same point apply in report order.
 - It keeps a file's line endings: in a file that uses CRLF, a `\n` in `newText` is written as `\r\n`. A line's characters stop before its `\r\n`.
@@ -196,7 +197,7 @@ A document that starts with a `---` line and has a later line of exactly `---` h
 - `range` runs from the start of the opening `---` to the end of the closing `---`.
 - `bodyStart` is the first line after the block.
 
-Kiira does not parse YAML, so a plugin brings its own parser, or reads `raw` as text. The block is left out of `ctx.mdast`, and line numbers after it are the same as in the file. `ctx.text` is still the whole file. A byte order mark before the opening `---` means the document has no frontmatter.
+Kiira does not parse YAML, so a plugin brings its own parser, or reads `raw` as text. The block is left out of `ctx.mdast`, and the line, column, and offset of each node after it are the same as in the file. `ctx.text` is still the whole file. A byte order mark before the opening `---` is skipped. If a code fence opens between the two `---` lines, the block is not frontmatter, so the fence is still checked.
 
 This rule requires a `name:` line:
 
@@ -227,9 +228,9 @@ A plugin or preset can set its own TypeScript options for each Markdown file. Ad
 
 | Result | Effect |
 | --- | --- |
-| `compilerOptions` | tsconfig-style options, in the same string form as [`overrides`](/latest/configuration/options#overrides). An invalid option throws an error that names the plugin or preset and the file. |
+| `compilerOptions` | tsconfig-style options, in the same string form as [`overrides`](/latest/configuration/options#overrides). An invalid option throws an error that names the plugin or preset and the file. `paths` and `baseUrl` also throw an error. Use the `paths` result instead. |
 | `replaceTsconfig` | When `true`, start from Kiira's default options instead of the project tsconfig. `allowJs` and `checkJs` stay on unless your `compilerOptions` turn them off. Workspace and external-package resolution still apply. |
-| `paths` | Path mappings merged on top of the file's `paths`, including the ones from your workspace. |
+| `paths` | Path mappings merged on top of the file's `paths`, including the ones from your workspace. Values are relative to `cwd`, also when your tsconfig sets a `baseUrl`. Targets for `"*"` go after the existing `"*"` targets. |
 | `filterDiagnostic` | Called for each TypeScript diagnostic of the file. Return `false` to drop it. |
 
 This plugin checks docs against Kiira's defaults instead of the project tsconfig, resolves `@docs/*` imports to a folder of examples, and drops "cannot find name" errors for a global the docs assume:
@@ -257,9 +258,10 @@ export default defineConfig({ plugins: [docs] })
 A few things to know:
 
 - Hooks run once per document. Presets' hooks run first, in preset order, then plugins' hooks in plugin order.
-- Results merge: `compilerOptions` are shallow-merged and `paths` merge per key, with later hooks winning. `replaceTsconfig` is `true` if any hook says so. A diagnostic is dropped if any `filterDiagnostic` returns `false`.
+- Results merge: `compilerOptions` are shallow-merged and `paths` merge per key, with later hooks winning. The `"*"` key is different: each hook adds its targets after the earlier ones. `replaceTsconfig` is `true` if any hook says so. A diagnostic is dropped if any `filterDiagnostic` returns `false`.
 - A file's options are layered in this order: the tsconfig (or Kiira's defaults), the `unused-symbols` level, matching `overrides`, the hook's `compilerOptions`, then the hook's `paths`.
 - Files whose final options differ are checked in separate programs, so one document's hook never changes how another is checked.
+- A `filterDiagnostic` that throws fails the run with an error that names the plugin or preset and the file.
 - `filterDiagnostic` runs on TypeScript diagnostics only, before `unused-symbols`, `relative-imports`, and document rules see them. Its `snippet` is the fence that contains the diagnostic, or the file's first fence when the diagnostic is in generated code.
 - Editor quick fixes in VS Code use the same options and the same `frontmatter`. A caller that has only the checked fences, such as `checkVirtualFiles`, gives hooks their code joined by blank lines as `text`, and `frontmatter` is `undefined`.
 
@@ -278,10 +280,14 @@ export default {
           meta: { scope: "document", defaultSeverity: "warn" },
           /** @param {import("kiira-core/plugin").RuleDocumentContext} ctx */
           create(ctx) {
-            const character = ctx.text.indexOf("TODO")
-            if (character === -1) return
-            const start = { line: 0, character }
-            ctx.report({ range: { start, end: start }, message: "Remove TODO." })
+            ctx.text.split("
+").forEach((line, index) => {
+              const character = line.indexOf("TODO")
+              if (character === -1) return
+              const start = { line: index, character }
+              const end = { line: index, character: character + 4 }
+              ctx.report({ range: { start, end }, message: "Remove TODO." })
+            })
           },
         },
       },
@@ -305,5 +311,7 @@ const result = await check({ cwd: "fixtures/todo", plugins: [plugin] })
 
 console.log(result.diagnostics.map((diagnostic) => diagnostic.code))
 ```
+
+A relative `cwd` is resolved from the current directory, so run the test from the folder that has `fixtures/`. Use an absolute path if you are not sure.
 
 A complete example lives in [`examples/plugin-basic`](https://github.com/AlemTuzlak/kiira/tree/main/examples/plugin-basic): a document, a program, and a project rule, a preset with an `include` function, a TypeScript hook, and end-to-end tests that run `check()` and the CLI with `--fix` and `--dry-run`.

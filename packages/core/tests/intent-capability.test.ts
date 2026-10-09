@@ -91,7 +91,7 @@ const skillFrontmatter = defineRule({
 	},
 })
 
-describe("Intent capability map", () => {
+describe("Intent skill validation with the plugin API", () => {
 	// A git hook (the pre-commit test run) exports GIT_INDEX_FILE and friends, which would point the
 	// git commands in these tests, and `isTracked`, at the outer repository instead of the temp one.
 	beforeEach(() => {
@@ -328,7 +328,7 @@ describe("Intent capability map", () => {
 				const entry = ["dist/index.d.ts", "src/index.ts"].find((candidate) => ctx.project.isTracked(candidate))
 				if (typeof name === "string" && entry) paths[name] = [`./${entry}`]
 				for (const pkg of ctx.project.workspacePackages) {
-					paths[pkg.name] = [`./${relative(ctx.project.cwd, pkg.dir)}/src/index.ts`]
+					paths[pkg.name] = [`./${relative(ctx.project.cwd, pkg.dir).replaceAll("\\", "/")}/src/index.ts`]
 				}
 				return { paths }
 			},
@@ -523,7 +523,7 @@ describe("Intent capability map", () => {
 		expect(stats).toMatchObject({ errors: 2, warnings: 1 })
 	})
 
-	it("frontmatter repair: document rule edits fix + safe writer", async () => {
+	it("frontmatter repair: a document rule returns exact edits for LF and CRLF files", async () => {
 		// Moves a non-spec `author:` key under `metadata:`. `--fix` applies these edits with the safe writer
 		// (unchanged-file check, overlap refusal, CRLF kept, atomic write), which packages/cli/src/fix.test.ts
 		// covers; here the edits are applied directly to show that the fix is exact.
@@ -563,7 +563,7 @@ describe("Intent capability map", () => {
 		expect(applyEdits(crlf, edits)).toBe(`---\r\nname: a\r\nmetadata:\n  author: me\r\n---\r\n\r\n${body}`)
 	})
 
-	it("--check: a fixable diagnostic at error severity fails the run", async () => {
+	it("--check: a fixable error still counts in stats.errors", async () => {
 		const fixable = defineRule({
 			meta: { scope: "document", defaultSeverity: "error" },
 			create(ctx) {
@@ -585,7 +585,7 @@ describe("Intent capability map", () => {
 		expect(stats.errors).toBe(1)
 	})
 
-	it("repair --patch: --fix --dry-run, because a check only reports edits and never writes", async () => {
+	it("repair --patch: the result has the text that was read and the edits a dry-run diff needs", async () => {
 		const rename = defineRule({
 			meta: { scope: "document", defaultSeverity: "warn" },
 			create(ctx) {
@@ -659,7 +659,7 @@ describe("Intent capability map", () => {
 		expect(again.diagnostics).toEqual([])
 	})
 
-	it("--github-summary: the github reporter's step summary, fed by the diagnostics a rule reports", async () => {
+	it("--github-summary: a plugin diagnostic has the file, line, message, and counts the step summary uses", async () => {
 		const flag = defineRule({
 			meta: { scope: "document", defaultSeverity: "error" },
 			create(ctx) {
