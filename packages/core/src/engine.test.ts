@@ -1,19 +1,45 @@
-import { mkdtempSync, utimesSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	classicEngine,
 	classicEngineCacheSize,
+	getClassicResolutionCache,
 	projectTypescriptMajor,
 	resetClassicEngineCache,
 	resolveEngine,
 } from "./engine"
 import type { VirtualFile } from "./types"
 
+// Wrap statSync so a test can make the engine's fingerprint stat fail.
+vi.mock("node:fs", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("node:fs")>()
+	return { ...actual, statSync: vi.fn(actual.statSync) }
+})
+
 const cwd = fileURLToPath(new URL(".", import.meta.url))
+const OPTIONS: ts.CompilerOptions = {
+	target: ts.ScriptTarget.ES2022,
+	module: ts.ModuleKind.ESNext,
+	moduleResolution: ts.ModuleResolutionKind.Bundler,
+	strict: true,
+	skipLibCheck: true,
+	noEmit: true,
+}
+
+function virtualFile(root: string, name: string, content: string): VirtualFile {
+	return {
+		id: name,
+		fileName: join(root, ".kiira", "virtual", name),
+		lang: "ts",
+		content,
+		snippet: {} as VirtualFile["snippet"],
+		mappings: [],
+	}
+}
 
 describe("projectTypescriptMajor", () => {
 	it("reads the bundled TypeScript major from cwd", () => {
@@ -124,10 +150,284 @@ describe("classic engine reuse across checks", () => {
 	})
 
 	it("resetClassicEngineCache empties the cache", async () => {
-		const { vf } = project()
+		const { dir, vf } = project()
 		await classicEngine.collect([vf("export const a = 1")], options())
 		expect(classicEngineCacheSize()).toBeGreaterThan(0)
+		expect(getClassicResolutionCache(dir, options())).toBeDefined()
 		resetClassicEngineCache()
 		expect(classicEngineCacheSize()).toBe(0)
+		expect(getClassicResolutionCache(dir, options())).toBeUndefined()
+	})
+})
+
+describe("classic module resolution cache", () => {
+	it("reuses negative lookups across virtual edits and invalidates disk changes", async () => {
+		const root = mkdtempSync(join(tmpdir(), "kiira-resolution-"))
+		const virtual = virtualFile(
+			root,
+			"entry.ts",
+			'import type { Value } from "fixture-pkg"\nexport const value: Value = "ok"\n'
+		)
+		const packageDir = join(root, "node_modules", "fixture-pkg")
+		const packageJson = join(packageDir, "package.json")
+		const declaration = join(packageDir, "index.d.ts")
+		const collectErrors = async (file: VirtualFile) =>
+			(await classicEngine.collect([file], OPTIONS)).filter((diagnostic) => diagnostic.severity === "error")
+
+		try {
+			expect((await collectErrors(virtual)).some((d) => d.code === 2307)).toBe(true)
+			const cache = getClassicResolutionCache(root, OPTIONS)
+			expect(cache).toBeDefined()
+			if (!cache) {
+				throw new Error("Expected classic module resolution cache")
+			}
+			const clearSpy = vi.spyOn(cache, "clear")
+			try {
+				const edited = { ...virtual, content: `// changed text\n${virtual.content}` }
+				expect((await collectErrors(edited)).some((d) => d.code === 2307)).toBe(true)
+				expect(clearSpy).not.toHaveBeenCalled()
+
+				mkdirSync(packageDir, { recursive: true })
+				writeFileSync(packageJson, JSON.stringify({ types: "./index.d.ts" }))
+				writeFileSync(declaration, 'export type Value = "ok"\n')
+				expect((await collectErrors(edited)).some((d) => d.code === 2307)).toBe(false)
+				expect(clearSpy).toHaveBeenCalledTimes(1)
+
+				writeFileSync(declaration, "export type Value = number\n")
+				expect((await collectErrors(edited)).some((d) => d.code === 2322)).toBe(true)
+				expect(clearSpy).toHaveBeenCalledTimes(2)
+
+				rmSync(packageDir, { recursive: true, force: true })
+				expect((await collectErrors(edited)).some((d) => d.code === 2307)).toBe(true)
+				expect(clearSpy).toHaveBeenCalledTimes(3)
+			} finally {
+				clearSpy.mockRestore()
+			}
+		} finally {
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("invalidates a missing alias target created outside the tracked roots", async () => {
+		const workspace = mkdtempSync(join(tmpdir(), "kiira-resolution-alias-"))
+		const project = join(workspace, "project")
+		const shared = join(workspace, "shared")
+		mkdirSync(project)
+		mkdirSync(shared)
+		const virtual = virtualFile(
+			project,
+			"entry.ts",
+			'import { value } from "shared-dep"\nconst expected: "ok" = value\n'
+		)
+		const options: ts.CompilerOptions = {
+			...OPTIONS,
+			baseUrl: project,
+			paths: { "shared-dep": ["../shared/dep"] },
+		}
+		const collectErrors = async (file: VirtualFile) =>
+			(await classicEngine.collect([file], options)).filter((diagnostic) => diagnostic.severity === "error")
+
+		try {
+			expect((await collectErrors(virtual)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+			const cache = getClassicResolutionCache(project, options)
+			expect(cache).toBeDefined()
+			if (!cache) {
+				throw new Error("Expected classic module resolution cache")
+			}
+			const clearSpy = vi.spyOn(cache, "clear")
+			try {
+				const edited = { ...virtual, content: `// changed text\n${virtual.content}` }
+				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+				expect(clearSpy).not.toHaveBeenCalled()
+
+				writeFileSync(join(shared, "unrelated.d.ts"), "export declare const unrelated: true\n")
+				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(true)
+				expect(clearSpy).not.toHaveBeenCalled()
+
+				writeFileSync(join(shared, "dep.d.ts"), 'export declare const value: "ok"\n')
+				expect((await collectErrors(edited)).some((diagnostic) => diagnostic.code === 2307)).toBe(false)
+				expect(clearSpy).toHaveBeenCalledTimes(1)
+			} finally {
+				clearSpy.mockRestore()
+			}
+		} finally {
+			rmSync(workspace, { recursive: true, force: true })
+		}
+	})
+
+	it("isolates options and cwd, preserves import and require modes, and invalidates removed overlays", async () => {
+		const firstRoot = mkdtempSync(join(tmpdir(), "kiira-resolution-one-"))
+		const secondRoot = mkdtempSync(join(tmpdir(), "kiira-resolution-two-"))
+		try {
+			writeFileSync(join(firstRoot, "first.d.ts"), 'export declare const value: "first"\n')
+			writeFileSync(join(firstRoot, "second.d.ts"), 'export declare const value: "second"\n')
+			const aliasFile = virtualFile(
+				firstRoot,
+				"alias.ts",
+				'import { value } from "alias"\nconst expected: "first" = value\n'
+			)
+			const firstOptions = { ...OPTIONS, baseUrl: firstRoot, paths: { alias: ["first.d.ts"] } }
+			const secondOptions = { ...OPTIONS, baseUrl: firstRoot, paths: { alias: ["second.d.ts"] } }
+			expect((await classicEngine.collect([aliasFile], firstOptions)).some((d) => d.code === 2322)).toBe(false)
+			expect((await classicEngine.collect([aliasFile], secondOptions)).some((d) => d.code === 2322)).toBe(true)
+
+			for (const [root, value] of [
+				[firstRoot, "first"],
+				[secondRoot, "second"],
+			] as const) {
+				const packageDir = join(root, "node_modules", "cwd-pkg")
+				mkdirSync(packageDir, { recursive: true })
+				writeFileSync(join(packageDir, "package.json"), JSON.stringify({ types: "./index.d.ts" }))
+				writeFileSync(join(packageDir, "index.d.ts"), `export declare const value: "${value}"\n`)
+			}
+			const cwdOptions = { ...OPTIONS, baseUrl: undefined, paths: undefined }
+			const firstCwdFile = virtualFile(
+				firstRoot,
+				"cwd.ts",
+				'import { value } from "cwd-pkg"\nconst expected: "first" = value\n'
+			)
+			const secondCwdFile = virtualFile(
+				secondRoot,
+				"cwd.ts",
+				'import { value } from "cwd-pkg"\nconst expected: "first" = value\n'
+			)
+			expect((await classicEngine.collect([firstCwdFile], cwdOptions)).some((d) => d.code === 2322)).toBe(false)
+			expect((await classicEngine.collect([secondCwdFile], cwdOptions)).some((d) => d.code === 2322)).toBe(true)
+
+			const modes = join(firstRoot, "node_modules", "mode-pkg")
+			mkdirSync(modes, { recursive: true })
+			writeFileSync(
+				join(modes, "package.json"),
+				JSON.stringify({
+					exports: {
+						".": {
+							import: { types: "./import.d.mts", default: "./import.mjs" },
+							require: { types: "./require.d.cts", default: "./require.cjs" },
+						},
+					},
+				})
+			)
+			writeFileSync(join(modes, "import.d.mts"), 'export declare const value: "import"\n')
+			writeFileSync(join(modes, "require.d.cts"), 'export declare const value: "require"\n')
+			const modeOptions: ts.CompilerOptions = {
+				...OPTIONS,
+				module: ts.ModuleKind.NodeNext,
+				moduleResolution: ts.ModuleResolutionKind.NodeNext,
+			}
+			const importFile = virtualFile(
+				firstRoot,
+				"importer.mts",
+				'import { value } from "mode-pkg"\nconst expected: "import" = value\n'
+			)
+			const requireFile = virtualFile(
+				firstRoot,
+				"requirer.cts",
+				'import mode = require("mode-pkg")\nconst expected: "require" = mode.value\n'
+			)
+			expect(
+				(await classicEngine.collect([importFile, requireFile], modeOptions)).filter((d) => d.severity === "error")
+			).toHaveLength(0)
+
+			const entry = virtualFile(firstRoot, "overlay.ts", 'import { value } from "./dep"\nexport const copy = value\n')
+			const dependency = virtualFile(firstRoot, "dep.ts", "export const value = 1\n")
+			expect((await classicEngine.collect([entry, dependency], OPTIONS)).some((d) => d.code === 2307)).toBe(false)
+			expect((await classicEngine.collect([entry], OPTIONS)).some((d) => d.code === 2307)).toBe(true)
+		} finally {
+			rmSync(firstRoot, { recursive: true, force: true })
+			rmSync(secondRoot, { recursive: true, force: true })
+		}
+	})
+
+	it("invalidates when the package.json scope changes a nodenext file format", async () => {
+		const root = mkdtempSync(join(tmpdir(), "kiira-resolution-scope-"))
+		const options: ts.CompilerOptions = {
+			...OPTIONS,
+			module: ts.ModuleKind.NodeNext,
+			moduleResolution: ts.ModuleResolutionKind.NodeNext,
+		}
+		// `import.meta` is an error (TS1470) only when the file is CommonJS.
+		const virtual = virtualFile(root, "entry.ts", "export const meta = import.meta\n")
+		const hasCommonJsError = async () =>
+			(await classicEngine.collect([virtual], options)).some((diagnostic) => diagnostic.code === 1470)
+
+		try {
+			writeFileSync(join(root, "package.json"), JSON.stringify({ name: "scope" }))
+			expect(await hasCommonJsError()).toBe(true)
+			expect(await hasCommonJsError()).toBe(true)
+
+			writeFileSync(join(root, "package.json"), JSON.stringify({ name: "scope", type: "module" }))
+			expect(await hasCommonJsError()).toBe(false)
+		} finally {
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("treats a stat error as a stable fingerprint instead of throwing", async () => {
+		const root = mkdtempSync(join(tmpdir(), "kiira-resolution-eacces-"))
+		const packageDir = join(root, "node_modules", "fixture-pkg")
+		mkdirSync(packageDir, { recursive: true })
+		writeFileSync(join(packageDir, "package.json"), JSON.stringify({ types: "./index.d.ts" }))
+		writeFileSync(join(packageDir, "index.d.ts"), 'export type Value = "ok"\n')
+		const virtual = virtualFile(
+			root,
+			"entry.ts",
+			'import type { Value } from "fixture-pkg"\nexport const value: Value = "ok"\n'
+		)
+		const actual = await vi.importActual<typeof import("node:fs")>("node:fs")
+		const isPackageJson = (path: unknown) => /fixture-pkg[\\/]package\.json$/i.test(String(path))
+
+		try {
+			expect(await classicEngine.collect([virtual], OPTIONS)).toHaveLength(0)
+			const cache = getClassicResolutionCache(root, OPTIONS)
+			if (!cache) {
+				throw new Error("Expected classic module resolution cache")
+			}
+			const clearSpy = vi.spyOn(cache, "clear")
+			vi.mocked(statSync).mockImplementation(((path: string, statOptions?: object) => {
+				if (isPackageJson(path)) {
+					throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" })
+				}
+				return actual.statSync(path, statOptions)
+			}) as typeof statSync)
+			try {
+				expect(await classicEngine.collect([virtual], OPTIONS)).toHaveLength(0)
+				expect(clearSpy).toHaveBeenCalledTimes(1)
+				expect(await classicEngine.collect([virtual], OPTIONS)).toHaveLength(0)
+				expect(clearSpy).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.mocked(statSync).mockImplementation(actual.statSync)
+				clearSpy.mockRestore()
+			}
+		} finally {
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
+	it("keeps one cache per cwd and option set and caps how many are cached", async () => {
+		const workspace = mkdtempSync(join(tmpdir(), "kiira-resolution-cap-"))
+		const roots = Array.from({ length: 9 }, (_, index) => join(workspace, `root-${index}`))
+		const otherOptions = { ...OPTIONS, strict: false }
+		const check = (root: string, options: ts.CompilerOptions) =>
+			classicEngine.collect([virtualFile(root, "entry.ts", "export const value = 1\n")], options)
+
+		try {
+			const [first, ...rest] = roots as [string, ...string[]]
+			await check(first, OPTIONS)
+			await check(first, otherOptions)
+			expect(getClassicResolutionCache(first, OPTIONS)).toBeDefined()
+			expect(getClassicResolutionCache(first, otherOptions)).toBeDefined()
+
+			for (const root of rest.slice(0, 7)) {
+				await check(root, OPTIONS)
+			}
+			// 2 + 7 entries: the oldest (first, OPTIONS) is dropped.
+			expect(getClassicResolutionCache(first, OPTIONS)).toBeUndefined()
+			expect(getClassicResolutionCache(first, otherOptions)).toBeDefined()
+			for (const root of rest.slice(0, 7)) {
+				expect(getClassicResolutionCache(root, OPTIONS)).toBeDefined()
+			}
+		} finally {
+			rmSync(workspace, { recursive: true, force: true })
+		}
 	})
 })
