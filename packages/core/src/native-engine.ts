@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -254,13 +255,28 @@ function createOverlayFileSystem(
 	}
 }
 
-const nativeEngines = new Map<string, Promise<NativeEngineSession>>()
+interface NativeEngineEntry {
+	/** The resolved compiler (`unstable/sync` path + version) the session was spawned from. */
+	readonly compiler: string
+	readonly session: Promise<NativeEngineSession>
+}
 
-/** Create one native checker session that can safely serve repeated snapshots. */
+const nativeEngines = new Map<string, NativeEngineEntry>()
+
+// The native API keeps the project's compiler process running, which on Windows
+// locks its binary in node_modules. Close idle sessions so installs can replace it.
+const NATIVE_SESSION_IDLE_MS = 30_000
+
+/**
+ * Create one native checker session that can safely serve repeated snapshots.
+ * With `idleTimeoutMs`, the session closes itself once no check has been queued
+ * or running for that long.
+ */
 export function createNativeEngineSession(
 	API: NativeApiConstructor,
 	cwd: string,
-	onFailure?: () => void
+	onClose?: () => void,
+	idleTimeoutMs?: number
 ): NativeEngineSession {
 	const root = resolve(cwd)
 	const tsconfigPath = join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/")
@@ -272,17 +288,41 @@ export function createNativeEngineSession(
 	let projectOpened = false
 	let closed = false
 	let queue: Promise<void> = Promise.resolve()
+	let pending = 0
+	let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+	const clearIdleTimer = (): void => {
+		clearTimeout(idleTimer)
+		idleTimer = undefined
+	}
 
 	const closeApi = (): void => {
 		if (closed) {
 			return
 		}
 		closed = true
+		clearIdleTimer()
 		try {
 			api.close()
 		} finally {
-			onFailure?.()
+			onClose?.()
 		}
+	}
+
+	const scheduleIdleClose = (): void => {
+		clearIdleTimer()
+		if (idleTimeoutMs === undefined || closed || pending > 0) {
+			return
+		}
+		idleTimer = setTimeout(() => {
+			idleTimer = undefined
+			try {
+				closeApi()
+			} catch {
+				// Nothing awaits an idle close; the next check starts a new session.
+			}
+		}, idleTimeoutMs)
+		idleTimer.unref?.()
 	}
 
 	const collectSnapshot = (virtualFiles: VirtualFile[], options: ts.CompilerOptions): RawDiagnostic[] => {
@@ -350,6 +390,9 @@ export function createNativeEngineSession(
 		}
 		try {
 			// Invalidate disk state first, then apply the current in-memory overlay changes.
+			// Both requests are needed: `fileChanges` is either `invalidateAll` or a change
+			// list, and with TypeScript 7.0 `invalidateAll` alone does not reload the
+			// synthesized tsconfig, so its `files` and options would stay stale.
 			snapshot = api.updateSnapshot(invalidateParams)
 			projectOpened = true
 			disposeSnapshot()
@@ -394,14 +437,19 @@ export function createNativeEngineSession(
 		}
 	}
 
+	const settle = (): void => {
+		pending -= 1
+		scheduleIdleClose()
+	}
+
+	scheduleIdleClose()
 	return {
 		name: "native",
 		collect(virtualFiles, options) {
+			pending += 1
+			clearIdleTimer()
 			const operation = queue.then(() => collectSnapshot(virtualFiles, options))
-			queue = operation.then(
-				() => undefined,
-				() => undefined
-			)
+			queue = operation.then(settle, settle)
 			return operation
 		},
 		async close() {
@@ -418,27 +466,42 @@ export function createNativeEngineSession(
 export async function createNativeEngine(cwd: string): Promise<CheckerEngine> {
 	const root = resolve(cwd)
 	const key = normalize(root)
+	const require = createRequire(join(root, "__kiira_native_resolver__.js"))
+	const syncEntry = require.resolve("typescript/unstable/sync")
+	const { version } = JSON.parse(readFileSync(require.resolve("typescript/package.json"), "utf8")) as {
+		version?: string
+	}
+	const compiler = `${normalize(syncEntry)}@${version}`
 	const existing = nativeEngines.get(key)
+	if (existing?.compiler === compiler) {
+		return existing.session
+	}
 	if (existing) {
-		return existing
+		// TypeScript was upgraded or reinstalled: stop the old compiler. Nothing
+		// awaits this close, so a failure must not become an unhandled rejection.
+		nativeEngines.delete(key)
+		void existing.session.then((session) => session.close()).catch(() => undefined)
 	}
 
 	let enginePromise: Promise<NativeEngineSession>
 	enginePromise = (async () => {
-		const require = createRequire(join(root, "__kiira_native_resolver__.js"))
-		const syncEntry = require.resolve("typescript/unstable/sync")
 		const mod = (await import(pathToFileURL(syncEntry).href)) as { API: NativeApiConstructor }
-		return createNativeEngineSession(mod.API, root, () => {
-			if (nativeEngines.get(key) === enginePromise) {
-				nativeEngines.delete(key)
-			}
-		})
+		return createNativeEngineSession(
+			mod.API,
+			root,
+			() => {
+				if (nativeEngines.get(key)?.session === enginePromise) {
+					nativeEngines.delete(key)
+				}
+			},
+			NATIVE_SESSION_IDLE_MS
+		)
 	})()
-	nativeEngines.set(key, enginePromise)
+	nativeEngines.set(key, { compiler, session: enginePromise })
 	try {
 		return await enginePromise
 	} catch (error) {
-		if (nativeEngines.get(key) === enginePromise) {
+		if (nativeEngines.get(key)?.session === enginePromise) {
 			nativeEngines.delete(key)
 		}
 		throw error
@@ -449,17 +512,17 @@ export async function createNativeEngine(cwd: string): Promise<CheckerEngine> {
 export async function closeNativeEngine(cwd?: string): Promise<void> {
 	if (cwd !== undefined) {
 		const key = normalize(resolve(cwd))
-		const enginePromise = nativeEngines.get(key)
-		if (!enginePromise) {
+		const entry = nativeEngines.get(key)
+		if (!entry) {
 			return
 		}
 		nativeEngines.delete(key)
-		await (await enginePromise).close()
+		await (await entry.session).close()
 		return
 	}
-	const engines = [...nativeEngines.values()]
+	const entries = [...nativeEngines.values()]
 	nativeEngines.clear()
-	await Promise.all(engines.map(async (engine) => (await engine).close()))
+	await Promise.all(entries.map(async (entry) => (await entry.session).close()))
 }
 
 /**

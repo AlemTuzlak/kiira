@@ -57,6 +57,10 @@ export class WorkspaceFolderCheckLifecycle {
 				this.workspaceFolders.delete(cwd)
 				this.generations.set(cwd, (this.generations.get(cwd) ?? 0) + 1)
 				await Promise.allSettled(this.checks.get(cwd) ?? [])
+				// The folder came back while its checks drained; its new checks use the session.
+				if (this.workspaceFolders.has(cwd)) {
+					return
+				}
 				await closeSession(cwd)
 			})
 		)

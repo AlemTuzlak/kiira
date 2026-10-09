@@ -110,7 +110,7 @@ Workspace dependency lookup is exhaustive by default. Set `workspacePackageResol
 | `closeNativeEngine` | Release the native TypeScript session for one `cwd`, or all sessions when omitted. |
 | `KIIRA_CORE_VERSION` | The installed engine version. |
 
-When `engine: "native"` is selected, or `"auto"` selects TypeScript 7, `kiira-core` reuses one TypeScript API session per `cwd` across checks. Each check invalidates TypeScript's cached file-system state before applying overlay changes so disk changes remain visible. Long-lived hosts must close sessions when their checker lifetime ends:
+When `engine: "native"` is selected, or `"auto"` selects TypeScript 7, `kiira-core` reuses one TypeScript API session per `cwd` across checks. Each check invalidates TypeScript's cached file-system state before applying overlay changes so disk changes remain visible. A session closes after 30 seconds without checks, and a new session starts when the project's TypeScript install changes. Long-lived hosts must close sessions when their checker lifetime ends:
 
 ```ts
 import { closeNativeEngine } from "kiira-core"

@@ -1,10 +1,10 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { buildBaseOptions } from "./check"
 import { resolveConfig } from "./config"
 import { type RawDiagnostic, classicEngine } from "./engine"
@@ -45,7 +45,8 @@ function nativeProject(): string {
 	const typescriptEntry = createRequire(import.meta.url).resolve("typescript-7/unstable/sync")
 	const typescriptRoot = join(dirname(typescriptEntry), "../../..")
 	mkdirSync(join(root, "node_modules"), { recursive: true })
-	symlinkSync(typescriptRoot, join(root, "node_modules", "typescript"), "dir")
+	// A junction (unlike a "dir" symlink) needs no admin rights or Developer Mode on Windows.
+	symlinkSync(typescriptRoot, join(root, "node_modules", "typescript"), "junction")
 	return root
 }
 
@@ -223,64 +224,70 @@ describe("native engine (TypeScript 7)", () => {
 		}
 	})
 
-	it("serializes snapshot updates, reports update failures, and closes snapshots and APIs", async () => {
-		type ApiOptions = ConstructorParameters<NativeApiConstructor>[0]
-		type UpdateParams = Parameters<InstanceType<NativeApiConstructor>["updateSnapshot"]>[0]
-		class FakeApi {
-			static latest: FakeApi
-			readonly updates: UpdateParams[] = []
-			closed = 0
-			disposedSnapshots = 0
+	type ApiOptions = ConstructorParameters<NativeApiConstructor>[0]
+	type UpdateParams = Parameters<InstanceType<NativeApiConstructor>["updateSnapshot"]>[0]
+	class FakeApi {
+		static latest: FakeApi
+		readonly updates: UpdateParams[] = []
+		closed = 0
+		disposedSnapshots = 0
 
-			constructor(readonly options: ApiOptions) {
-				FakeApi.latest = this
-			}
+		constructor(readonly options: ApiOptions) {
+			FakeApi.latest = this
+		}
 
-			updateSnapshot(params: UpdateParams) {
-				this.updates.push(params)
-				return {
-					getProjects: () => [
-						{
-							configFileName: "tsconfig.json",
-							program: {
-								getSyntacticDiagnostics: () => [],
-								getSemanticDiagnostics: () => [],
-							},
+		updateSnapshot(params: UpdateParams) {
+			this.updates.push(params)
+			return {
+				getProjects: () => [
+					{
+						configFileName: "tsconfig.json",
+						program: {
+							getSyntacticDiagnostics: () => [],
+							getSemanticDiagnostics: () => [],
 						},
-					],
-					dispose: () => {
-						this.disposedSnapshots += 1
 					},
-				}
-			}
-
-			close(): void {
-				this.closed += 1
+				],
+				dispose: () => {
+					this.disposedSnapshots += 1
+				},
 			}
 		}
 
+		close(): void {
+			this.closed += 1
+		}
+	}
+
+	it("serializes snapshot updates, reports update failures, and closes snapshots and APIs", async () => {
 		const root = "/native-api-test"
 		const engine = createNativeEngineSession(FakeApi, root)
 		const first = vfileAt(root, "first.ts", "export const first = 1\n")
 		const second = vfileAt(root, "second.ts", "export const second = 2\n")
 		await Promise.all([engine.collect([first], OPTIONS), engine.collect([second], OPTIONS)])
 
-		expect(FakeApi.latest.updates[0]?.openProjects).toEqual([
-			join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/"),
-		])
+		// The session resolves `cwd` (a drive letter on Windows), and change lists carry
+		// the overlay keys, which are lowercase on case-insensitive file systems.
+		const toNativePath = (path: string): string => resolve(path).replace(/\\/g, "/")
+		const toOverlayKey = (path: string): string =>
+			process.platform === "win32" || process.platform === "darwin"
+				? toNativePath(path).toLowerCase()
+				: toNativePath(path)
+		const tsconfigPath = join(root, "__kiira_native.tsconfig.json")
+		expect(FakeApi.latest.updates[0]?.openProjects).toEqual([toNativePath(tsconfigPath)])
 		expect(FakeApi.latest.updates[1]?.openProjects).toBeUndefined()
 		expect(FakeApi.latest.updates[0]?.fileChanges).toEqual({ invalidateAll: true })
 		expect(FakeApi.latest.updates[1]?.fileChanges).toMatchObject({
-			created: [join(root, "__kiira_native.tsconfig.json").replace(/\\/g, "/"), first.fileName.replace(/\\/g, "/")],
+			created: [toOverlayKey(tsconfigPath), toOverlayKey(first.fileName)],
 		})
 		expect(FakeApi.latest.updates[2]?.fileChanges).toEqual({ invalidateAll: true })
 		expect(FakeApi.latest.updates[3]?.openProjects).toBeUndefined()
 		expect(FakeApi.latest.updates[3]?.fileChanges).toMatchObject({
-			created: [second.fileName.replace(/\\/g, "/")],
-			deleted: [first.fileName.replace(/\\/g, "/")],
+			created: [toOverlayKey(second.fileName)],
+			deleted: [toOverlayKey(first.fileName)],
 		})
-		expect(FakeApi.latest.options.fs?.readFile?.(first.fileName)).toBeNull()
-		expect(FakeApi.latest.options.fs?.fileExists?.(first.fileName)).toBe(false)
+		expect(FakeApi.latest.options.fs?.readFile?.(toNativePath(first.fileName))).toBeNull()
+		expect(FakeApi.latest.options.fs?.fileExists?.(toNativePath(first.fileName))).toBe(false)
 		expect(FakeApi.latest.disposedSnapshots).toBe(4)
 
 		await engine.close()
@@ -295,6 +302,74 @@ describe("native engine (TypeScript 7)", () => {
 		const failing = createNativeEngineSession(FailingApi, root)
 		await expect(failing.collect([first], OPTIONS)).rejects.toThrow("snapshot update failed")
 		expect(FakeApi.latest.closed).toBe(1)
+	})
+
+	it("closes an idle session after the timeout, but not while a check is queued", async () => {
+		vi.useFakeTimers()
+		try {
+			const root = "/native-idle-test"
+			const onClose = vi.fn()
+			const engine = createNativeEngineSession(FakeApi, root, onClose, 30_000)
+			const api = FakeApi.latest
+			const file = vfileAt(root, "idle.ts", "export const idle = 1\n")
+
+			vi.advanceTimersByTime(29_999)
+			const queued = engine.collect([file], OPTIONS)
+			// The check is still queued (it runs on a later microtask), so no time closes the session.
+			vi.advanceTimersByTime(60_000)
+			expect(api.closed).toBe(0)
+			await queued
+
+			// Each check restarts the idle timeout.
+			vi.advanceTimersByTime(29_999)
+			expect(api.closed).toBe(0)
+			vi.advanceTimersByTime(1)
+			expect(api.closed).toBe(1)
+			expect(onClose).toHaveBeenCalledOnce()
+			await expect(engine.collect([file], OPTIONS)).rejects.toThrow("is closed")
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it("replaces a session when the project's TypeScript install changes", async () => {
+		const root = mkdtempSync(join(tmpdir(), "kiira-native-"))
+		const typescriptDir = join(root, "node_modules", "typescript")
+		mkdirSync(typescriptDir, { recursive: true })
+		const writeVersion = (version: string): void =>
+			writeFileSync(
+				join(typescriptDir, "package.json"),
+				JSON.stringify({
+					name: "typescript",
+					version,
+					type: "module",
+					exports: { "./package.json": "./package.json", "./unstable/sync": "./sync.js" },
+				})
+			)
+		writeVersion("7.0.0")
+		writeFileSync(
+			join(typescriptDir, "sync.js"),
+			"export class API { constructor() { this.closed = 0; globalThis.__kiiraFakeApis.push(this) } close() { this.closed += 1 } }\n"
+		)
+		const apis: { closed: number }[] = []
+		const global = globalThis as { __kiiraFakeApis?: { closed: number }[] }
+		global.__kiiraFakeApis = apis
+		try {
+			const first = await createNativeEngine(root)
+			expect(await createNativeEngine(root)).toBe(first)
+
+			writeVersion("7.0.1")
+			const upgraded = await createNativeEngine(root)
+			expect(upgraded).not.toBe(first)
+			expect(apis).toHaveLength(2)
+			await vi.waitFor(() => expect(apis[0]?.closed).toBe(1))
+			expect(apis[1]?.closed).toBe(0)
+			expect(await createNativeEngine(root)).toBe(upgraded)
+		} finally {
+			await closeNativeEngine()
+			global.__kiiraFakeApis = undefined
+			rmSync(root, { recursive: true, force: true })
+		}
 	})
 })
 

@@ -166,7 +166,13 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 		}
 	} finally {
 		spinner.stop()
-		await closeNativeEngine(cwd)
+		// A failed cleanup must not hide the check's own result or error.
+		try {
+			await closeNativeEngine(cwd)
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			options.error(`Warning: could not close the native TypeScript session: ${message}`)
+		}
 	}
 
 	for (const { message, channel } of pending) {

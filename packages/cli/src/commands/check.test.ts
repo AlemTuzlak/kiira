@@ -2,8 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { externalCacheDir } from "kiira-core"
+import { closeNativeEngine, externalCacheDir } from "kiira-core"
 import { runCheck } from "./check"
+
+vi.mock("kiira-core", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("kiira-core")>()
+	return { ...actual, closeNativeEngine: vi.fn(actual.closeNativeEngine) }
+})
 
 const here = dirname(fileURLToPath(import.meta.url))
 const fixtures = resolve(here, "../../tests/fixtures/project")
@@ -48,6 +53,15 @@ describe("runCheck", () => {
 		expect(report.stats.errors).toBe(0)
 		// The ignored fence is counted but not checked.
 		expect(report.stats.ignored).toBe(1)
+	})
+
+	it("keeps the check result and warns when closing the native session fails", async () => {
+		vi.mocked(closeNativeEngine).mockRejectedValueOnce(new Error("close failed"))
+		const io = capture()
+		const code = await runCheck({ cwd: fixtures, files: ["bad.md"], reporter: "json", ...io })
+		expect(code).toBe(1)
+		expect(JSON.parse(io.logs.join("\n")).stats.errors).toBe(1)
+		expect(io.errors).toEqual(["Warning: could not close the native TypeScript session: close failed"])
 	})
 
 	it("emits GitHub annotations with the github reporter", async () => {

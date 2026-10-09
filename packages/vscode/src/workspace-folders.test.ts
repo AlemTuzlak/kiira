@@ -34,6 +34,27 @@ describe("WorkspaceFolderCheckLifecycle", () => {
 		expect(closeSession).toHaveBeenCalledExactlyOnceWith("/workspace/one")
 	})
 
+	it("keeps the session when the folder is re-added before its checks drain", async () => {
+		const lifecycle = new WorkspaceFolderCheckLifecycle()
+		const cwd = "/workspace/one"
+		lifecycle.setWorkspaceFolders([{ uri: { fsPath: cwd } }])
+		let resumeCheck!: () => void
+		const blocked = new Promise<void>((resolve) => {
+			resumeCheck = resolve
+		})
+		const check = lifecycle.runIfPresent(cwd, () => blocked)
+		await Promise.resolve()
+
+		lifecycle.setWorkspaceFolders([])
+		const closeSession = vi.fn(async () => undefined)
+		const removal = lifecycle.closeRemoved([{ uri: { fsPath: cwd } }], closeSession)
+		lifecycle.setWorkspaceFolders([{ uri: { fsPath: cwd } }])
+		resumeCheck()
+		await Promise.all([check, removal])
+
+		expect(closeSession).not.toHaveBeenCalled()
+	})
+
 	it("skips a removed folder queued behind a deferred workspace check", async () => {
 		const lifecycle = new WorkspaceFolderCheckLifecycle()
 		const first = "/workspace/one"
