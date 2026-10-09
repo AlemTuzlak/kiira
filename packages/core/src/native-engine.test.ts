@@ -152,7 +152,8 @@ describe("options produced by a TypeScript hook", () => {
 			resolveJsonModule: true,
 			allowSyntheticDefaultImports: false,
 			strictNullChecks: false,
-			paths: { "@docs/*": ["./src/*"] },
+			// Hook path values resolve from cwd to absolute paths.
+			paths: { "@docs/*": [`${join(hookCwd, "src").replace(/\\/g, "/")}/*`] },
 			allowJs: true,
 			checkJs: true,
 		})

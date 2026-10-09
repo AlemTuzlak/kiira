@@ -349,18 +349,24 @@ export interface TypescriptHookContext {
 /**
  * What a TypeScript hook returns for one document (experimental). Results from every
  * hook merge: `compilerOptions` shallow-merge and `paths` merge per key (later hooks
- * win), `replaceTsconfig` is true if any hook says so, and a diagnostic is dropped if
+ * win, except `*`, whose targets add up), `replaceTsconfig` is true if any hook says so, and a diagnostic is dropped if
  * any `filterDiagnostic` returns `false`. Presets' hooks run first, then plugins'.
  */
 export interface TypescriptHookResult {
-	/** tsconfig-style `compilerOptions` (string enum forms, as in `overrides`), applied after matching overrides. */
+	/**
+	 * tsconfig-style `compilerOptions` (string enum forms, as in `overrides`), applied after
+	 * matching overrides. `paths` and `baseUrl` throw an error: use {@link TypescriptHookResult.paths}.
+	 */
 	compilerOptions?: Record<string, unknown>
 	/**
 	 * Start from Kiira's default compiler options instead of the project tsconfig.
 	 * Workspace and external-package resolution still apply.
 	 */
 	replaceTsconfig?: boolean
-	/** Path mappings merged on top of the resulting `paths`, including the workspace's. */
+	/**
+	 * Path mappings merged on top of the resulting `paths`, including the workspace's.
+	 * Values are relative to `cwd`. Targets for `*` go after the existing `*` fallbacks.
+	 */
 	paths?: Record<string, string[]>
 	/**
 	 * Return `false` to drop a TypeScript diagnostic for this document. `snippet` is the

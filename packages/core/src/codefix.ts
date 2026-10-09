@@ -1,8 +1,11 @@
 import type ts from "typescript"
 import { applyLibDirOverride, createOptionsResolver, documentFromVirtualFiles } from "./check"
 import { resolveConfig } from "./config"
-import type { KiiraConfig, SourcePosition, SourceRange, VirtualFile } from "./types"
+import { extractSnippetsFromContent, loadMdxSupportFor } from "./extract"
+import { createProject, createRuleFs } from "./rules/run"
+import type { KiiraConfig, KiiraFs, KiiraProject, SourcePosition, SourceRange, VirtualFile } from "./types"
 import { getTypescript, selectTypescript } from "./typescript"
+import { hasTypescriptHooks } from "./typescript-hook"
 
 /** A single text edit, in zero-based Markdown coordinates. */
 export interface CodeFixEdit {
@@ -31,8 +34,8 @@ export interface GetCodeFixesInput {
 	/** TypeScript error codes present at that range (drives which fixes apply). */
 	errorCodes: number[]
 	/**
-	 * The document's text, passed to TypeScript hooks. Without it they get the checked
-	 * fences' code joined by blank lines.
+	 * The document's text. TypeScript hooks get it and the snippets parsed from it, as
+	 * checking does. Without it they get the checked fences, their code joined by blank lines.
 	 */
 	text?: string
 }
@@ -56,6 +59,18 @@ let serviceCache: { key: string; service: ts.LanguageService } | undefined
 function serviceCacheKey(cwd: string, options: ts.CompilerOptions, virtualFiles: VirtualFile[]): string {
 	const files = virtualFiles.map((v) => `${v.fileName}\0${v.content}`).join("\u0001")
 	return `${cwd}\u0002${JSON.stringify(options)}\u0002${files}`
+}
+
+// The TypeScript hooks' project and fs for the most recent document, so repeated
+// requests on an unchanged document don't rediscover the workspace. Any edit to the
+// document rebuilds them, as checking does on each run.
+let hookEnvCache: { key: string; env: { project: KiiraProject; fs: KiiraFs } } | undefined
+
+async function hookEnvFor(cwd: string, key: string): Promise<{ project: KiiraProject; fs: KiiraFs }> {
+	if (hookEnvCache?.key !== key) {
+		hookEnvCache = { key, env: { project: await createProject(cwd), fs: createRuleFs(cwd).fs } }
+	}
+	return hookEnvCache.env
 }
 
 /** Build a language service that overlays the virtual files on the real filesystem. */
@@ -224,8 +239,18 @@ export async function getCodeFixes(input: GetCodeFixesInput): Promise<CodeFixAct
 
 	const resolved = resolveConfig(config)
 	// Same options checking used, TypeScript hook included, so quick fixes agree with the diagnostics.
-	const resolver = createOptionsResolver(cwd, resolved)
-	const hook = await resolver.hookFor(markdownFile, documentFromVirtualFiles(markdownFile, virtualFiles, text))
+	const hooked = hasTypescriptHooks(resolved)
+	const env = hooked
+		? await hookEnvFor(cwd, `${markdownFile}\n${text ?? serviceCacheKey(cwd, {}, virtualFiles)}`)
+		: undefined
+	const resolver = createOptionsResolver(cwd, resolved, env)
+	let doc = documentFromVirtualFiles(markdownFile, virtualFiles)
+	if (hooked && text !== undefined) {
+		// Parse the text as checking does, so the hook sees every fence, not only the checked ones.
+		await loadMdxSupportFor([markdownFile])
+		doc = { text, snippets: extractSnippetsFromContent({ markdownFile, content: text, config: resolved }).snippets }
+	}
+	const hook = await resolver.hookFor(markdownFile, doc)
 	const options = await resolver.optionsFor(markdownFile, hook)
 
 	// Reuse the language service (and its already-built program) across the repeated

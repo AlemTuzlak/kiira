@@ -1,3 +1,4 @@
+import { resolve } from "node:path"
 import { checkMarkdownFiles, checkMarkdownText, createOptionsResolver, documentFromVirtualFiles } from "./check"
 import { resolveConfig } from "./config"
 import { classicEngine } from "./engine"
@@ -14,6 +15,9 @@ const implicitAny = "export function f(x) {\n\treturn x\n}"
 /** A type error (2322) and an undefined name (2304): TypeScript syntax for ts/tsx, JSDoc types for js/jsx. */
 const mismatch = (lang: string) =>
 	isJs(lang) ? '/** @type {number} */\nexport const a = "x"\nmissing()' : 'export const a: number = "x"\nmissing()'
+
+/** A hook path value as Kiira resolves it: absolute from `cwd`, posix separators. */
+const absolute = (cwd: string, path: string) => resolve(cwd, path).replace(/\\/g, "/")
 
 const pluginWithHook = (typescript: () => TypescriptHookResult | undefined, name = "hook") =>
 	definePlugin({ name, typescript })
@@ -66,6 +70,13 @@ describe("TypeScript hook on every fence language", () => {
 		const code = 'import { greet } from "@docs/greet"\nexport const x = greet()'
 		const plugins = [pluginWithHook(() => ({ paths: { "@docs/*": ["./src/*"] } }))]
 		expect(await typescriptCodes(tempProject({ ...slim(), ...greet }), tag, code, { plugins })).toEqual([])
+	})
+
+	it("paths resolve from cwd even when the tsconfig sets a baseUrl", async () => {
+		const cwd = tempProject({ ...slim({ baseUrl: "./src" }), "examples/greet.ts": greet["src/greet.ts"] })
+		const code = 'import { greet } from "@docs/greet"\nexport const x = greet()'
+		const plugins = [pluginWithHook(() => ({ paths: { "@docs/*": ["./examples/*"] } }))]
+		expect(await typescriptCodes(cwd, "ts", code, { plugins })).toEqual([])
 	})
 
 	it.each(FENCE_TAGS)("filterDiagnostic drops a chosen code in a `%s` fence", async (tag, lang) => {
@@ -257,7 +268,7 @@ describe("merging hooks", () => {
 		const options = await resolver.optionsFor("doc.md", hook)
 		expect(options.noImplicitAny).toBe(true)
 		expect(options.strictNullChecks).toBe(false)
-		expect(options.paths).toMatchObject({ "@a/*": ["./a/*"], "@b/*": ["./plugin/*"] })
+		expect(options.paths).toMatchObject({ "@a/*": [absolute(cwd, "a/*")], "@b/*": [absolute(cwd, "plugin/*")] })
 		// A diagnostic is dropped when any filter returns false.
 		const diagnostic = { severity: "error", message: "m", source: "typescript" } as KiiraDiagnostic
 		const info = { snippet: {} as never, file: "doc.md" }
@@ -297,8 +308,24 @@ describe("merging hooks", () => {
 		const options = await resolver.optionsFor("doc.md", hook)
 		expect(options.noImplicitAny).toBe(false)
 		expect(options.strictNullChecks).toBe(true)
-		expect(options.paths).toEqual({ "@x/*": ["./x/*"] })
-		expect(options.pathsBasePath).toBe(cwd)
+		expect(options.paths).toEqual({ "@x/*": [absolute(cwd, "x/*")] })
+	})
+
+	it("rejects paths and baseUrl in a hook's compilerOptions", async () => {
+		const cwd = tempProject()
+		for (const compilerOptions of [{ paths: { "@x/*": ["./x/*"] } }, { baseUrl: "." }]) {
+			const config = resolveConfig({ plugins: [pluginWithHook(() => ({ compilerOptions }), "bad")] })
+			const resolver = createOptionsResolver(cwd, config, await shared(cwd))
+			await expect(resolver.hookFor("a.md", { text: "", snippets: [] })).rejects.toThrow(
+				/plugin "bad" sets compilerOptions\.(paths|baseUrl) for a\.md.*`paths` field/
+			)
+		}
+	})
+
+	it("adds a hook's `*` targets after the existing `*` fallbacks", () => {
+		const hook = { compilerOptions: {}, paths: { "*": ["./types/*"] }, replaceTsconfig: false, filters: [] }
+		const options = applyTypescriptHook("/repo", { paths: { "*": ["/repo/node_modules/*"], a: ["/a"] } }, hook)
+		expect(options.paths).toEqual({ "*": ["/repo/node_modules/*", absolute("/repo", "types/*")], a: ["/a"] })
 	})
 
 	it("throws naming the plugin and file for invalid compilerOptions", async () => {
@@ -308,6 +335,22 @@ describe("merging hooks", () => {
 		})
 		const resolver = createOptionsResolver(cwd, config, await shared(cwd))
 		await expect(resolver.hookFor("docs/a.md", { text: "", snippets: [] })).rejects.toThrow(/plugin "bad".*docs\/a\.md/)
+	})
+
+	it("names the plugin and file when a filterDiagnostic throws", async () => {
+		const plugins = [
+			pluginWithHook(
+				() => ({
+					filterDiagnostic: () => {
+						throw new Error("nope")
+					},
+				}),
+				"bad"
+			),
+		]
+		await expect(typescriptCodes(tempProject(slim()), "ts", mismatch("ts"), { plugins })).rejects.toThrow(
+			/filterDiagnostic of plugin "bad" failed on doc\.md: nope/
+		)
 	})
 
 	it("names the preset when a preset's hook throws", async () => {

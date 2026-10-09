@@ -155,9 +155,9 @@ A plugin or preset can set its own TypeScript options for each Markdown file. Ad
 
 | Result | Effect |
 | --- | --- |
-| `compilerOptions` | tsconfig-style options, in the same string form as [`overrides`](/latest/configuration/options#overrides). An invalid option throws an error that names the plugin or preset and the file. |
+| `compilerOptions` | tsconfig-style options, in the same string form as [`overrides`](/latest/configuration/options#overrides). An invalid option throws an error that names the plugin or preset and the file. `paths` and `baseUrl` also throw an error. Use the `paths` result instead. |
 | `replaceTsconfig` | When `true`, start from Kiira's default options instead of the project tsconfig. `allowJs` and `checkJs` stay on unless your `compilerOptions` turn them off. Workspace and external-package resolution still apply. |
-| `paths` | Path mappings merged on top of the file's `paths`, including the ones from your workspace. |
+| `paths` | Path mappings merged on top of the file's `paths`, including the ones from your workspace. Values are relative to `cwd`, also when your tsconfig sets a `baseUrl`. Targets for `"*"` go after the existing `"*"` targets. |
 | `filterDiagnostic` | Called for each TypeScript diagnostic of the file. Return `false` to drop it. |
 
 This plugin checks docs against Kiira's defaults instead of the project tsconfig, resolves `@docs/*` imports to a folder of examples, and drops "cannot find name" errors for a global the docs assume:
@@ -185,8 +185,9 @@ export default defineConfig({ plugins: [docs] })
 A few things to know:
 
 - Hooks run once per document. Presets' hooks run first, in preset order, then plugins' hooks in plugin order.
-- Results merge: `compilerOptions` are shallow-merged and `paths` merge per key, with later hooks winning. `replaceTsconfig` is `true` if any hook says so. A diagnostic is dropped if any `filterDiagnostic` returns `false`.
+- Results merge: `compilerOptions` are shallow-merged and `paths` merge per key, with later hooks winning. The `"*"` key is different: each hook adds its targets after the earlier ones. `replaceTsconfig` is `true` if any hook says so. A diagnostic is dropped if any `filterDiagnostic` returns `false`.
 - A file's options are layered in this order: the tsconfig (or Kiira's defaults), the `unused-symbols` level, matching `overrides`, the hook's `compilerOptions`, then the hook's `paths`.
 - Files whose final options differ are checked in separate programs, so one document's hook never changes how another is checked.
+- A `filterDiagnostic` that throws fails the run with an error that names the plugin or preset and the file.
 - `filterDiagnostic` runs on TypeScript diagnostics only, before `unused-symbols`, `relative-imports`, and document rules see them. Its `snippet` is the fence that contains the diagnostic, or the file's first fence when the diagnostic is in generated code.
 - Editor quick fixes in VS Code use the same options.
