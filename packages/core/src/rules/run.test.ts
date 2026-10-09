@@ -72,6 +72,30 @@ describe("document rules", () => {
 		expect(ctx?.config.ruleRegistry["t/r"]).toBeDefined()
 	})
 
+	it("freeze rule options, so a rule cannot change them for later runs", async () => {
+		const defaults = { mode: "x", tags: ["a"] }
+		const plugin = definePlugin({
+			name: "t",
+			rules: {
+				r: defineRule({
+					meta: { scope: "document", defaultSeverity: "warn", options: { default: defaults } },
+					create(ctx) {
+						;(ctx.options as typeof defaults).tags.push("b")
+					},
+				}),
+			},
+		})
+		const resolved = resolveConfig({ plugins: [plugin], engine: "classic" })
+		// A rule that throws is reported as an error on the file; both runs must see the frozen options.
+		const failures = async () =>
+			(await checkMarkdownText({ cwd: tempProject(), markdownFile: "doc.md", text: "x", config: resolved })).diagnostics
+				.filter((d) => d.code === "t/r" && d.severity === "error")
+				.map((d) => d.message)
+		expect(await failures()).toEqual([expect.stringMatching(/^Rule "t\/r" failed on doc\.md: .*not extensible/)])
+		expect(await failures()).toEqual([expect.stringMatching(/not extensible/)])
+		expect(defaults).toEqual({ mode: "x", tags: ["a"] })
+	})
+
 	it("see an empty tree and a parseError when the document fails to parse", async () => {
 		const seen: RuleDocumentContext[] = []
 		const plugin = pluginWith("document", (ctx) => {

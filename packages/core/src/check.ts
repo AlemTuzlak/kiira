@@ -1,9 +1,8 @@
 import { existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
-import picomatch from "picomatch"
 import type ts from "typescript"
-import { loadConfig, resolveConfig, rulesForFile } from "./config"
+import { loadConfig, overrideMatcher, resolveConfig, rulesForFile } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { type CheckerEngine, type RawDiagnostic, resolveEngine } from "./engine"
 import { collectExternalPackages, ensureExternalPackages, externalResolution } from "./external"
@@ -32,6 +31,7 @@ import type {
 	KiiraConfig,
 	KiiraDiagnostic,
 	KiiraFs,
+	KiiraOverride,
 	KiiraPlugin,
 	KiiraProject,
 	ResolvedKiiraConfig,
@@ -417,11 +417,26 @@ interface OptionsPartition {
 	virtualFiles: VirtualFile[]
 }
 
+// Converted per override object and cwd, once: `convertCompilerOptionsFromJson`
+// is called for every matched override of every file otherwise.
+const convertedOverrides = new WeakMap<KiiraOverride, Map<string, ts.CompilerOptions>>()
+
 /** Convert a single override's JSON compilerOptions to a `ts.CompilerOptions`, throwing on invalid input. */
-function convertOverrideOptions(
-	cwd: string,
-	override: ReturnType<typeof resolveConfig>["overrides"][number]
-): ts.CompilerOptions {
+export function convertOverrideOptions(cwd: string, override: KiiraOverride): ts.CompilerOptions {
+	let byCwd = convertedOverrides.get(override)
+	if (!byCwd) {
+		byCwd = new Map()
+		convertedOverrides.set(override, byCwd)
+	}
+	let options = byCwd.get(cwd)
+	if (!options) {
+		options = convertOverrideOptionsUncached(cwd, override)
+		byCwd.set(cwd, options)
+	}
+	return options
+}
+
+function convertOverrideOptionsUncached(cwd: string, override: KiiraOverride): ts.CompilerOptions {
 	const ts = getTypescript()
 	// `include` (the glob), `defaultGroup` (a Kiira grouping concept),
 	// `externalPackages` (doc-only deps), and the rule/preset/fence settings are
@@ -465,7 +480,7 @@ export function optionsForFile(
 		overrides = config.overrides
 	}
 	for (const override of overrides) {
-		if (picomatch(override.include)(markdownFile)) {
+		if (overrideMatcher(override)(markdownFile)) {
 			options = { ...options, ...convertOverrideOptions(cwd, override) }
 		}
 	}
