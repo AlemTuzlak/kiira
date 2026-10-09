@@ -86,6 +86,18 @@ for (const entry of ["index.mjs", "index.cjs", "plugin.mjs", "plugin.cjs"]) {
 	}
 }
 
+// acorn must be bundled once per format. Without the `acorn` alias in tsdown.config.ts,
+// acorn-jsx pulls in acorn's CJS build next to the ESM one. Each copy defines this constructor.
+const acornParser = "Parser = function Parser(options, input, startPos)"
+for (const extension of [".mjs", ".cjs"]) {
+	const copies = readdirSync(dist)
+		.filter((file) => file.endsWith(extension))
+		.reduce((count, file) => count + readFileSync(join(dist, file), "utf8").split(acornParser).length - 1, 0)
+	if (copies !== 1) {
+		failures.push(`dist/*${extension} contains ${copies} copies of acorn's Parser, expected 1`)
+	}
+}
+
 // `kiira-core/plugin` is for plugin authors: it must stay free of runtime imports.
 for (const file of ["plugin.mjs", "plugin.cjs"]) {
 	const source = readFileSync(join(dist, file), "utf8")
