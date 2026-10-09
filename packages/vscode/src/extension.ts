@@ -5,6 +5,7 @@ import {
 	type KiiraDiagnostic,
 	type VirtualFile,
 	checkMarkdownFiles,
+	closeNativeEngine,
 	loadConfig,
 	loadConfigFile,
 	setFallbackTypescriptModule,
@@ -15,6 +16,7 @@ import { checkDocument } from "./check-document"
 import { KiiraCodeActionProvider } from "./code-actions"
 import { diagnosticCodeLabel, selectDiagnostics } from "./diagnostics"
 import { findTypescript } from "./typescript-host"
+import { WorkspaceFolderCheckLifecycle } from "./workspace-folders"
 
 const VIRTUAL_SCHEME = "kiira"
 
@@ -24,6 +26,7 @@ const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const virtualFilesByDocument = new Map<string, VirtualFile[]>()
 const diagnosticsByDocument = new Map<string, KiiraDiagnostic[]>()
 const sourcesByDocument = new Map<string, Record<string, string>>()
+const workspaceCheckLifecycle = new WorkspaceFolderCheckLifecycle()
 
 interface KiiraSettings {
 	enable: boolean
@@ -100,25 +103,38 @@ async function checkAndPublish(document: vscode.TextDocument): Promise<void> {
 		return
 	}
 
-	const config = await loadWorkspaceConfig(ctx.cwd, settings.configPath)
-	try {
-		const { diagnostics, virtualFiles, sources } = await checkDocument({
-			cwd: ctx.cwd,
-			markdownFile: ctx.markdownFile,
-			text: document.getText(),
-			config,
-			markdownUri: document.uri.toString(),
-		})
-		virtualFilesByDocument.set(document.uri.toString(), virtualFiles)
-		sourcesByDocument.set(document.uri.toString(), sources)
-		const selected = selectDiagnostics(diagnostics, { showGenerated: settings.showGeneratedDiagnostics })
-		// Keep the rich diagnostics (with their `fix` payloads) so the code-action
-		// provider can offer quick fixes for what's currently shown.
-		diagnosticsByDocument.set(document.uri.toString(), selected)
-		collection.set(document.uri, selected.map(toVscodeDiagnostic))
-	} catch (error) {
-		output.appendLine(`Error checking ${ctx.markdownFile}: ${(error as Error).message}`)
-	}
+	await workspaceCheckLifecycle.runIfPresent(ctx.cwd, async (isCurrent) => {
+		if (!isCurrent()) {
+			return
+		}
+		const config = await loadWorkspaceConfig(ctx.cwd, settings.configPath)
+		if (!isCurrent()) {
+			return
+		}
+		try {
+			const { diagnostics, virtualFiles, sources } = await checkDocument({
+				cwd: ctx.cwd,
+				markdownFile: ctx.markdownFile,
+				text: document.getText(),
+				config,
+				markdownUri: document.uri.toString(),
+			})
+			if (!isCurrent()) {
+				return
+			}
+			virtualFilesByDocument.set(document.uri.toString(), virtualFiles)
+			sourcesByDocument.set(document.uri.toString(), sources)
+			const selected = selectDiagnostics(diagnostics, { showGenerated: settings.showGeneratedDiagnostics })
+			// Keep the rich diagnostics (with their `fix` payloads) so the code-action
+			// provider can offer quick fixes for what's currently shown.
+			diagnosticsByDocument.set(document.uri.toString(), selected)
+			collection.set(document.uri, selected.map(toVscodeDiagnostic))
+		} catch (error) {
+			if (isCurrent()) {
+				output.appendLine(`Error checking ${ctx.markdownFile}: ${(error as Error).message}`)
+			}
+		}
+	})
 }
 
 function scheduleCheck(document: vscode.TextDocument, delayMs: number): void {
@@ -142,17 +158,28 @@ async function checkWorkspaceCommand(): Promise<void> {
 	try {
 		for (const folder of vscode.workspace.workspaceFolders ?? []) {
 			const cwd = folder.uri.fsPath
-			const config = await loadWorkspaceConfig(cwd, settings.configPath)
-			const result = await checkMarkdownFiles({ cwd, config })
-			const byFile = new Map<string, KiiraDiagnostic[]>()
-			for (const d of selectDiagnostics(result.diagnostics, { showGenerated: settings.showGeneratedDiagnostics })) {
-				const list = byFile.get(d.markdownFile) ?? []
-				list.push(d)
-				byFile.set(d.markdownFile, list)
-			}
-			for (const [file, diags] of byFile) {
-				collection.set(vscode.Uri.file(join(cwd, file)), diags.map(toVscodeDiagnostic))
-			}
+			await workspaceCheckLifecycle.runIfPresent(cwd, async (isCurrent) => {
+				if (!isCurrent()) {
+					return
+				}
+				const config = await loadWorkspaceConfig(cwd, settings.configPath)
+				if (!isCurrent()) {
+					return
+				}
+				const result = await checkMarkdownFiles({ cwd, config })
+				if (!isCurrent()) {
+					return
+				}
+				const byFile = new Map<string, KiiraDiagnostic[]>()
+				for (const d of selectDiagnostics(result.diagnostics, { showGenerated: settings.showGeneratedDiagnostics })) {
+					const list = byFile.get(d.markdownFile) ?? []
+					list.push(d)
+					byFile.set(d.markdownFile, list)
+				}
+				for (const [file, diags] of byFile) {
+					collection.set(vscode.Uri.file(join(cwd, file)), diags.map(toVscodeDiagnostic))
+				}
+			})
 		}
 	} catch (error) {
 		output.appendLine(`Workspace check failed: ${(error as Error).message}`)
@@ -284,9 +311,17 @@ export function activate(context: vscode.ExtensionContext): void {
 	setFallbackTypescriptModule(setup.fallback?.module)
 	setTypescriptLibDir(undefined)
 	const provider = new VirtualContentProvider()
+	workspaceCheckLifecycle.setWorkspaceFolders(vscode.workspace.workspaceFolders ?? [])
 
 	context.subscriptions.push(
 		vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_SCHEME, provider),
+		vscode.workspace.onDidChangeWorkspaceFolders((event) => {
+			workspaceCheckLifecycle.setWorkspaceFolders(vscode.workspace.workspaceFolders ?? [])
+			void workspaceCheckLifecycle.closeRemoved(event.removed).catch((error) => {
+				const message = error instanceof Error ? error.message : String(error)
+				output.appendLine(`Error closing native sessions for removed workspace folders: ${message}`)
+			})
+		}),
 		vscode.workspace.onDidOpenTextDocument((document) => void checkAndPublish(document)),
 		vscode.workspace.onDidChangeTextDocument((event) => {
 			const settings = readSettings()
@@ -346,11 +381,12 @@ export function activate(context: vscode.ExtensionContext): void {
 	}
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
 	for (const timer of debounceTimers.values()) {
 		clearTimeout(timer)
 	}
 	debounceTimers.clear()
 	collection?.dispose()
 	output?.dispose()
+	await closeNativeEngine()
 }

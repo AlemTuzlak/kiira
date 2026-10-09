@@ -1,0 +1,68 @@
+import { closeNativeEngine } from "kiira-core"
+
+interface RemovedWorkspaceFolder {
+	uri: {
+		fsPath: string
+	}
+}
+
+export class WorkspaceFolderCheckLifecycle {
+	private workspaceFolders = new Set<string>()
+	private readonly generations = new Map<string, number>()
+	private readonly checks = new Map<string, Set<Promise<void>>>()
+
+	setWorkspaceFolders(folders: readonly RemovedWorkspaceFolder[]): void {
+		const next = new Set(folders.map((folder) => folder.uri.fsPath))
+		for (const cwd of new Set([...this.workspaceFolders, ...next])) {
+			if (this.workspaceFolders.has(cwd) !== next.has(cwd)) {
+				this.generations.set(cwd, (this.generations.get(cwd) ?? 0) + 1)
+			}
+		}
+		this.workspaceFolders = next
+	}
+
+	async runIfPresent(cwd: string, check: (isCurrent: () => boolean) => Promise<void>): Promise<boolean> {
+		if (!this.workspaceFolders.has(cwd)) {
+			return false
+		}
+		await this.run(cwd, check)
+		return true
+	}
+
+	private run(cwd: string, check: (isCurrent: () => boolean) => Promise<void>): Promise<void> {
+		const generation = this.generations.get(cwd) ?? 0
+		const operation = Promise.resolve().then(() => check(() => (this.generations.get(cwd) ?? 0) === generation))
+		let active = this.checks.get(cwd)
+		if (!active) {
+			active = new Set()
+			this.checks.set(cwd, active)
+		}
+		const tracked = operation.finally(() => {
+			active.delete(tracked)
+			if (active.size === 0) {
+				this.checks.delete(cwd)
+			}
+		})
+		active.add(tracked)
+		return tracked
+	}
+
+	async closeRemoved(
+		removed: readonly RemovedWorkspaceFolder[],
+		closeSession: (cwd: string) => Promise<void> = closeNativeEngine
+	): Promise<void> {
+		await Promise.all(
+			removed.map(async (folder) => {
+				const cwd = folder.uri.fsPath
+				this.workspaceFolders.delete(cwd)
+				this.generations.set(cwd, (this.generations.get(cwd) ?? 0) + 1)
+				await Promise.allSettled(this.checks.get(cwd) ?? [])
+				// The folder came back while its checks drained; its new checks use the session.
+				if (this.workspaceFolders.has(cwd)) {
+					return
+				}
+				await closeSession(cwd)
+			})
+		)
+	}
+}
