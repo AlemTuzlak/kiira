@@ -564,6 +564,16 @@ describe("project and fs helpers", () => {
 		expect((await createProject(tempProject({ "package.json": "[1]" }))).packageJson).toBeUndefined()
 	})
 
+	// Inside a git hook these point at the outer repository; clear them so git in a temp dir sees only that dir.
+	beforeEach(() => {
+		for (const name of ["GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"]) {
+			vi.stubEnv(name, undefined)
+		}
+	})
+	afterEach(() => {
+		vi.unstubAllEnvs()
+	})
+
 	const hasGit = (() => {
 		try {
 			execFileSync("git", ["--version"], { stdio: "ignore" })
@@ -589,6 +599,76 @@ describe("project and fs helpers", () => {
 		expect(isTracked("tracked.txt")).toBe(true)
 		expect(isTracked("untracked.txt")).toBe(false)
 		expect(isTracked("missing.txt")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked accepts absolute and ./-prefixed paths and rejects outside paths", async () => {
+		const cwd = tempProject({ "tracked.txt": "t", "nested/deep.txt": "d" })
+		execFileSync("git", ["init", "-q"], { cwd })
+		execFileSync("git", ["add", "."], { cwd })
+		const { isTracked } = await createProject(cwd)
+		expect(isTracked(join(cwd, "tracked.txt"))).toBe(true)
+		expect(isTracked("./nested/deep.txt")).toBe(true)
+		expect(isTracked(join(cwd, "..", "elsewhere.txt"))).toBe(false)
+		expect(isTracked("")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked accepts tracked filenames and directories starting with two dots", async () => {
+		const cwd = tempProject({ "..tracked.txt": "t", "..nested/deep.txt": "d" })
+		execFileSync("git", ["init", "-q"], { cwd })
+		execFileSync("git", ["add", "."], { cwd })
+		const { isTracked } = await createProject(cwd)
+		expect(isTracked("..tracked.txt")).toBe(true)
+		expect(isTracked("./..tracked.txt")).toBe(true)
+		expect(isTracked(join(cwd, "..tracked.txt"))).toBe(true)
+		expect(isTracked("..nested/deep.txt")).toBe(true)
+		expect(isTracked("..")).toBe(false)
+		expect(isTracked("../outside.txt")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked answers for repository paths outside cwd", async () => {
+		const repo = tempProject({ "README.md": "r", "docs/guide.md": "g" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		execFileSync("git", ["add", "."], { cwd: repo })
+		const { isTracked } = await createProject(join(repo, "docs"))
+		expect(isTracked("guide.md")).toBe(true)
+		expect(isTracked("../README.md")).toBe(true)
+		expect(isTracked(join(repo, "README.md"))).toBe(true)
+		expect(isTracked("../missing.md")).toBe(false)
+		expect(isTracked("../../outside.md")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked is true for a directory or . holding a tracked file", async () => {
+		const repo = tempProject({ "nested/deep/a.txt": "a", "loose/b.txt": "b", "docs/c.md": "c" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		execFileSync("git", ["add", "nested", "docs"], { cwd: repo })
+		const { isTracked } = await createProject(repo)
+		expect(isTracked(".")).toBe(true)
+		expect(isTracked("nested")).toBe(true)
+		expect(isTracked("nested/")).toBe(true)
+		expect(isTracked("nested/deep")).toBe(true)
+		expect(isTracked(join(repo, "nested"))).toBe(true)
+		expect(isTracked("loose")).toBe(false)
+		expect(isTracked("nest")).toBe(false)
+		expect((await createProject(join(repo, "docs"))).isTracked("..")).toBe(true)
+		expect((await createProject(join(repo, "loose"))).isTracked(".")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked is false for . in a repository with nothing tracked", async () => {
+		const repo = tempProject({ "a.txt": "a" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		const { isTracked } = await createProject(repo)
+		expect(isTracked(".")).toBe(false)
+	})
+
+	it.skipIf(!hasGit)("isTracked matches globs like git does", async () => {
+		const repo = tempProject({ "docs/sub/a.md": "a", "b.txt": "b" })
+		execFileSync("git", ["init", "-q"], { cwd: repo })
+		execFileSync("git", ["add", "docs"], { cwd: repo })
+		const { isTracked } = await createProject(repo)
+		expect(isTracked("docs/*.md")).toBe(true)
+		expect(isTracked("docs/sub/?.md")).toBe(true)
+		expect(isTracked("docs/sub/[ab].md")).toBe(true)
+		expect(isTracked("*.txt")).toBe(false)
 	})
 
 	it("isTracked is false outside a git repository", async () => {

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { isAbsolute, join, posix, relative, resolve, sep } from "node:path"
 import type { Root } from "mdast"
 import type ts from "typescript"
 import { rulesForFile } from "../config"
@@ -82,17 +82,95 @@ export async function createProject(cwd: string): Promise<KiiraProject> {
 		cwd,
 		packageJson,
 		workspacePackages: await discoverWorkspacePackages(cwd),
-		isTracked: (path) => {
-			try {
-				execFileSync("git", ["-c", "core.fsmonitor=false", "ls-files", "--error-unmatch", "--", path], {
-					cwd,
-					stdio: "ignore",
-				})
-				return true
-			} catch {
-				return false
+		isTracked: createIsTracked(cwd),
+	}
+}
+
+/**
+ * `isTracked` for a project: one `git ls-files` lists every tracked path in the
+ * repository the first time it is asked, and every later answer is a set lookup.
+ * (A spawn per path cost ~20 ms, so a rule asking per document scaled linearly.)
+ * Answers match `git ls-files --error-unmatch -- <path>` run in `cwd`: a
+ * directory is tracked when any file under it is. Globs, and a listing git
+ * cannot produce, fall back to that per-path command.
+ */
+function createIsTracked(cwd: string): (path: string) => boolean {
+	const git = (args: string[]): string =>
+		execFileSync("git", ["-c", "core.fsmonitor=false", ...args], {
+			cwd,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+			maxBuffer: 256 * 1024 * 1024,
+		})
+	const askGit = (path: string): boolean => {
+		try {
+			git(["ls-files", "--error-unmatch", "--", path])
+			return true
+		} catch {
+			return false
+		}
+	}
+	// `prefix` is `cwd` relative to the repository root ("" at the root, else "docs/").
+	type Listing = { prefix: string; files: Set<string>; dirs: Set<string> } | "no-repo" | "per-path"
+	let listing: Listing | undefined
+	const load = (): Listing => {
+		if (listing) {
+			return listing
+		}
+		let prefix: string
+		try {
+			prefix = git(["rev-parse", "--show-prefix"]).replace(/\n$/, "")
+		} catch {
+			// Not a repository, or no git: the per-path command would fail for every path too.
+			listing = "no-repo"
+			return listing
+		}
+		try {
+			const files = new Set(
+				git(["ls-files", "-z", "--full-name", "--", ":/"])
+					.split("\0")
+					.filter((entry) => entry.length > 0)
+			)
+			const dirs = new Set<string>()
+			for (const file of files) {
+				for (let slash = file.lastIndexOf("/"); slash > 0; slash = file.lastIndexOf("/", slash - 1)) {
+					dirs.add(file.slice(0, slash))
+				}
 			}
-		},
+			listing = { prefix, files, dirs }
+		} catch {
+			listing = "per-path"
+		}
+		return listing
+	}
+	return (path) => {
+		// git rejects an empty pathspec.
+		if (path === "") {
+			return false
+		}
+		if (/[*?[]/.test(path)) {
+			return askGit(path)
+		}
+		const state = load()
+		if (state === "no-repo") {
+			return false
+		}
+		if (state === "per-path") {
+			return askGit(path)
+		}
+		const fromCwd = relative(cwd, resolve(cwd, path))
+		if (isAbsolute(fromCwd)) {
+			return false
+		}
+		// Relative to the repository root; "." is the root itself.
+		const rel = posix.normalize(state.prefix + fromCwd.split(sep).join("/")).replace(/\/$/, "")
+		if (rel === ".." || rel.startsWith("../")) {
+			return false
+		}
+		if (rel === ".") {
+			return state.files.size > 0
+		}
+		return state.files.has(rel) || state.dirs.has(rel)
 	}
 }
 
