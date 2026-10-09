@@ -105,4 +105,4 @@ When you use the official [Kiira GitHub Action](/latest/ci/github-action), `gith
 
 ### Step summary
 
-When the `GITHUB_STEP_SUMMARY` environment variable is set, which GitHub Actions does for every step, the `github` reporter also appends a Markdown summary to that file. It shows on the workflow run's page. It has a `### Kiira` heading, a pass or fail line, the number of files, snippets checked, errors and warnings, and the first 10 errors as `` `file:line` message `` with "and N more" after that. Other reporters never write it.
+When the `GITHUB_STEP_SUMMARY` environment variable is set, which GitHub Actions does for every step, the `github` reporter also appends a Markdown summary to that file. It shows on the workflow run's page. It has a `### Kiira` heading, a pass or fail line, the number of files, snippets checked, errors and warnings, and the first 10 errors as `` `file:line` message `` with "and N more" after that. Each message shows its first line only, up to 200 characters, as plain text. Other reporters never write it. When Kiira cannot write the file, it prints a warning and the exit code does not change.
