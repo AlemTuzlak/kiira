@@ -68,6 +68,9 @@ describe("resolveConfig", () => {
 				"jsx-framework": { severity: "warn", options: undefined },
 				"unused-symbols": { severity: "off", options: undefined },
 				"relative-imports": { severity: "off", options: undefined },
+				"broken-link": { severity: "off", options: { anchors: false } },
+				"max-lines": { severity: "off", options: undefined },
+				"deprecated-import": { severity: "off", options: undefined },
 			},
 			ruleOverrides: {},
 		})
@@ -245,6 +248,9 @@ describe("resolveConfig rules", () => {
 			"jsx-framework",
 			"unused-symbols",
 			"relative-imports",
+			"broken-link",
+			"max-lines",
+			"deprecated-import",
 			"demo/shout",
 			"demo/strict",
 		])
@@ -366,7 +372,7 @@ describe("resolveConfig errors", () => {
 			{ presets: [{ name: "p", rules: { nope: "off" } }] },
 			/Unknown rule "nope" in preset "p"/,
 		],
-		["an unknown preset", { presets: ["nope"] }, /Unknown preset "nope"\. Known presets: \(none\)/],
+		["an unknown preset", { presets: ["nope"] }, /Unknown preset "nope"\. Known presets: recommended\./],
 		["an unknown override preset", { overrides: [{ include: ["a.md"], presets: ["nope"] }] }, /Unknown preset "nope"/],
 		[
 			"an invalid level",

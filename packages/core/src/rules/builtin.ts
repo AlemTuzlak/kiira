@@ -1,9 +1,12 @@
 import { definePlugin } from "../plugin"
 import type { KiiraPlugin } from "../types"
+import { brokenLinkRule } from "./broken-link"
+import { deprecatedImportRule } from "./deprecated-import"
 import { fenceMetaRule } from "./fence-meta"
 import { groupRule } from "./group"
 import { jsxFrameworkRule } from "./jsx-framework"
 import { languageTagRule } from "./language-tag"
+import { maxLinesRule } from "./max-lines"
 import { parseErrorRule } from "./parse-error"
 import { relativeImportsRule, unusedSymbolsRule } from "./toggles"
 
@@ -22,5 +25,9 @@ export const builtinPlugin: KiiraPlugin = definePlugin({
 		"jsx-framework": jsxFrameworkRule,
 		"unused-symbols": unusedSymbolsRule,
 		"relative-imports": relativeImportsRule,
+		"broken-link": brokenLinkRule,
+		"max-lines": maxLinesRule,
+		"deprecated-import": deprecatedImportRule,
 	},
+	presets: [{ name: "recommended", rules: { "broken-link": "error", "deprecated-import": "warn" } }],
 })
