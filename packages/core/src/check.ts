@@ -30,8 +30,8 @@ import type {
 	KiiraConfig,
 	KiiraDiagnostic,
 	KiiraFs,
-	KiiraProject,
 	KiiraPlugin,
+	KiiraProject,
 	ResolvedKiiraConfig,
 	RuleSeverity,
 	VirtualFile,
@@ -689,6 +689,8 @@ function collectSources(
 		sources[doc.file] = doc.text
 	}
 	return sources
+}
+
 export interface CheckInput {
 	cwd: string
 	/** Markdown files relative to `cwd`; defaults to the config's `include`. */

@@ -63,7 +63,7 @@ describe("formatJson", () => {
 	it("leaves the sources the run read out of the output", () => {
 		const output = formatJson(result())
 		expect(output).not.toContain("SOURCE-TEXT")
-		expect(Object.keys(JSON.parse(output))).toEqual(["stats", "diagnostics"])
+		expect(Object.keys(JSON.parse(output))).toEqual(["schemaVersion", "stats", "diagnostics"])
 	})
 })
 
@@ -211,7 +211,7 @@ describe("formatGithubSummary", () => {
 
 	it("says Passed and lists nothing for a clean run", () => {
 		const stats = { ...result().stats, errors: 0 }
-		const clean: KiiraCheckResult = { snippets: [], virtualFiles: [], diagnostics: [], stats }
+		const clean: KiiraCheckResult = { snippets: [], virtualFiles: [], diagnostics: [], stats, sources: {} }
 		expect(formatGithubSummary(clean)).toContain("\nPassed\n")
 		expect(formatGithubSummary(clean)).not.toContain("`")
 	})

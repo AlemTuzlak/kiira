@@ -316,6 +316,9 @@ describe("runCheck --fix with rule edits", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true })
 		}
+	})
+})
+
 describe("runCheck GitHub step summary", () => {
 	const summaryPath = join(mkdtempSync(join(tmpdir(), "kiira-summary-")), "summary.md")
 
