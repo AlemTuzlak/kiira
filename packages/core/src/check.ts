@@ -6,7 +6,7 @@ import type ts from "typescript"
 import { loadConfig, resolveConfig, rulesForFile } from "./config"
 import { discoverMarkdownFiles } from "./discover"
 import { type CheckerEngine, type RawDiagnostic, resolveEngine } from "./engine"
-import { collectExternalPackages, externalResolution } from "./external"
+import { collectExternalPackages, ensureExternalPackages, externalResolution } from "./external"
 import { extractSnippets, loadMdxSupportFor, parseDocument } from "./extract"
 import { groupSuggestions } from "./rules/group"
 import { jsxFrameworkSuggestions } from "./rules/jsx-framework"
@@ -701,11 +701,14 @@ export interface CheckInput {
 
 /** Check Markdown files and run every rule: document, program and project. Experimental. */
 export async function check(input: CheckInput): Promise<KiiraCheckResult> {
-	const config = input.config ?? (await loadConfig(input.cwd))
+	const cwd = resolve(input.cwd)
+	const config = input.config ?? (await loadConfig(cwd))
 	const added = input.plugins ?? []
 	const names = new Set(added.map((plugin) => plugin.name))
 	const plugins = [...(config.plugins ?? []).filter((plugin) => !names.has(plugin.name)), ...added]
-	return checkMarkdownFiles({ cwd: input.cwd, files: input.files, config: { ...config, plugins } })
+	// Like `kiira check`: install declared doc-only packages so their imports resolve.
+	await ensureExternalPackages(cwd, collectExternalPackages(config), { warn: console.warn })
+	return checkMarkdownFiles({ cwd, files: input.files, config: { ...config, plugins } })
 }
 
 export interface CheckMarkdownTextInput {
