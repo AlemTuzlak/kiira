@@ -4,7 +4,13 @@ export default defineConfig({
 	entry: { extension: "src/extension.ts" },
 	sourcemap: true,
 	dts: false,
-	minify: false,
+	// Smaller download and faster load. The `.map` files above are only for local
+	// debugging: `.vscodeignore` keeps them out of the `.vsix`. So keep function and
+	// class names, or stack traces in user bug reports become unreadable.
+	minify: {
+		compress: { keepNames: { function: true, class: true } },
+		mangle: { keepNames: true },
+	},
 	clean: true,
 	format: ["cjs"],
 	outDir: "out",
