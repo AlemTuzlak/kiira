@@ -96,7 +96,7 @@ A document that starts with a `---` line and has a later line of exactly `---` h
 - `range` runs from the start of the opening `---` to the end of the closing `---`.
 - `bodyStart` is the first line after the block.
 
-Kiira does not parse YAML, so a plugin brings its own parser. The block is left out of `ctx.mdast`, and line numbers after it are the same as in the file. `ctx.text` is still the whole file. A byte order mark before the opening `---` means the document has no frontmatter.
+Kiira does not parse YAML, so a plugin brings its own parser. The block is left out of `ctx.mdast`, and the line, column, and offset of each node after it are the same as in the file. `ctx.text` is still the whole file. A byte order mark before the opening `---` is skipped. If a code fence opens between the two `---` lines, the block is not frontmatter, so the fence is still checked.
 
 This rule requires a `name:` line:
 

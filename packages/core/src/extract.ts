@@ -126,7 +126,7 @@ interface ParsedDocument {
  * `VFileMessage` carries them) so one bad file, e.g. mid-edit, doesn't abort the run.
  */
 export function parseDocument(markdownFile: string, content: string): ParsedDocument {
-	// The block is emptied line by line, so positions after it match the file and its
+	// The block is turned into spaces, so positions after it match the file and its
 	// closing `---` cannot become a setext heading or thematic break.
 	const block = detectFrontmatter(content)
 	try {

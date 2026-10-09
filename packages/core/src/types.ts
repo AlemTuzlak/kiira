@@ -260,7 +260,7 @@ export interface RuleDocumentContext<TOptions = unknown> {
 	file: string
 	text: string
 	/** The leading frontmatter block, if any. `mdast` does not contain it. */
-	frontmatter: Frontmatter | undefined
+	frontmatter?: Frontmatter
 	/** The parsed tree. Empty (no children) when `parseError` is set. */
 	mdast: MdastRoot
 	parseError?: DocumentParseError

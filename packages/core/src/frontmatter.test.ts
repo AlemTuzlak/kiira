@@ -18,7 +18,7 @@ describe("detectFrontmatter", () => {
 			range: { start: { line: 0, character: 0 }, end: { line: 3, character: 3 } },
 			bodyStart: { line: 4, character: 0 },
 		})
-		expect(found?.blanked).toBe("\n\n\n\n# Title\n")
+		expect(found?.blanked).toBe("   \n       \n         \n   \n# Title\n")
 	})
 
 	it("keeps CRLF in raw and in the blanked text", () => {
@@ -29,12 +29,12 @@ describe("detectFrontmatter", () => {
 			end: { line: 3, character: 6 },
 		})
 		expect(found?.frontmatter.bodyStart).toEqual({ line: 4, character: 0 })
-		expect(found?.blanked).toBe("\r\n\r\n\r\n\r\nbody\r\n")
+		expect(found?.blanked).toBe("   \r\n       \r\n         \r\n      \r\nbody\r\n")
 	})
 
 	it("handles an empty block and a closing line at the end of the file", () => {
 		expect(detectFrontmatter("---\n---")?.frontmatter.raw).toBe("")
-		expect(detectFrontmatter("---\na\n---")?.blanked).toBe("\n\n")
+		expect(detectFrontmatter("---\na\n---")?.blanked).toBe("   \n \n   ")
 	})
 
 	it("is not frontmatter without a closing line", () => {
@@ -49,8 +49,15 @@ describe("detectFrontmatter", () => {
 		expect(detectFrontmatter("--- \nname: x\n---\n")).toBeUndefined()
 	})
 
-	it("does not skip a byte order mark", () => {
-		expect(detectFrontmatter("﻿---\nname: x\n---\n")).toBeUndefined()
+	it("skips a byte order mark and gives the same block as without it", () => {
+		const withBom = detectFrontmatter("﻿---\nname: x\n---\nbody\n")
+		expect(withBom?.frontmatter).toEqual(detectFrontmatter("---\nname: x\n---\nbody\n")?.frontmatter)
+		expect(withBom?.blanked).toBe("﻿   \n       \n   \nbody\n")
+	})
+
+	it("is not frontmatter when a code fence opens inside the block", () => {
+		expect(detectFrontmatter("---\n\n```ts\nconst a = 1\n```\n\n---\n")).toBeUndefined()
+		expect(detectFrontmatter("---\n~~~\nx\n~~~\n---\n")).toBeUndefined()
 	})
 })
 
@@ -81,6 +88,14 @@ describe("parsing a document with frontmatter", () => {
 		const { frontmatter, parseError } = parseDocument("doc.mdx", "---\nname: x\n---\n<Unclosed>\n")
 		expect(parseError).toBeDefined()
 		expect(frontmatter?.raw).toBe("name: x")
+	})
+
+	it.each(FILES)("keeps node offsets in line with the text in %s", (file) => {
+		const text = "---\ntitle: x\n---\n\nSome *text* here\n"
+		const [paragraph] = parseDocument(file, text).mdast.children
+		const { start, end } = paragraph?.position ?? {}
+		expect(text.slice(start?.offset, end?.offset)).toBe("Some *text* here")
+		expect(start).toMatchObject({ line: 5, column: 1 })
 	})
 
 	it.each(FILES)("keeps fence positions in %s", (file) => {
