@@ -293,7 +293,7 @@ describe("merging hooks", () => {
 	it("returns undefined when no hook returns a result", async () => {
 		const cwd = tempProject()
 		const config = resolveConfig({ plugins: [pluginWithHook(() => undefined)] })
-		const input = { file: "d.md", text: "", snippets: [], ...(await shared(cwd)) }
+		const input = { file: "d.md", text: "", frontmatter: undefined, snippets: [], ...(await shared(cwd)) }
 		expect(runTypescriptHooks(config, input)).toBeUndefined()
 	})
 
@@ -385,6 +385,42 @@ describe("merging hooks", () => {
 		})
 		await checkMarkdownText({ cwd, markdownFile: "doc.md", text, config: { engine: "classic", plugins: [plugin] } })
 		expect(seen).toEqual(["doc.md", "doc.md", text, ["export const a = 1"], cwd, "hello"])
+	})
+})
+
+describe("frontmatter in the hook context", () => {
+	const spy = (seen: unknown[]) =>
+		definePlugin({
+			name: "spy",
+			typescript: (_file, ctx) => {
+				seen.push(ctx.frontmatter?.raw ?? null)
+				return undefined
+			},
+		})
+	const text = `---\ntitle: Hi\n---\n\n${docWithFence("ts", "export const a = 1")}`
+
+	it("matches what document rules get, and is undefined without a block", async () => {
+		const cwd = tempProject({ "with.md": text, "without.md": docWithFence("ts", "export const a = 1") })
+		const seen: unknown[] = []
+		await checkMarkdownFiles({ cwd, config: { engine: "classic", plugins: [spy(seen)] } })
+		expect(seen.sort()).toEqual([null, "title: Hi"])
+	})
+
+	it("is computed from the passed text", async () => {
+		const seen: unknown[] = []
+		await checkMarkdownText({
+			cwd: tempProject({}),
+			markdownFile: "doc.md",
+			text,
+			config: { engine: "classic", plugins: [spy(seen)] },
+		})
+		expect(seen).toEqual(["title: Hi"])
+	})
+
+	it("documentFromVirtualFiles detects it only when it has the text", () => {
+		const vf = { snippet: { id: "1", markdownFile: "d.md", code: "a" } } as never
+		expect(documentFromVirtualFiles("d.md", [vf], text).frontmatter?.raw).toBe("title: Hi")
+		expect(documentFromVirtualFiles("d.md", [vf]).frontmatter).toBeUndefined()
 	})
 })
 

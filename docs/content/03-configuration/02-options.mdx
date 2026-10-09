@@ -165,7 +165,7 @@ export default defineConfig({
 })
 ```
 
-A plugin's rules are named `<plugin>/<rule>`, so `docs/no-todo` above. Plugins need a JavaScript or TypeScript config file; they can't be written in `kiira.config.json`. See [Rules](/latest/configuration/rules) for how to write one.
+A plugin's rules are named `<plugin>/<rule>`, so `docs/no-todo` above. Plugins need a JavaScript or TypeScript config file; they can't be written in `kiira.config.json`. See [Writing a plugin](/latest/plugins/writing-a-plugin) for how to write one.
 
 ## `presets`
 
@@ -196,6 +196,9 @@ presets: [
 | `allowEmpty` | `boolean` | When true and no file matches, Kiira skips the run, prints `No files matched; nothing to check.`, and exits `0`. Without it, an empty match is a normal run with zero files. |
 | `codeFenceLanguages` | `string[]` | The fence identifiers to recognize. The last preset that sets it wins, unless you set `markdown.codeFenceLanguages` yourself. |
 | `rules` | `Record<string, RuleSetting>` | Rule settings, applied in the order described in [how settings merge](#how-rule-settings-merge). |
+| `typescript` | `(file, ctx) => TypescriptHookResult \| undefined` | Per-file TypeScript options. See the [TypeScript hook](/latest/configuration/rules#typescript-hook). |
+
+The [presets reference](/latest/plugins/rules-and-presets#presets) has more on each field.
 
 `--entry` and positional paths on the CLI replace the whole `include` set, presets included.
 
@@ -232,6 +235,8 @@ Each layer is applied on top of the one before it:
 5. `--rule` on the CLI.
 
 A level without options keeps the options set by an earlier layer.
+
+The [reference](/latest/plugins/rules-and-presets#how-settings-merge) shows each step with an example.
 
 ## `overrides`
 

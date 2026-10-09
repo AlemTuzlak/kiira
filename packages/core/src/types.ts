@@ -341,6 +341,8 @@ export interface TypescriptHookContext {
 	 * joined by blank lines.
 	 */
 	text: string
+	/** The leading frontmatter block, as document rules see it. `undefined` when there is none, or the text is not available. */
+	frontmatter: Frontmatter | undefined
 	snippets: ExtractedSnippet[]
 	project: KiiraProject
 	fs: KiiraFs

@@ -6,7 +6,9 @@ description: >
   Covers fence metadata (`ignore`, `validate`, `fixture`, `name`, `group`,
   `package`), grouping multi-fence walkthroughs and `defaultGroup: "file"`,
   fixtures for needed scope, `ts`->`tsx` mistags, unused-symbols and relative
-  imports ignored by default, and never silencing a valid error with `ignore`.
+  imports ignored by default, turning built-in rules on or off (`rules`,
+  `--rule`), leading frontmatter not being parsed as Markdown, and never
+  silencing a valid error with `ignore`.
 type: core
 library: kiira
 library_version: "0.4.0"
@@ -15,6 +17,9 @@ sources:
   - "AlemTuzlak/kiira:docs/content/04-fences/02-grouping-snippets.mdx"
   - "AlemTuzlak/kiira:docs/content/04-fences/03-language-tag-checking.mdx"
   - "AlemTuzlak/kiira:docs/content/03-configuration/02-options.mdx"
+  - "AlemTuzlak/kiira:docs/content/03-configuration/04-rules.mdx"
+  - "AlemTuzlak/kiira:docs/content/08-plugins/02-rules-and-presets.mdx"
+  - "AlemTuzlak/kiira:docs/content/08-plugins/03-writing-a-plugin.mdx"
   - "AlemTuzlak/kiira:packages/core/src/virtual.ts"
 ---
 
@@ -81,6 +86,27 @@ export function App() { return <div>hi</div> }
 ```bash
 kiira check --fix   # rewrites ts->tsx mistags, adds group= tags, writes jsx overrides
 ```
+
+### Turn a rule on, off, or down
+
+Everything Kiira reports besides TypeScript's own errors is a rule (`language-tag`, `group`,
+`fence-meta`, `jsx-framework`, `unused-symbols`, `relative-imports`, ...). Set a level in
+config, or for one run with `--rule`; `--rule` beats every config layer:
+
+```ts
+// kiira.config.ts
+export default defineConfig({ rules: { "language-tag": "off", "unused-symbols": "warn" } })
+```
+
+```bash
+kiira check --rule unused-symbols=warn --rule group=off
+```
+
+### Frontmatter is not Markdown
+
+A leading `---` block is left out of the parsed document, so it never becomes a heading or
+thematic break, and fences and line numbers after it are unaffected. Kiira does not parse
+the YAML; only plugin rules can read it (`ctx.frontmatter.raw`).
 
 ## Common Mistakes
 

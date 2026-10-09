@@ -1,13 +1,6 @@
 import { resolve } from "node:path"
 import type ts from "typescript"
-import type {
-	ExtractedSnippet,
-	KiiraFs,
-	KiiraProject,
-	ResolvedKiiraConfig,
-	TypescriptHookContext,
-	TypescriptHookResult,
-} from "./types"
+import type { ResolvedKiiraConfig, TypescriptHookContext, TypescriptHookResult } from "./types"
 import { getTypescript } from "./typescript"
 
 type DiagnosticFilter = NonNullable<TypescriptHookResult["filterDiagnostic"]>
@@ -64,7 +57,7 @@ export function hasTypescriptHooks(resolved: ResolvedKiiraConfig): boolean {
 /** Run every hook for one document and merge their results; `undefined` when none returned anything. */
 export function runTypescriptHooks(
 	resolved: ResolvedKiiraConfig,
-	input: { file: string; text: string; snippets: ExtractedSnippet[]; project: KiiraProject; fs: KiiraFs }
+	input: TypescriptHookContext
 ): TypescriptHookOutcome | undefined {
 	const ts = getTypescript()
 	let outcome: TypescriptHookOutcome | undefined

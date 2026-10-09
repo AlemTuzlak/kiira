@@ -5,7 +5,7 @@ description: "Every built-in Kiira rule with its scope, default level, and what 
 ---
 
 <WarningAlert title="Experimental">
-The rule and plugin API can change between minor releases while it settles. A fuller plugin guide will follow.
+The rule and plugin API can change between minor releases while it settles. See [Experimental API](/latest/plugins/experimental-api).
 </WarningAlert>
 
 ## What a rule is
@@ -79,6 +79,8 @@ export default defineConfig({
 ```
 
 ## Write a rule
+
+This section is a short summary. The [plugin guide](/latest/plugins/writing-a-plugin) covers writing a plugin step by step, and the [reference](/latest/plugins/rules-and-presets) covers rule settings, presets, and the order Kiira merges them in.
 
 Import `defineRule` and `definePlugin` from `kiira-core/plugin`. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
 

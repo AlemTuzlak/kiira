@@ -1,0 +1,32 @@
+---
+title: "Experimental API"
+summary: "What can still change in the plugin API, and how to build on it safely"
+description: "Which parts of Kiira's rule, plugin, and programmatic APIs are experimental, what that means for your plugin, and how to protect it with a test that runs check()."
+---
+
+<WarningAlert title="Experimental">
+Everything on this page's list can change between minor releases while the API settles.
+</WarningAlert>
+
+## What is experimental
+
+- Rules, plugins, and presets, and the `kiira-core/plugin` entry that types them.
+- The three rule scopes and everything a rule's `ctx` exposes: `frontmatter`, `program`, `checker`, `project`, `fs`, and the rest.
+- `edits` fixes and how `--fix` and `--fix --dry-run` apply them.
+- The per-file `typescript` hook for plugins and presets.
+- `check()` from `kiira-core`.
+
+The JSON reporter's output has a `schemaVersion`, so a script that reads it can tell when the shape changes.
+
+## What is not
+
+The CLI flags, exit codes, and config options that existed before rules and plugins are not part of this. `rules`, `plugins`, `presets`, and `--rule` are.
+
+## Build on it safely
+
+- Pin `kiira` and `kiira-core` to the same version, and update them together.
+- Keep a test that runs [`check()`](/latest/configuration/programmatic-api) on a small fixture and asserts the diagnostics your rules report. A change that breaks your plugin then fails your CI, not a reader's docs build.
+- Read the release notes before a minor update. A change to this API is listed there.
+- Program rules only run on the classic [engine](/latest/configuration/options#engine). Set `engine: "classic"` if your plugin needs one.
+
+Next: [Rules and presets reference](/latest/plugins/rules-and-presets), then [Writing a plugin](/latest/plugins/writing-a-plugin).

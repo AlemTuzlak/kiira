@@ -8,6 +8,7 @@ import { discoverMarkdownFiles } from "./discover"
 import { type CheckerEngine, type RawDiagnostic, resolveEngine } from "./engine"
 import { collectExternalPackages, ensureExternalPackages, externalResolution } from "./external"
 import { extractSnippets, loadMdxSupportFor, parseDocument } from "./extract"
+import { detectFrontmatter } from "./frontmatter"
 import { groupSuggestions } from "./rules/group"
 import { jsxFrameworkSuggestions } from "./rules/jsx-framework"
 import { languageTagSuggestions } from "./rules/language-tag"
@@ -26,6 +27,7 @@ import {
 } from "./rules/run"
 import type {
 	ExtractedSnippet,
+	Frontmatter,
 	KiiraCheckResult,
 	KiiraConfig,
 	KiiraDiagnostic,
@@ -244,6 +246,8 @@ function applyToggleRules(diagnostics: KiiraDiagnostic[], resolved: ResolvedKiir
 /** A document as a TypeScript hook sees it. */
 interface HookDocument {
 	text: string
+	/** The leading frontmatter block, when the document text is known. */
+	frontmatter?: Frontmatter | undefined
 	snippets: ExtractedSnippet[]
 }
 
@@ -261,7 +265,11 @@ export function documentFromVirtualFiles(file: string, virtualFiles: VirtualFile
 		}
 	}
 	const list = [...snippets.values()]
-	return { text: text ?? list.map((snippet) => snippet.code).join("\n\n"), snippets: list }
+	return {
+		text: text ?? list.map((snippet) => snippet.code).join("\n\n"),
+		frontmatter: text === undefined ? undefined : detectFrontmatter(text)?.frontmatter,
+		snippets: list,
+	}
 }
 
 /**
@@ -283,7 +291,8 @@ export function createOptionsResolver(
 				return undefined
 			}
 			env ??= { project: await createProject(cwd), fs: createRuleFs(cwd).fs }
-			return runTypescriptHooks(resolved, { file, ...doc, ...env })
+			const { text, snippets, frontmatter } = doc
+			return runTypescriptHooks(resolved, { file, text, snippets, frontmatter, ...env })
 		},
 		async optionsFor(file: string, hook?: TypescriptHookOutcome): Promise<ts.CompilerOptions> {
 			const replaceTsconfig = hook?.replaceTsconfig ?? false

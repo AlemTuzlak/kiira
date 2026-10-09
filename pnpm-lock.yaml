@@ -63,6 +63,24 @@ importers:
         specifier: ^5.4.0
         version: 5.8.3
 
+  examples/plugin-basic:
+    devDependencies:
+      '@types/node':
+        specifier: 22.14.1
+        version: 22.14.1
+      kiira:
+        specifier: workspace:*
+        version: link:../../packages/cli
+      kiira-core:
+        specifier: workspace:*
+        version: link:../../packages/core
+      typescript:
+        specifier: ^5.4.0
+        version: 5.8.3
+      vitest:
+        specifier: ^3.1.1
+        version: 3.1.1(@types/debug@4.1.13)(@types/node@22.14.1)(happy-dom@17.4.4)(jiti@2.6.1)(yaml@2.8.3)
+
   examples/react:
     devDependencies:
       '@types/react':
