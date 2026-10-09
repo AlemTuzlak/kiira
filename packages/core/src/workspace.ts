@@ -80,17 +80,25 @@ async function readWorkspaceGlobs(cwd: string): Promise<string[]> {
 // (`createProject` and `buildBaseOptions`), the `group` rule once more per probe,
 // and the editor once per keystroke. The result only changes when the workspace
 // does, so it is cached per `cwd` behind a fingerprint of the paths that decide it:
-// the workspace manifest, the glob roots (a new package changes its parent's mtime),
-// and each package's `package.json`, `node_modules`, and `node_modules/@types`.
+// the workspace manifest, every directory the globs walk (a new entry changes its
+// parent's mtime), and each package's directory, `package.json`, `src`,
+// `node_modules`, and `node_modules/@types`.
 // Validating the fingerprint is a few stats per package instead of a glob and N reads.
 
 interface WorkspaceSnapshot {
-	/** The paths whose mtimes decide the snapshot, in a fixed order. */
+	/** The paths whose mtimes decide the snapshot, sorted. */
 	watched: string[]
 	fingerprint: string
-	packages: WorkspacePackage[]
+	packages: readonly WorkspacePackage[]
 	/** Built on first request; `null` when not yet built. */
 	resolution: WorkspaceResolution | undefined | null
+}
+
+interface WorkspaceScan {
+	/** cwd-relative `package.json` paths the workspace globs match. */
+	manifests: string[]
+	/** See {@link WorkspaceSnapshot.watched}. */
+	watched: string[]
 }
 
 const snapshots = new Map<string, WorkspaceSnapshot>()
@@ -102,17 +110,21 @@ export function resetWorkspaceCache(): void {
 
 const GLOB_MAGIC = /[*?{}[\]()!]/
 
-/** The static leading directory of a workspace glob (`packages/*` -> `packages`). */
-function globRoot(glob: string): string {
+/** How many leading segments of a workspace glob are static (`packages/*` -> 1). */
+function staticDepth(segments: string[]): number {
+	const depth = segments.findIndex((segment) => GLOB_MAGIC.test(segment))
+	return depth === -1 ? segments.length : depth
+}
+
+// Each level a workspace glob walks below its static root:
+// `apps/*/pkgs/*` -> `apps/*`, `apps/*/pkgs`, `apps/*/pkgs/*`.
+function globLevels(glob: string): string[] {
 	const segments = glob.split("/")
-	const fixed: string[] = []
-	for (const segment of segments) {
-		if (GLOB_MAGIC.test(segment)) {
-			break
-		}
-		fixed.push(segment)
+	const levels: string[] = []
+	for (let depth = staticDepth(segments) + 1; depth <= segments.length; depth++) {
+		levels.push(segments.slice(0, depth).join("/"))
 	}
-	return fixed.join("/")
+	return levels
 }
 
 function mtimeOf(path: string): string {
@@ -124,20 +136,46 @@ function fingerprintOf(watched: string[]): string {
 	return watched.map(mtimeOf).join("\n")
 }
 
-function watchedPaths(cwd: string, globs: string[], packages: WorkspacePackage[]): string[] {
-	const watched = [
+function sameList(a: string[], b: string[]): boolean {
+	return a.length === b.length && a.every((item, i) => item === b[i])
+}
+
+/** Glob the workspace for its `package.json` files and every directory the globs walk. */
+async function scanWorkspace(cwd: string): Promise<WorkspaceScan> {
+	const globs = (await readWorkspaceGlobs(cwd)).map((g) => g.replace(/\/+$/, ""))
+	const watched = new Set([
 		join(cwd, "pnpm-workspace.yaml"),
 		join(cwd, "package.json"),
 		join(cwd, "node_modules"),
 		join(cwd, "node_modules", "@types"),
-	]
-	for (const root of new Set(globs.map(globRoot))) {
-		watched.push(join(cwd, root))
+	])
+	if (globs.length === 0) {
+		return { manifests: [], watched: [...watched].sort() }
 	}
-	for (const pkg of packages) {
-		watched.push(join(pkg.dir, "package.json"), join(pkg.dir, "node_modules"), join(pkg.dir, "node_modules", "@types"))
+	for (const g of globs) {
+		const segments = g.split("/")
+		watched.add(join(cwd, segments.slice(0, staticDepth(segments)).join("/")))
 	}
-	return watched
+	// Match the directories at every walked level too, so a directory that does not
+	// hold a package yet (or holds packages deeper down) is watched for new entries.
+	const options = { cwd, ignore: ["**/node_modules/**"], dot: false }
+	const [dirs, manifests] = await Promise.all([
+		glob(globs.filter((g) => !g.startsWith("!")).flatMap(globLevels), { ...options, onlyDirectories: true }),
+		glob(
+			globs.map((g) => `${g}/package.json`),
+			{ ...options, onlyFiles: true }
+		),
+	])
+	for (const dir of dirs) {
+		watched.add(join(cwd, dir.replace(/\/$/, "")))
+	}
+	for (const manifest of manifests) {
+		const dir = join(cwd, dirname(manifest))
+		for (const path of ["", "package.json", "src", "node_modules", join("node_modules", "@types")]) {
+			watched.add(join(dir, path))
+		}
+	}
+	return { manifests, watched: [...watched].sort() }
 }
 
 /** The cached snapshot for `cwd`, rebuilt when any watched path's mtime changed. */
@@ -146,43 +184,50 @@ async function workspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
 	if (cached && fingerprintOf(cached.watched) === cached.fingerprint) {
 		return cached
 	}
-	const globs = await readWorkspaceGlobs(cwd)
-	const packages = await globWorkspacePackages(cwd, globs)
-	const watched = watchedPaths(cwd, globs, packages)
-	const snapshot: WorkspaceSnapshot = { watched, fingerprint: fingerprintOf(watched), packages, resolution: null }
-	snapshots.set(cwd, snapshot)
-	return snapshot
-}
-
-/** Discover the named packages in a pnpm/npm/yarn workspace rooted at `cwd`. Cached; see {@link workspaceSnapshot}. */
-export async function discoverWorkspacePackages(cwd: string): Promise<WorkspacePackage[]> {
-	return (await workspaceSnapshot(cwd)).packages
-}
-
-async function globWorkspacePackages(cwd: string, globs: string[]): Promise<WorkspacePackage[]> {
-	if (globs.length === 0) {
-		return []
+	// Stat before reading: a change made during the scan then shows up as a changed
+	// mtime on the next call, instead of a new mtime stored next to old content. The
+	// paths to stat come from a scan, so scan again until it watches what was statted.
+	let watched = cached?.watched ?? []
+	for (let attempt = 1; ; attempt++) {
+		const fingerprint = fingerprintOf(watched)
+		const scan = await scanWorkspace(cwd)
+		const settled = sameList(scan.watched, watched)
+		if (settled || attempt === 3) {
+			const snapshot: WorkspaceSnapshot = {
+				watched: scan.watched,
+				// Still moving after three scans: use the result once, but rebuild next time.
+				fingerprint: settled ? fingerprint : "",
+				packages: await readWorkspacePackages(cwd, scan.manifests),
+				resolution: null,
+			}
+			snapshots.set(cwd, snapshot)
+			return snapshot
+		}
+		watched = scan.watched
 	}
-	const packageJsonGlobs = globs.map((g) => `${g.replace(/\/+$/, "")}/package.json`)
-	const matches = await glob(packageJsonGlobs, {
-		cwd,
-		ignore: ["**/node_modules/**"],
-		onlyFiles: true,
-		dot: false,
-	})
+}
 
+/**
+ * Discover the named packages in a pnpm/npm/yarn workspace rooted at `cwd`. Cached
+ * (see {@link workspaceSnapshot}); each call returns a fresh copy the caller may change.
+ */
+export async function discoverWorkspacePackages(cwd: string): Promise<WorkspacePackage[]> {
+	return (await workspaceSnapshot(cwd)).packages.map((pkg) => ({ ...pkg }))
+}
+
+async function readWorkspacePackages(cwd: string, manifests: string[]): Promise<readonly WorkspacePackage[]> {
 	const packages: WorkspacePackage[] = []
-	for (const rel of matches) {
+	for (const rel of manifests) {
 		try {
 			const pkg = JSON.parse(await readFile(join(cwd, rel), "utf8")) as { name?: string }
 			if (pkg.name) {
-				packages.push({ name: pkg.name, dir: join(cwd, dirname(rel)) })
+				packages.push(Object.freeze({ name: pkg.name, dir: join(cwd, dirname(rel)) }))
 			}
 		} catch {
 			// ignore malformed package.json
 		}
 	}
-	return packages
+	return Object.freeze(packages)
 }
 
 type ExportsValue = string | { [condition: string]: ExportsValue } | null
@@ -266,7 +311,7 @@ function toSourceIfPresent(absTarget: string): string | undefined {
  * as a `*` fallback so third-party deps resolve too.
  *
  * Returns `undefined` when `cwd` is not a workspace. Cached with the workspace
- * snapshot (see {@link discoverWorkspacePackages}); callers must not mutate the result.
+ * snapshot (see {@link discoverWorkspacePackages}) and frozen, so callers cannot mutate it.
  */
 export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceResolution | undefined> {
 	const snapshot = await workspaceSnapshot(cwd)
@@ -276,7 +321,10 @@ export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceRe
 	return snapshot.resolution
 }
 
-async function resolveWorkspace(cwd: string, packages: WorkspacePackage[]): Promise<WorkspaceResolution | undefined> {
+async function resolveWorkspace(
+	cwd: string,
+	packages: readonly WorkspacePackage[]
+): Promise<WorkspaceResolution | undefined> {
 	if (packages.length === 0) {
 		return undefined
 	}
@@ -359,5 +407,10 @@ async function resolveWorkspace(cwd: string, packages: WorkspacePackage[]): Prom
 		paths["*"] = nodeModulesFallbacks
 	}
 
-	return { baseUrl: cwd, paths, typeRoots: [...new Set(typeRoots)] }
+	// Frozen: the cached result is shared by every caller.
+	const resolution: WorkspaceResolution = { baseUrl: cwd, paths, typeRoots: [...new Set(typeRoots)] }
+	for (const value of [...Object.values(paths), paths, resolution.typeRoots, resolution]) {
+		Object.freeze(value)
+	}
+	return resolution
 }
