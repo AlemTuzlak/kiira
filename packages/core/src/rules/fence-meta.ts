@@ -1,6 +1,5 @@
 import type { Root } from "mdast"
-import { collectCodeNodes } from "../code-nodes"
-import { parseFenceMeta } from "../meta"
+import { codeNodesOf, fenceMetaOf } from "../code-nodes"
 import { defineRule } from "../plugin"
 import type { ExtractedSnippet, RuleReport } from "../types"
 
@@ -8,12 +7,12 @@ import type { ExtractedSnippet, RuleReport } from "../types"
 export function fenceMetaReports(mdast: Root, snippets: readonly ExtractedSnippet[]): RuleReport[] {
 	const byLine = new Map(snippets.map((snippet) => [snippet.markdownRange.start.line, snippet]))
 	const reports: RuleReport[] = []
-	for (const node of collectCodeNodes(mdast)) {
+	for (const node of codeNodesOf(mdast)) {
 		const snippet = node.position ? byLine.get(node.position.start.line - 1) : undefined
 		if (!snippet) {
 			continue
 		}
-		for (const issue of parseFenceMeta(node.meta).issues) {
+		for (const issue of fenceMetaOf(node).issues) {
 			reports.push({ range: snippet.markdownRange, message: issue.message })
 		}
 	}

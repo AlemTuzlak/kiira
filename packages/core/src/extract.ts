@@ -2,10 +2,9 @@ import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import type { Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
-import { collectCodeNodes } from "./code-nodes"
+import { codeNodesOf, fenceMetaOf } from "./code-nodes"
 import { FENCE_ALIASES, codeFenceLanguagesForFile, resolveConfig, rulesForFile } from "./config"
 import { detectFrontmatter } from "./frontmatter"
-import { parseFenceMeta } from "./meta"
 import { fenceMetaReports } from "./rules/fence-meta"
 import { parseErrorReport } from "./rules/parse-error"
 import { reportToDiagnostic } from "./rules/run"
@@ -168,7 +167,7 @@ export function extractSnippets({
 	const recognized = new Set<string>(codeFenceLanguagesForFile(config, markdownFile).map((l) => l.toLowerCase()))
 	let index = 0
 
-	for (const node of collectCodeNodes(mdast)) {
+	for (const node of codeNodesOf(mdast)) {
 		const rawLang = node.lang
 		if (!rawLang || !recognized.has(rawLang.toLowerCase()) || !node.position) {
 			continue
@@ -185,7 +184,7 @@ export function extractSnippets({
 			markdownFile,
 			lang,
 			code: node.value,
-			meta: parseFenceMeta(node.meta).meta,
+			meta: fenceMetaOf(node).meta,
 			markdownRange: {
 				start: { line: start.line - 1, character: start.column - 1 },
 				end: { line: end.line - 1, character: end.column - 1 },
