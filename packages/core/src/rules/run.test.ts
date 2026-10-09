@@ -86,9 +86,13 @@ describe("document rules", () => {
 			},
 		})
 		const resolved = resolveConfig({ plugins: [plugin], engine: "classic" })
-		const run = () => checkMarkdownText({ cwd: tempProject(), markdownFile: "doc.md", text: "x", config: resolved })
-		await expect(run()).rejects.toThrow(/Rule "t\/r" failed on doc\.md: .*not extensible/)
-		await expect(run()).rejects.toThrow(/not extensible/)
+		// A rule that throws is reported as an error on the file; both runs must see the frozen options.
+		const failures = async () =>
+			(await checkMarkdownText({ cwd: tempProject(), markdownFile: "doc.md", text: "x", config: resolved })).diagnostics
+				.filter((d) => d.code === "t/r" && d.severity === "error")
+				.map((d) => d.message)
+		expect(await failures()).toEqual([expect.stringMatching(/^Rule "t\/r" failed on doc\.md: .*not extensible/)])
+		expect(await failures()).toEqual([expect.stringMatching(/not extensible/)])
 		expect(defaults).toEqual({ mode: "x", tags: ["a"] })
 	})
 
