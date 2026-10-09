@@ -52,6 +52,7 @@ export {
 	collectSuggestions,
 	optionsForFile,
 	resolveTsconfigPath,
+	resetClassicEngineCache,
 	setTypescriptLibDir,
 	setTypescriptModule,
 } from "./check"

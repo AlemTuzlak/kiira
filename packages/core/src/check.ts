@@ -50,7 +50,7 @@ import { buildWorkspaceResolution } from "./workspace"
 // The lib-dir override and the classic overlay host live in `engine.ts` alongside
 // the classic engine; re-export the host-facing hooks so consumers (index, vscode)
 // keep importing them from `check`.
-export { applyLibDirOverride, setTypescriptLibDir } from "./engine"
+export { applyLibDirOverride, resetClassicEngineCache, setTypescriptLibDir } from "./engine"
 export { setTypescriptModule } from "./typescript"
 
 function defaultCompilerOptions(): ts.CompilerOptions {
