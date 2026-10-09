@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { check } from "../src/index"
 import { definePlugin, defineRule } from "../src/plugin"
 import { docWithFence, tempProject } from "../src/rules/test-helpers"
-import type { KiiraConfig, KiiraDiagnostic, KiiraTextEdit, SourcePosition } from "../src/types"
+import type { KiiraConfig, KiiraDiagnostic, KiiraProject, KiiraTextEdit, SourcePosition } from "../src/types"
 
 const tsconfig = (compilerOptions: Record<string, unknown> = {}) =>
 	JSON.stringify({
@@ -107,7 +107,7 @@ describe("Intent skill validation with the plugin API", () => {
 		const discovery = {
 			name: "intent",
 			// The workspace root checks `skills/` plus each package's; otherwise just the package's own.
-			include: (project: { cwd: string; workspacePackages: Array<{ dir: string }> }) => [
+			include: (project: KiiraProject) => [
 				"skills/**/SKILL.md",
 				...project.workspacePackages.map(
 					(pkg) => `${relative(project.cwd, pkg.dir).replaceAll("\\", "/")}/skills/**/SKILL.md`
