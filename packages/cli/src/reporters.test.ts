@@ -197,6 +197,18 @@ describe("formatGithubSummary", () => {
 		)
 	})
 
+	it("escapes Markdown in messages, fences backticks in paths, and caps long messages", () => {
+		const r = result()
+		r.diagnostics[0].markdownFile = "docs/`odd`.md"
+		r.diagnostics[0].message = "Type 'Promise<string>' is not `a_b` | [x] *y* & \\z"
+		expect(formatGithubSummary(r)).toContain(
+			"- ``docs/`odd`.md:42`` Type 'Promise\\<string\\>' is not \\`a\\_b\\` \\| \\[x\\] \\*y\\* \\& \\\\z\n"
+		)
+
+		r.diagnostics[0].message = "x".repeat(300)
+		expect(formatGithubSummary(r)).toContain(` ${"x".repeat(199)}…\n`)
+	})
+
 	it("says Passed and lists nothing for a clean run", () => {
 		const stats = { ...result().stats, errors: 0 }
 		const clean: KiiraCheckResult = { snippets: [], virtualFiles: [], diagnostics: [], stats }

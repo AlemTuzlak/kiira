@@ -344,6 +344,21 @@ describe("runCheck GitHub step summary", () => {
 		)
 	})
 
+	it("warns and keeps the exit code when the summary cannot be written", async () => {
+		const io = capture()
+		const notAFile = dirname(summaryPath)
+		const code = await runCheck({
+			cwd: fixtures,
+			files: ["bad.md"],
+			reporter: "github",
+			static: true,
+			env: { GITHUB_STEP_SUMMARY: notAFile },
+			...io,
+		})
+		expect(code).toBe(1)
+		expect(io.errors.join("\n")).toContain(`could not write the step summary to ${notAFile}`)
+	})
+
 	it("writes nothing for other reporters or without the variable", async () => {
 		writeFileSync(summaryPath, "")
 		await run("pretty", { GITHUB_STEP_SUMMARY: summaryPath })

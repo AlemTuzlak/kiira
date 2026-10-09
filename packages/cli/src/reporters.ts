@@ -96,6 +96,22 @@ export function formatGithub(result: KiiraCheckResult): string {
 }
 
 const SUMMARY_ERROR_LIMIT = 10
+const SUMMARY_MESSAGE_LIMIT = 200
+
+/** A code span whose fence is longer than any backtick run in `text`. */
+function codeSpan(text: string): string {
+	const longestRun = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+	const fence = "`".repeat(longestRun + 1)
+	const pad = text.startsWith("`") || text.endsWith("`") ? " " : ""
+	return `${fence}${pad}${text}${pad}${fence}`
+}
+
+/** The first line of a message, capped and escaped so Markdown and HTML show as plain text. */
+function summaryMessage(message: string): string {
+	const line = message.split("\n")[0]
+	const capped = line.length > SUMMARY_MESSAGE_LIMIT ? `${line.slice(0, SUMMARY_MESSAGE_LIMIT - 1)}…` : line
+	return capped.replace(/[\\`*_[\]<>|&]/g, "\\$&")
+}
 
 /** Markdown for `$GITHUB_STEP_SUMMARY`: outcome, counts, and the first errors. */
 export function formatGithubSummary(result: KiiraCheckResult): string {
@@ -114,7 +130,7 @@ export function formatGithubSummary(result: KiiraCheckResult): string {
 	if (errors.length > 0) {
 		lines.push("")
 		for (const d of errors.slice(0, SUMMARY_ERROR_LIMIT)) {
-			lines.push(`- \`${d.markdownFile}:${d.markdownRange.start.line + 1}\` ${d.message.split("\n")[0]}`)
+			lines.push(`- ${codeSpan(`${d.markdownFile}:${d.markdownRange.start.line + 1}`)} ${summaryMessage(d.message)}`)
 		}
 		if (errors.length > SUMMARY_ERROR_LIMIT) {
 			lines.push(`- and ${errors.length - SUMMARY_ERROR_LIMIT} more`)

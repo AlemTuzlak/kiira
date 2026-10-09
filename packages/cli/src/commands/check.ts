@@ -188,7 +188,12 @@ export async function runCheck(options: RunCheckOptions): Promise<number> {
 
 	const summaryFile = (options.env ?? process.env).GITHUB_STEP_SUMMARY
 	if (options.reporter === "github" && summaryFile) {
-		appendFileSync(summaryFile, formatGithubSummary(result))
+		// The report is already printed; a summary that cannot be written must not change the exit code.
+		try {
+			appendFileSync(summaryFile, formatGithubSummary(result))
+		} catch (error) {
+			options.error(`Kiira could not write the step summary to ${summaryFile}: ${(error as Error).message}`)
+		}
 	}
 
 	return result.stats.errors > 0 ? 1 : 0
