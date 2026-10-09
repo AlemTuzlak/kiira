@@ -5,9 +5,15 @@ import { describe, expect, it } from "vitest"
 import { buildBaseOptions } from "./check"
 import { resolveConfig } from "./config"
 import { type RawDiagnostic, classicEngine } from "./engine"
-import { type NativeApiConstructor, collectNativeDiagnostics, compilerOptionsToTsconfigJson } from "./native-engine"
+import {
+	type NativeApiConstructor,
+	collectNativeDiagnostics,
+	compilerOptionsToTsconfigJson,
+	lineStartsOf,
+	offsetToPosition,
+} from "./native-engine"
 import { createProject, createRuleFs } from "./rules/run"
-import type { TypescriptHookResult, VirtualFile } from "./types"
+import type { SourcePosition, TypescriptHookResult, VirtualFile } from "./types"
 import { applyTypescriptHook, runTypescriptHooks } from "./typescript-hook"
 
 const cwd = fileURLToPath(new URL(".", import.meta.url))
@@ -85,6 +91,36 @@ describe("compilerOptionsToTsconfigJson", () => {
 		expect(json).not.toHaveProperty("configFilePath")
 		expect(json).not.toHaveProperty("pathsBasePath")
 		expect(json).toMatchObject({ strict: true })
+	})
+})
+
+describe("offsetToPosition", () => {
+	/** The earlier linear scan, kept as the reference the binary search must match. */
+	function referencePosition(content: string, offset: number): SourcePosition {
+		const clamped = Math.max(0, Math.min(offset, content.length))
+		let line = 0
+		let lineStart = 0
+		for (let i = 0; i < clamped; i += 1) {
+			if (content.charCodeAt(i) === 10 /* \n */) {
+				line += 1
+				lineStart = i + 1
+			}
+		}
+		return { line, character: clamped - lineStart }
+	}
+
+	it.each([
+		{ name: "offset 0", content: "const a = 1\nconst b = 2", offset: 0 },
+		{ name: "middle of a line", content: "const a = 1\nconst b = 2", offset: 15 },
+		{ name: "exactly on a newline", content: "const a = 1\nconst b = 2", offset: 11 },
+		{ name: "right after a trailing newline at EOF", content: "const a = 1\n", offset: 12 },
+		{ name: "CRLF text, on the \\r", content: "a\r\nbc\r\nd", offset: 4 },
+		{ name: "CRLF text, after the \\n", content: "a\r\nbc\r\nd", offset: 7 },
+		{ name: "past the end", content: "a\nb", offset: 99 },
+		{ name: "negative offset", content: "a\nb", offset: -5 },
+		{ name: "empty content", content: "", offset: 3 },
+	])("matches the linear scan: $name", ({ content, offset }) => {
+		expect(offsetToPosition(lineStartsOf(content), content.length, offset)).toEqual(referencePosition(content, offset))
 	})
 })
 

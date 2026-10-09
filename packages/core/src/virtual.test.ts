@@ -1,6 +1,6 @@
 import { resolveConfig } from "./config"
-import type { ExtractedSnippet } from "./types"
-import { buildVirtualFile, effectiveGroup, mapVirtualLine, virtualFileName } from "./virtual"
+import type { ExtractedSnippet, SourceMapping } from "./types"
+import { buildVirtualFile, effectiveGroup, mapVirtualLine, mapVirtualRange, virtualFileName } from "./virtual"
 
 function snippet(overrides: Partial<ExtractedSnippet> = {}): ExtractedSnippet {
 	return {
@@ -107,6 +107,30 @@ describe("createVirtualFiles uniqueness", () => {
 })
 
 describe("mapVirtualLine", () => {
+	it("resolves sparse or unordered mappings by scanning", () => {
+		const mappings = [
+			{ virtualLine: 7, markdownLine: 70, characterDelta: 0 },
+			{ virtualLine: 2, markdownLine: 20, characterDelta: 0 },
+		]
+		expect(mapVirtualLine(mappings, 2)).toBe(20)
+		expect(mapVirtualLine(mappings, 7)).toBe(70)
+		expect(mapVirtualLine(mappings, 0)).toBeNull()
+	})
+
+	it("returns the first mapping when a virtual line appears more than once", () => {
+		const mappings = [
+			{ virtualLine: 1, markdownLine: 10, characterDelta: 0 },
+			{ virtualLine: 1, markdownLine: 11, characterDelta: 0 },
+		]
+		expect(mapVirtualLine(mappings, 1)).toBe(10)
+	})
+
+	it("returns null, not undefined, for a mapping without a markdownLine", () => {
+		const mappings = [{ virtualLine: 0, characterDelta: 0 }] as unknown as SourceMapping[]
+		expect(mapVirtualLine(mappings, 0)).toBeNull()
+		expect(mapVirtualRange(mappings, { line: 0, character: 0 }, { line: 0, character: 1 })).toBeUndefined()
+	})
+
 	it("returns null for generated lines and out-of-range lines", () => {
 		const mappings = buildVirtualFile({ snippet: snippet({ code: "x" }), before: "gen" }).mappings
 		expect(mapVirtualLine(mappings, 0)).toBeNull()

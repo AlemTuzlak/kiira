@@ -119,8 +119,30 @@ function uniqueName(name: string, used: Set<string>): string {
 	return candidate
 }
 
+// Mapping arrays already checked to hold one entry per virtual line, in order.
+// Appending later entries cannot put a duplicate before an existing index.
+const inOrderMappings = new WeakSet<SourceMapping[]>()
+
+function isInOrder(mappings: SourceMapping[]): boolean {
+	if (inOrderMappings.has(mappings)) {
+		return true
+	}
+	const inOrder = mappings.every((m, index) => m.virtualLine === index)
+	if (inOrder) {
+		inOrderMappings.add(mappings)
+	}
+	return inOrder
+}
+
 /** Resolve a virtual line to its originating Markdown line, or `null` if generated. */
 export function mapVirtualLine(mappings: SourceMapping[], virtualLine: number): number | null {
+	// Kiira's own builders emit one mapping per virtual line, in order, so the
+	// mapping for line N sits at index N. Any other shape (sparse, unordered,
+	// duplicates) keeps the scan, where the first matching mapping wins.
+	const direct = mappings[virtualLine]
+	if (direct?.virtualLine === virtualLine && isInOrder(mappings)) {
+		return direct.markdownLine ?? null
+	}
 	return mappings.find((m) => m.virtualLine === virtualLine)?.markdownLine ?? null
 }
 
