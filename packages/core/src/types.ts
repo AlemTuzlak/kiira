@@ -245,10 +245,22 @@ export interface ProjectRuleReport extends Omit<RuleReport, "range"> {
 	range?: SourceRange
 }
 
+/** A leading `---` block. Kiira does not parse YAML; `raw` is the text for a plugin to parse. */
+export interface Frontmatter {
+	/** The lines between the delimiter lines, joined with the file's own line endings, without the last one. */
+	raw: string
+	/** From the start of the opening `---` to the end of the closing `---` line. */
+	range: SourceRange
+	/** The first line after the closing delimiter. */
+	bodyStart: SourcePosition
+}
+
 export interface RuleDocumentContext<TOptions = unknown> {
 	/** Markdown file path, relative to `cwd`, posix separators. */
 	file: string
 	text: string
+	/** The leading frontmatter block, if any. `mdast` does not contain it. */
+	frontmatter?: Frontmatter
 	/** The parsed tree. Empty (no children) when `parseError` is set. */
 	mdast: MdastRoot
 	parseError?: DocumentParseError

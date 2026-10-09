@@ -3,6 +3,7 @@
 import type { KiiraPlugin, KiiraRule, RuleScope } from "./types"
 
 export type {
+	Frontmatter,
 	KiiraPlugin,
 	KiiraPreset,
 	KiiraProject,

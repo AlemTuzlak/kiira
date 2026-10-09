@@ -4,6 +4,7 @@ import type { Root } from "mdast"
 import { fromMarkdown } from "mdast-util-from-markdown"
 import { collectCodeNodes } from "./code-nodes"
 import { FENCE_ALIASES, codeFenceLanguagesForFile, resolveConfig, rulesForFile } from "./config"
+import { detectFrontmatter } from "./frontmatter"
 import { parseFenceMeta } from "./meta"
 import { fenceMetaReports } from "./rules/fence-meta"
 import { parseErrorReport } from "./rules/parse-error"
@@ -11,6 +12,7 @@ import { reportToDiagnostic } from "./rules/run"
 import type {
 	DocumentParseError,
 	ExtractedSnippet,
+	Frontmatter,
 	KiiraConfig,
 	KiiraDiagnostic,
 	KiiraLanguage,
@@ -111,6 +113,7 @@ function parseMarkdown(markdownFile: string, content: string): Root {
 }
 
 interface ParsedDocument {
+	frontmatter?: Frontmatter
 	/** The parsed tree; an empty root when `parseError` is set. */
 	mdast: Root
 	parseError?: DocumentParseError
@@ -123,15 +126,23 @@ interface ParsedDocument {
  * `VFileMessage` carries them) so one bad file, e.g. mid-edit, doesn't abort the run.
  */
 export function parseDocument(markdownFile: string, content: string): ParsedDocument {
+	// The block is turned into spaces, so positions after it match the file and its
+	// closing `---` cannot become a setext heading or thematic break.
+	const block = detectFrontmatter(content)
 	try {
-		return { mdast: parseMarkdown(markdownFile, content) }
+		const mdast = parseMarkdown(markdownFile, block?.blanked ?? content)
+		return block ? { mdast, frontmatter: block.frontmatter } : { mdast }
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error)
 		// `VFileMessage` exposes 1-based `line`/`column` of the offending construct.
 		const vfile = error as { line?: number | null; column?: number | null }
 		const line = typeof vfile.line === "number" && vfile.line > 0 ? vfile.line - 1 : 0
 		const character = typeof vfile.column === "number" && vfile.column > 0 ? vfile.column - 1 : 0
-		return { mdast: { type: "root", children: [] }, parseError: { message, position: { line, character } } }
+		return {
+			mdast: { type: "root", children: [] },
+			parseError: { message, position: { line, character } },
+			...(block && { frontmatter: block.frontmatter }),
+		}
 	}
 }
 

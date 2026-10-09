@@ -83,9 +83,36 @@ A few things to know:
 
 - `create` runs once per file for a `document` or `program` rule, and once per run for a `project` rule. It can be `async`.
 - Ranges are zero-based, like the rest of Kiira's diagnostics. The CLI adds one when it prints them.
-- `report` takes `range` and `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) can lower the configured level for that one report. It cannot raise it: a rule set to `warn` that reports `"error"` still gives a warning. An optional an optional `fix` is applied by `--fix` when it is one of Kiira's fix kinds. A project rule's `report` also takes the `file`, and a `range` that defaults to the start of the file.
+- `report` takes `range` and `message`. An optional `severity` (`"error"`, `"warning"`, or `"info"`) can lower the configured level for that one report. It cannot raise it: a rule set to `warn` that reports `"error"` still gives a warning. An optional `fix` is applied by `--fix` when it is one of Kiira's fix kinds. A project rule's `report` also takes the `file`, and a `range` that defaults to the start of the file.
 - `ctx.snippets` lists the fences in the file. Every fence identifier Kiira recognizes (`ts`, `typescript`, `mjs`, and so on) is normalized to `ts`, `tsx`, `js`, or `jsx` on `snippet.lang`.
 - A `program` rule also gets `ctx.program`, `ctx.checker`, and `ctx.toMarkdownRange(virtualFile, start, end)`, which maps an offset span in a snippet's generated file back to a Markdown range. It returns `undefined` for generated code.
 - A rule that throws does not stop the check. Kiira reports an `error` diagnostic with the rule id as its `code` and a message that names the rule, the file, and the error. The other rules still run. A failed `project` rule is reported on the first file of the run.
+
+## Frontmatter
+
+A document that starts with a `---` line and has a later line of exactly `---` has frontmatter. Rules get it as `ctx.frontmatter`, or `undefined` when the document has none:
+
+- `raw` is the text between the two `---` lines, with the file's own line endings.
+- `range` runs from the start of the opening `---` to the end of the closing `---`.
+- `bodyStart` is the first line after the block.
+
+Kiira does not parse YAML, so a plugin brings its own parser. The block is left out of `ctx.mdast`, and the line, column, and offset of each node after it are the same as in the file. `ctx.text` is still the whole file. A byte order mark before the opening `---` is skipped. If a code fence opens between the two `---` lines, the block is not frontmatter, so the fence is still checked.
+
+This rule requires a `name:` line:
+
+```ts
+import { defineRule } from "kiira-core/plugin"
+
+export const requireName = defineRule({
+  meta: { scope: "document", defaultSeverity: "error" },
+  create(ctx) {
+    const { frontmatter } = ctx
+    if (!frontmatter) return
+    if (!/^name:/m.test(frontmatter.raw)) {
+      ctx.report({ range: frontmatter.range, message: "Frontmatter needs a `name:` line." })
+    }
+  },
+})
+```
 
 Options that fail `validate`, an unknown rule id, a rule with an unknown `scope` or `defaultSeverity`, and a plugin without a `name` all fail when the config is resolved, not when the rule runs.
