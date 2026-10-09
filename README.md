@@ -134,6 +134,15 @@ maps every package name to its source, and adds each package's `node_modules` as
 fallback. So in a monorepo, docs that import `@your-scope/*` **and** third-party libs resolve
 out of the box — no hand-written `tsconfig` `paths` required.
 
+For large workspaces, set `workspacePackageResolution: "owner"` to check the owning package's
+`node_modules` first, then the workspace root, then the workspace packages that the owner
+declares as dependencies. Other packages add only their `@types`. Kiira checks the docs of each
+owner package in a separate program, so a doc gets the same result in the CLI and in the editor.
+The default `"exhaustive"` mode keeps the existing lookup across every package. Owner mode can
+miss undeclared workspace dependencies. User `paths`, declaration exports, and `typeRoots` remain
+in effect. If Kiira cannot find the owner (a file outside the project root, or an unreadable
+`package.json`), it prints a warning and uses exhaustive lookup.
+
 ## Per-glob overrides
 
 When a docs set spans multiple frameworks, a single `jsx`/`jsxImportSource` can't serve all of
@@ -235,6 +244,7 @@ export default defineConfig({
   exclude: ["**/node_modules/**"],
   tsconfig: "tsconfig.docs.json",   // defaults to tsconfig.docs.json, then tsconfig.json
   packageMode: "workspace",          // "workspace" (default) | "packed"
+  workspacePackageResolution: "exhaustive", // "exhaustive" (default) | "owner"
   defaultValidate: "type",           // "type" (default) | "runtime" | "none"
   checkUnusedSymbols: false,          // report TS6133 unused locals/params/imports
   checkRelativeImports: false,        // report unresolved ./ and ../ imports
@@ -255,6 +265,7 @@ export default defineConfig({
 | `exclude` | `[]` | Globs to skip. |
 | `tsconfig` | auto | tsconfig to source compiler options from. |
 | `packageMode` | `workspace` | Resolve monorepo packages (`workspace`) or rely on installed packages (`packed`). |
+| `workspacePackageResolution` | `exhaustive` | Search every workspace package, or limit dependency fallbacks to each Markdown file's owner. |
 | `defaultValidate` | `type` | Default validation mode for fences without a `validate=` tag. |
 | `defaultGroup` | `none` | `file` implicitly groups every fence in a file (literate docs). |
 | `checkUnusedSymbols` | `false` | Report unused locals/params/imports (TS6133). |

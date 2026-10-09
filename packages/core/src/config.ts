@@ -47,6 +47,19 @@ export function defineConfig(config: KiiraConfig): KiiraConfig {
 	return config
 }
 
+/** Return `value` (or `fallback` when unset), throwing when it is not one of `allowed`. */
+function oneOf<T extends string>(key: string, value: T | undefined, allowed: readonly T[], fallback: T): T {
+	if (value === undefined) {
+		return fallback
+	}
+	if (!allowed.includes(value)) {
+		throw new Error(
+			`Invalid Kiira config: ${key} must be one of ${allowed.map((a) => JSON.stringify(a)).join(", ")}, got ${JSON.stringify(value)}.`
+		)
+	}
+	return value
+}
+
 const RULE_SEVERITIES = new Set<RuleSeverity>(["off", "warn", "error"])
 const RULE_SCOPES = new Set<RuleScope>(["document", "program", "project"])
 
@@ -292,7 +305,13 @@ export function resolveConfig(
 		tsconfig: config.tsconfig,
 		engine: config.engine ?? "auto",
 		overrides,
-		packageMode: config.packageMode ?? "workspace",
+		packageMode: oneOf("packageMode", config.packageMode, ["workspace", "packed"], "workspace"),
+		workspacePackageResolution: oneOf(
+			"workspacePackageResolution",
+			config.workspacePackageResolution,
+			["exhaustive", "owner"],
+			"exhaustive"
+		),
 		defaultValidate: config.defaultValidate ?? "type",
 		defaultFixture: config.defaultFixture,
 		defaultGroup: config.defaultGroup ?? "none",

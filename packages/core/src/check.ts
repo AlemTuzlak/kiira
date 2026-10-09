@@ -47,7 +47,7 @@ import {
 	stableStringify,
 } from "./typescript-hook"
 import { createVirtualFiles, mapVirtualRange } from "./virtual"
-import { buildWorkspaceResolution } from "./workspace"
+import { buildWorkspaceResolution, discoverWorkspacePackages, markdownOwnerKey } from "./workspace"
 
 // The lib-dir override and the classic overlay host live in `engine.ts` alongside
 // the classic engine; re-export the host-facing hooks so consumers (index, vscode)
@@ -157,7 +157,9 @@ export async function buildBaseOptions(
 	cwd: string,
 	resolved: ReturnType<typeof resolveConfig>,
 	// `replaceTsconfig` (a TypeScript hook's request) starts from Kiira's defaults, skipping the tsconfig.
-	{ replaceTsconfig = false }: { replaceTsconfig?: boolean } = {}
+	// `markdownFiles` are the docs checked with these options; owner-scoped workspace
+	// resolution scopes to the packages that own them.
+	{ replaceTsconfig = false, markdownFiles }: { replaceTsconfig?: boolean; markdownFiles?: string[] } = {}
 ): Promise<ts.CompilerOptions> {
 	selectTypescript(cwd)
 	const tsconfigPath = replaceTsconfig ? undefined : resolveTsconfigPath(cwd, resolved.tsconfig)
@@ -173,7 +175,10 @@ export async function buildBaseOptions(
 	// dependencies resolvable from the repo root, where a pnpm isolated
 	// node_modules would otherwise hide them. User-defined paths win on conflict.
 	if (resolved.packageMode === "workspace") {
-		const ws = await buildWorkspaceResolution(cwd)
+		const ws = await buildWorkspaceResolution(cwd, {
+			workspacePackageResolution: resolved.workspacePackageResolution,
+			markdownFiles,
+		})
 		if (ws) {
 			options.baseUrl = options.baseUrl ?? ws.baseUrl
 			options.paths = { ...ws.paths, ...(options.paths ?? {}) }
@@ -275,16 +280,31 @@ export function documentFromVirtualFiles(file: string, virtualFiles: VirtualFile
 /**
  * Resolves the compiler options each Markdown file is checked with, running the
  * TypeScript hooks. Shared by checking and code fixes so both see identical options.
- * Base options are built once per `replaceTsconfig` value.
+ * Base options are built once per `replaceTsconfig` value (and per owner package with
+ * owner-scoped workspace resolution).
  */
 export function createOptionsResolver(
 	cwd: string,
 	resolved: ResolvedKiiraConfig,
 	shared?: { project: KiiraProject; fs: KiiraFs }
 ) {
-	const bases = new Map<boolean, Promise<ts.CompilerOptions>>()
+	const bases = new Map<string, Promise<ts.CompilerOptions>>()
+	const ownerScoped = resolved.packageMode === "workspace" && resolved.workspacePackageResolution === "owner"
+	let packages: ReturnType<typeof discoverWorkspacePackages> | undefined
 	let env = shared
+	/**
+	 * The owner-scope key of a document (see {@link markdownOwnerKey}), or `""` when
+	 * workspace resolution is not owner-scoped. Docs with different keys never share options.
+	 */
+	const scopeFor = async (file: string): Promise<string> => {
+		if (!ownerScoped) {
+			return ""
+		}
+		packages ??= discoverWorkspacePackages(cwd)
+		return markdownOwnerKey(cwd, await packages, file)
+	}
 	return {
+		scopeFor,
 		/** The merged hook result for a document, or `undefined` when no hook applies. */
 		async hookFor(file: string, doc: HookDocument): Promise<TypescriptHookOutcome | undefined> {
 			if (!hasTypescriptHooks(resolved)) {
@@ -296,10 +316,13 @@ export function createOptionsResolver(
 		},
 		async optionsFor(file: string, hook?: TypescriptHookOutcome): Promise<ts.CompilerOptions> {
 			const replaceTsconfig = hook?.replaceTsconfig ?? false
-			let base = bases.get(replaceTsconfig)
+			// Owner-scoped workspace resolution depends on the package that owns the file,
+			// so build one base per owner. Every file of an owner gets the same scope.
+			const key = `${replaceTsconfig}\0${await scopeFor(file)}`
+			let base = bases.get(key)
 			if (!base) {
-				base = buildBaseOptions(cwd, resolved, { replaceTsconfig })
-				bases.set(replaceTsconfig, base)
+				base = buildBaseOptions(cwd, resolved, { replaceTsconfig, markdownFiles: ownerScoped ? [file] : undefined })
+				bases.set(key, base)
 			}
 			return optionsForFile(cwd, await base, resolved, file, hook)
 		},
@@ -355,7 +378,10 @@ async function runChecker(
 		const hook = await resolver.hookFor(file, doc)
 		hooks.set(file, hook)
 		const options = await resolver.optionsFor(file, hook)
-		const key = stableStringify(options)
+		// With owner-scoped workspace resolution, each owner package's docs are checked in
+		// their own programs, so a doc gets the same result whether it is checked alone
+		// (the editor, the group= probe) or with the whole repo (the CLI).
+		const key = `${await resolver.scopeFor(file)}\0${stableStringify(options)}`
 		let partition = partitions.get(key)
 		if (!partition) {
 			partition = { options, virtualFiles: [] }

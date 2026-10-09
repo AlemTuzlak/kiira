@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, statSync } from "node:fs"
 import { readFile } from "node:fs/promises"
-import { dirname, join, sep } from "node:path"
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path"
 import { glob } from "tinyglobby"
 
 export interface WorkspacePackage {
@@ -14,6 +14,16 @@ export interface WorkspaceResolution {
 	paths: Record<string, string[]>
 	/** `@types` directories across the workspace, so e.g. @types/react resolves for a package's docs. */
 	typeRoots: string[]
+}
+
+export interface WorkspaceResolutionOptions {
+	workspacePackageResolution?: "exhaustive" | "owner"
+	markdownFiles?: string[]
+}
+
+interface WorkspaceOwners {
+	directDependencies: Set<string>
+	directories: Set<string>
 }
 
 function toPosix(path: string): string {
@@ -92,6 +102,8 @@ interface WorkspaceSnapshot {
 	packages: readonly WorkspacePackage[]
 	/** Built on first request; `null` when not yet built. */
 	resolution: WorkspaceResolution | undefined | null
+	/** Owner-scoped resolutions, keyed by their owner package directories. */
+	ownerResolutions: Map<string, WorkspaceResolution>
 }
 
 interface WorkspaceScan {
@@ -199,6 +211,7 @@ async function workspaceSnapshot(cwd: string): Promise<WorkspaceSnapshot> {
 				fingerprint: settled ? fingerprint : "",
 				packages: await readWorkspacePackages(cwd, scan.manifests),
 				resolution: null,
+				ownerResolutions: new Map(),
 			}
 			snapshots.set(cwd, snapshot)
 			return snapshot
@@ -297,6 +310,34 @@ function toSourceIfPresent(absTarget: string): string | undefined {
 	return src !== absTarget && existsSync(src) ? src : undefined
 }
 
+/** True when `file` is `dir` itself or lies inside it. */
+function isInside(dir: string, file: string): boolean {
+	const rel = relative(dir, file)
+	return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+}
+
+/** The deepest workspace package containing `file`, or `root` when none does. */
+function ownerDirectory(root: string, packages: readonly WorkspacePackage[], file: string): string {
+	return (
+		packages
+			.filter((pkg) => isInside(resolve(pkg.dir), file))
+			.sort((left, right) => right.dir.length - left.dir.length)[0]?.dir ?? root
+	)
+}
+
+const ownerFallbackWarnings = new Set<string>()
+
+/** Warn (once per kind of cause) that owner scoping could not be applied. */
+function warnOwnerFallback(kind: string, reason: string): void {
+	if (ownerFallbackWarnings.has(kind)) {
+		return
+	}
+	ownerFallbackWarnings.add(kind)
+	process.emitWarning(
+		`Kiira: workspacePackageResolution "owner" fell back to "exhaustive" because ${reason}. Every workspace package's dependencies are resolvable for this check.`
+	)
+}
+
 /**
  * Build TypeScript `paths` that make a workspace's packages resolvable when
  * type-checking docs from the repo root — which a pnpm isolated `node_modules`
@@ -308,30 +349,115 @@ function toSourceIfPresent(absTarget: string): string | undefined {
  * package's root and its subpaths on the *same* side of the src/dist line, avoiding
  * "two copies of the same type" errors when an export key is renamed (e.g.
  * `./adapters` -> `dist/esm/activities`). Every package's `node_modules` is added
- * as a `*` fallback so third-party deps resolve too.
+ * as a `*` fallback so third-party deps resolve too. In owner mode only the owners',
+ * the root's and the owners' direct workspace dependencies' `node_modules` are added;
+ * other packages add just their `@types`.
  *
  * Returns `undefined` when `cwd` is not a workspace. Cached with the workspace
- * snapshot (see {@link discoverWorkspacePackages}) and frozen, so callers cannot mutate it.
+ * snapshot (see {@link discoverWorkspacePackages}), per set of owners in owner mode,
+ * and frozen, so callers cannot mutate it.
  */
-export async function buildWorkspaceResolution(cwd: string): Promise<WorkspaceResolution | undefined> {
-	const snapshot = await workspaceSnapshot(cwd)
-	if (snapshot.resolution === null) {
-		snapshot.resolution = await resolveWorkspace(cwd, snapshot.packages)
-	}
-	return snapshot.resolution
-}
-
-async function resolveWorkspace(
+export async function buildWorkspaceResolution(
 	cwd: string,
-	packages: readonly WorkspacePackage[]
+	options: WorkspaceResolutionOptions = {}
 ): Promise<WorkspaceResolution | undefined> {
-	if (packages.length === 0) {
+	const snapshot = await workspaceSnapshot(cwd)
+	if (snapshot.packages.length === 0) {
 		return undefined
 	}
+	const owners =
+		options.workspacePackageResolution === "owner"
+			? await resolveWorkspaceOwners(cwd, snapshot.packages, options.markdownFiles)
+			: undefined
+	if (!owners) {
+		if (snapshot.resolution === null) {
+			snapshot.resolution = await resolveWorkspace(cwd, snapshot.packages)
+		}
+		return snapshot.resolution
+	}
+	// An owner-scoped result depends only on the owner packages (their manifests are
+	// part of the snapshot's fingerprint), so it is cached per set of owners.
+	const key = [...owners.directories].sort().join("\n")
+	let scoped = snapshot.ownerResolutions.get(key)
+	if (!scoped) {
+		scoped = await resolveWorkspace(cwd, snapshot.packages, owners)
+		snapshot.ownerResolutions.set(key, scoped)
+	}
+	return scoped
+}
+
+/**
+ * The owner-scope key of a Markdown file: the directory of the workspace package that
+ * owns it, `cwd` when no package does, or `""` when the file is outside `cwd`. Docs
+ * with the same key are checked with the same scope, so owner-scoped resolution gives
+ * a document the same result whether it is checked alone (the editor) or with the
+ * whole repo (the CLI).
+ */
+export function markdownOwnerKey(cwd: string, packages: readonly WorkspacePackage[], markdownFile: string): string {
+	const root = resolve(cwd)
+	const file = resolve(root, markdownFile)
+	return isInside(root, file) ? ownerDirectory(root, packages, file) : ""
+}
+
+/** Find the owner packages of `markdownFiles` and their declared dependencies; `undefined` means "do not scope". */
+async function resolveWorkspaceOwners(
+	cwd: string,
+	packages: readonly WorkspacePackage[],
+	markdownFiles: string[] | undefined
+): Promise<WorkspaceOwners | undefined> {
+	if (!markdownFiles || markdownFiles.length === 0) {
+		return undefined
+	}
+	const root = resolve(cwd)
+	const directories = new Set<string>()
+	const directDependencies = new Set<string>()
+	for (const markdownFile of markdownFiles) {
+		// Absolute paths resolve as-is; relative ones resolve against `cwd`.
+		const file = resolve(root, markdownFile)
+		if (!isInside(root, file)) {
+			warnOwnerFallback("outside", `${markdownFile} is outside ${root}`)
+			return undefined
+		}
+		const owner = ownerDirectory(root, packages, file)
+		let manifest: Record<string, unknown>
+		try {
+			manifest = JSON.parse(await readFile(join(owner, "package.json"), "utf8")) as Record<string, unknown>
+		} catch {
+			warnOwnerFallback("manifest", `${join(owner, "package.json")} (the owner of ${markdownFile}) could not be read`)
+			return undefined
+		}
+		directories.add(resolve(owner))
+		for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+			const dependencies = manifest[field]
+			if (dependencies && typeof dependencies === "object") {
+				for (const name of Object.keys(dependencies)) {
+					directDependencies.add(name)
+				}
+			}
+		}
+	}
+	return { directories, directDependencies }
+}
+
+/** Build the (frozen) resolution; with `owners`, scope the `node_modules` fallbacks to them. */
+async function resolveWorkspace(
+	cwd: string,
+	packages: readonly WorkspacePackage[],
+	owners?: WorkspaceOwners
+): Promise<WorkspaceResolution> {
+	const scoped = owners !== undefined
 
 	const paths: Record<string, string[]> = {}
 	const nodeModulesFallbacks: string[] = []
 	const typeRoots: string[] = []
+	const fallbackDirectories = new Set<string>()
+	const addNodeModulesFallback = (dir: string): void => {
+		const nodeModules = resolve(dir, "node_modules")
+		if (existsSync(nodeModules) && !fallbackDirectories.has(nodeModules)) {
+			fallbackDirectories.add(nodeModules)
+			nodeModulesFallbacks.push(`${toPosix(join(nodeModules, "*"))}`)
+		}
+	}
 
 	const addTypeRoot = (dir: string): void => {
 		const typesDir = join(dir, "node_modules", "@types")
@@ -372,10 +498,28 @@ async function resolveWorkspace(
 
 	// Absolute path values so resolution is correct regardless of any `baseUrl`
 	// the project's tsconfig may set (paths values are otherwise baseUrl-relative).
-	if (existsSync(join(cwd, "node_modules"))) {
-		nodeModulesFallbacks.push(`${toPosix(join(cwd, "node_modules"))}/*`)
+	if (scoped) {
+		for (const owner of owners.directories) {
+			if (owner !== resolve(cwd)) {
+				addNodeModulesFallback(owner)
+			}
+		}
+		addNodeModulesFallback(cwd)
+		// Other packages add their full `node_modules` only when the owner depends on
+		// them; otherwise they contribute just their `@types` (added below).
+		for (const pkg of packages) {
+			if (owners.directDependencies.has(pkg.name)) {
+				addNodeModulesFallback(pkg.dir)
+			}
+		}
+		for (const owner of owners.directories) {
+			addTypeRoot(owner)
+		}
+		addTypeRoot(cwd)
+	} else {
+		addNodeModulesFallback(cwd)
+		addTypeRoot(cwd)
 	}
-	addTypeRoot(cwd)
 
 	for (const pkg of packages) {
 		const manifest = JSON.parse(await readFile(join(pkg.dir, "package.json"), "utf8")) as Record<string, unknown>
@@ -397,8 +541,8 @@ async function resolveWorkspace(
 				? [`${toPosix(srcDir)}/*`, `${toPosix(pkg.dir)}/*`]
 				: [`${toPosix(pkg.dir)}/*`]
 		}
-		if (existsSync(join(pkg.dir, "node_modules"))) {
-			nodeModulesFallbacks.push(`${toPosix(join(pkg.dir, "node_modules"))}/*`)
+		if (!scoped) {
+			addNodeModulesFallback(pkg.dir)
 		}
 		addTypeRoot(pkg.dir)
 	}

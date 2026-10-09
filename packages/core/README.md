@@ -91,6 +91,8 @@ console.log(result.stats) // { markdownFiles, snippets, checked, ignored, errors
 > `config` accepts a `Partial<KiiraConfig>`; omit it to load the nearest `kiira.config.*`.
 > Every input/result shape is fully typed — let your editor guide you, or read the exports below.
 
+Workspace dependency lookup is exhaustive by default. Set `workspacePackageResolution: "owner"` to try the package that owns each Markdown file, the workspace root, then the workspace packages that the owner declares as dependencies. Other packages add only their `@types`. This can miss imports from undeclared workspace dependencies. Kiira checks the files of each owner package in a separate program, so a file gets the same result whether you check it alone or with the whole repo.
+
 ## Public API
 
 `kiira-core` exports the whole pipeline. Highlights:
@@ -114,7 +116,7 @@ All input/result/option shapes are exported as types (e.g. `KiiraConfig`, `Resol
 ## Configuration reference
 
 See the [`kiira` CLI README](https://www.npmjs.com/package/kiira) for the full
-config and fence-metadata reference (`include`, `exclude`, `tsconfig`, `packageMode`,
+config and fence-metadata reference (`include`, `exclude`, `tsconfig`, `packageMode`, `workspacePackageResolution`,
 `defaultValidate`, `checkUnusedSymbols`, `checkRelativeImports`, `overrides`, `fixtures`,
 `defaultFixture`, `languages`) — `kiira-core` consumes exactly the same shape via `defineConfig`.
 

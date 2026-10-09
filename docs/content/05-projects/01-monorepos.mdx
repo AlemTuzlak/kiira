@@ -27,6 +27,13 @@ When `packageMode` is `"workspace"`, Kiira:
 
 The result: docs that import your `@your-scope/*` packages **and** their third-party dependencies type-check correctly, with **no hand-written tsconfig `paths`** to maintain.
 
+Workspace dependency lookup is exhaustive by default. For large workspaces, set
+`workspacePackageResolution: "owner"` to try the package that owns each Markdown file, then the
+workspace root, then the workspace packages that the owner declares as dependencies. Other
+packages add only their `@types`. This can miss undeclared workspace dependencies. Kiira checks
+the docs of each owner package in a separate program, so a doc gets the same result in the CLI
+and in the editor.
+
 ## Example
 
 Given a monorepo:
