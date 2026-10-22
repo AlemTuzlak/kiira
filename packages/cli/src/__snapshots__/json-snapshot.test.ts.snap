@@ -896,11 +896,11 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for r
 "{
   "schemaVersion": 1,
   "stats": {
-    "markdownFiles": 1,
-    "snippets": 2,
-    "checked": 2,
+    "markdownFiles": 3,
+    "snippets": 6,
+    "checked": 6,
     "ignored": 0,
-    "errors": 1,
+    "errors": 3,
     "warnings": 0,
     "fixable": 0
   },
@@ -919,6 +919,42 @@ exports[`json reporter output is pinned per fixture > matches the snapshot for r
         "end": {
           "line": 13,
           "character": 55
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2322,
+      "message": "Type 'number' is not assignable to type 'string'.",
+      "markdownFile": "earlier-fence.md",
+      "markdownRange": {
+        "start": {
+          "line": 11,
+          "character": 7
+        },
+        "end": {
+          "line": 11,
+          "character": 13
+        }
+      },
+      "generated": false
+    },
+    {
+      "severity": "error",
+      "source": "typescript",
+      "code": 2345,
+      "message": "Argument of type '{ tools: any; }' is not assignable to parameter of type '{ tools?: any; count: number; }'.\\n  Property 'count' is missing in type '{ tools: any; }' but required in type '{ tools?: any; count: number; }'.",
+      "markdownFile": "hidden-errors.md",
+      "markdownRange": {
+        "start": {
+          "line": 12,
+          "character": 5
+        },
+        "end": {
+          "line": 12,
+          "character": 14
         }
       },
       "generated": false

@@ -24,4 +24,25 @@ describe("relative import handling", () => {
 		})
 		expect(result.diagnostics.some((d) => d.code === 2307 && d.message.includes("./tool-definitions"))).toBe(true)
 	})
+
+	it("still type-checks calls that use an unresolved relative import (#44)", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["hidden-errors.md"],
+			config: { include: ["**/*.md"] },
+		})
+		// The missing `count` is reported; the stubbed value, type and default imports are `any`.
+		expect(result.diagnostics.map((d) => [d.code, d.markdownRange.start.line])).toEqual([[2345, 11]])
+		expect(result.diagnostics[0]?.message).toContain("Property 'count' is missing")
+	})
+
+	it("resolves an unresolved relative import to an earlier fence that exports the names", async () => {
+		const result = await checkMarkdownFiles({
+			cwd: fixtures,
+			files: ["earlier-fence.md"],
+			config: { include: ["**/*.md"] },
+		})
+		// `amount` keeps its real `number` type from the first fence.
+		expect(result.diagnostics.map((d) => [d.code, d.markdownRange.start.line])).toEqual([[2322, 10]])
+	})
 })

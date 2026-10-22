@@ -1,11 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import ts from "typescript"
 import { describe, expect, it, vi } from "vitest"
-import { buildBaseOptions } from "./check"
+import { buildBaseOptions, checkMarkdownFiles } from "./check"
 import { resolveConfig } from "./config"
 import { type RawDiagnostic, classicEngine } from "./engine"
 import {
@@ -145,6 +145,28 @@ describe("offsetToPosition", () => {
 })
 
 describe("native engine (TypeScript 7)", () => {
+	it("resolves the stubs kiira writes for unresolved relative imports (#44)", async () => {
+		const root = nativeProject()
+		try {
+			const fixtures = fileURLToPath(new URL("../tests/fixtures/relative-imports/", import.meta.url))
+			for (const file of ["hidden-errors.md", "earlier-fence.md"]) {
+				writeFileSync(join(root, file), readFileSync(join(fixtures, file)))
+			}
+			const result = await checkMarkdownFiles({
+				cwd: root,
+				files: ["hidden-errors.md", "earlier-fence.md"],
+				config: { include: ["**/*.md"], engine: "native" },
+			})
+			// TS 7 reports the missing `count` as 2741 where TS 5/6 wraps it in 2345.
+			expect(result.diagnostics.map((d) => [d.markdownFile, d.code])).toEqual([
+				["hidden-errors.md", 2741],
+				["earlier-fence.md", 2322],
+			])
+		} finally {
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
 	it("reports the same erroring files as the classic engine", async () => {
 		const { API } = (await import("typescript-7/unstable/sync")) as unknown as { API: NativeApiConstructor }
 		const files = [
