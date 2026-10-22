@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises"
-import { join } from "node:path"
-import { overrideMatcher, resolveConfig } from "./config"
+import { basename, join } from "node:path"
+import type TS from "typescript"
+import { overrideMatcher, resolveConfig, rulesForFile } from "./config"
 import { detectLanguageTag } from "./detect"
 import type {
 	ExtractedSnippet,
@@ -14,6 +15,7 @@ import type {
 	SourceRange,
 	VirtualFile,
 } from "./types"
+import { type TypeScriptModule, getTypescript } from "./typescript"
 
 /** Appended to every virtual file so each snippet is an isolated module. */
 const MODULE_MARKER = "export {}"
@@ -266,6 +268,133 @@ export function buildGroupedVirtualFile(input: {
 	return { content: allLines.join("\n"), mappings }
 }
 
+/** The names a checked virtual file exports, for later fences that import them. */
+interface FenceExports {
+	markdownFile: string
+	/** Markdown line of the file's first fence. */
+	line: number
+	/** The specifier that imports this virtual file from its sibling virtual files. */
+	specifier: string
+	names: Set<string>
+}
+
+function exportedNames(ts: TypeScriptModule, source: TS.SourceFile): Set<string> {
+	const names = new Set<string>()
+	for (const statement of source.statements) {
+		if (ts.isExportDeclaration(statement) && statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+			for (const element of statement.exportClause.elements) {
+				names.add(element.name.text)
+			}
+		} else if (ts.isExportAssignment(statement)) {
+			names.add("default")
+		} else if (ts.canHaveModifiers(statement)) {
+			const modifiers = ts.getModifiers(statement) ?? []
+			if (!modifiers.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
+				continue
+			}
+			if (modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword)) {
+				names.add("default")
+			} else if (ts.isVariableStatement(statement)) {
+				for (const declaration of statement.declarationList.declarations) {
+					if (ts.isIdentifier(declaration.name)) {
+						names.add(declaration.name.text)
+					}
+				}
+			} else if ("name" in statement && statement.name && ts.isIdentifier(statement.name as TS.Node)) {
+				names.add((statement.name as TS.Identifier).text)
+			}
+		}
+	}
+	return names
+}
+
+/** How a virtual file imports a sibling virtual file (`.js` maps to the `.ts`/`.tsx` file). */
+function siblingSpecifier(fileName: string): string {
+	return `./${basename(fileName).replace(/\.[^.]+$/, ".js")}`
+}
+
+/**
+ * Snippets often import from a sibling file the docs never show (`./tools`). Left
+ * unresolved, the binding gets TypeScript's error type, which can silence every
+ * other error in a call that uses it (#44). So point each such import at real code:
+ * an earlier fence in the same Markdown file that exports all the imported names,
+ * or else this file itself, with an `any` stub exported for each name.
+ * Only the specifier changes, so the snippet's lines and names keep their positions.
+ */
+function rewriteUnresolvedImports(
+	built: BuiltVirtualFile,
+	fileName: string,
+	markdownFile: string,
+	earlier: FenceExports[]
+): { built: BuiltVirtualFile; exported: Set<string> } {
+	const ts = getTypescript()
+	const { content, mappings } = built
+	const source = ts.createSourceFile(fileName, content, ts.ScriptTarget.Latest, false, ts.ScriptKind.TSX)
+	const own = exportedNames(ts, source)
+	const self = siblingSpecifier(fileName)
+	const resolution = { moduleResolution: ts.ModuleResolutionKind.Bundler, module: ts.ModuleKind.ESNext, allowJs: true }
+	const stubs = new Map<string, string>()
+	const edits: { start: number; end: number; text: string }[] = []
+
+	for (const statement of source.statements) {
+		const clause = ts.isImportDeclaration(statement) ? statement.importClause : undefined
+		const specifier = (statement as TS.ImportDeclaration).moduleSpecifier
+		if (!clause || !ts.isStringLiteral(specifier) || !specifier.text.startsWith(".")) {
+			continue
+		}
+		// A namespace import has no names to stub; leave it as it was.
+		if (clause.namedBindings && !ts.isNamedImports(clause.namedBindings)) {
+			continue
+		}
+		if (ts.resolveModuleName(specifier.text, fileName, resolution, ts.sys).resolvedModule) {
+			continue
+		}
+		const names = [
+			...(clause.name ? ["default"] : []),
+			...(clause.namedBindings?.elements.map((e) => (e.propertyName ?? e.name).text) ?? []),
+		]
+		const line = mapVirtualLine(mappings, source.getLineAndCharacterOfPosition(specifier.getStart(source)).line)
+		const exporter = earlier.findLast(
+			(f) => f.markdownFile === markdownFile && line !== null && f.line < line && names.every((n) => f.names.has(n))
+		)
+		let text: string
+		if (exporter) {
+			text = exporter.specifier
+		} else if (names.some((n) => own.has(n))) {
+			// Stubbing a name this file already exports would clash with that export.
+			continue
+		} else {
+			for (const name of names) {
+				if (!stubs.has(name)) {
+					stubs.set(name, `__kiira_unresolved_${stubs.size}`)
+				}
+			}
+			text = self
+		}
+		edits.push({ start: specifier.getStart(source) + 1, end: specifier.getEnd() - 1, text })
+	}
+
+	let rewritten = content
+	for (const edit of edits.reverse()) {
+		rewritten = rewritten.slice(0, edit.start) + edit.text + rewritten.slice(edit.end)
+	}
+	const stubLines = [...stubs].map(
+		([name, local]) => `declare const ${local}: any; type ${local} = any; export { ${local} as ${name} }`
+	)
+	if (stubLines.length === 0) {
+		return { built: { content: rewritten, mappings }, exported: own }
+	}
+	const generated = stubLines.map((_, index) => ({
+		virtualLine: mappings.length + index,
+		markdownLine: null,
+		characterDelta: 0,
+	}))
+	return {
+		built: { content: [rewritten, ...stubLines].join("\n"), mappings: [...mappings, ...generated] },
+		exported: own,
+	}
+}
+
 export interface CreateVirtualFilesInput {
 	cwd: string
 	snippets: ExtractedSnippet[]
@@ -287,6 +416,7 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 	const virtualFiles: VirtualFile[] = []
 	const diagnostics: KiiraDiagnostic[] = []
 	const usedNames = new Set<string>()
+	const fenceExports: FenceExports[] = []
 
 	// Group checkable snippets: same file + same effective group are checked
 	// together (in document order); ungrouped snippets each form a singleton group.
@@ -339,16 +469,32 @@ export async function createVirtualFiles(input: CreateVirtualFilesInput): Promis
 		// Force module scope so top-level declarations are isolated per group
 		// (no cross-group "cannot redeclare" false errors).
 		const afterWithModuleMarker = [after, MODULE_MARKER].filter((s) => s.length > 0).join("\n")
-		const { content, mappings } =
+		let built =
 			members.length === 1
 				? buildVirtualFile({ snippet: lead, before, after: afterWithModuleMarker })
 				: buildGroupedVirtualFile({ snippets: members, before, after: afterWithModuleMarker })
 		const name = uniqueName(virtualFileName(lead, checkLang), usedNames)
+		const fileName = join(input.cwd, ".kiira", "virtual", name)
+		// Stubs are TypeScript syntax; with `relative-imports` on, the unresolved import is reported instead.
+		if (
+			(checkLang === "ts" || checkLang === "tsx") &&
+			rulesForFile(config, lead.markdownFile)["relative-imports"]?.severity === "off"
+		) {
+			const rewritten = rewriteUnresolvedImports(built, fileName, lead.markdownFile, fenceExports)
+			built = rewritten.built
+			fenceExports.push({
+				markdownFile: lead.markdownFile,
+				line: lead.markdownRange.start.line,
+				specifier: siblingSpecifier(fileName),
+				names: rewritten.exported,
+			})
+		}
+		const { content, mappings } = built
 		const leadGroup = effectiveGroup(lead, config)
 
 		virtualFiles.push({
 			id: leadGroup !== undefined ? `${lead.markdownFile}#group:${leadGroup}` : lead.id,
-			fileName: join(input.cwd, ".kiira", "virtual", name),
+			fileName,
 			lang: checkLang,
 			content,
 			snippet: lead,
