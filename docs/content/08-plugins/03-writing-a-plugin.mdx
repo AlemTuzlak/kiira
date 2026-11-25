@@ -1,7 +1,7 @@
 ---
 title: "Writing a plugin"
 summary: "Rules in three scopes, fixes, frontmatter, the TypeScript hook, and testing with check()"
-description: "Write a Kiira plugin with kiira-core/plugin: document, program, and project rules, report and edits fixes, frontmatter, the TypeScript hook, plain JavaScript plugins, and testing with check()."
+description: "Write a Kiira plugin with kiira/plugin: document, program, and project rules, report and edits fixes, frontmatter, the TypeScript hook, plain JavaScript plugins, and testing with check()."
 ---
 
 <WarningAlert title="Experimental">
@@ -10,13 +10,13 @@ This API can change between minor releases while it settles. See [Experimental A
 
 ## A first plugin
 
-Import `defineRule` and `definePlugin` from `kiira-core/plugin`. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
+Import `defineRule` and `definePlugin` from `kiira/plugin`. A plugin that you publish to npm can import from `kiira-core/plugin` instead. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
 
 This rule flags a word in the prose of every document:
 
 ```ts
-import { defineConfig } from "kiira-core"
-import { definePlugin, defineRule } from "kiira-core/plugin"
+import { defineConfig } from "kiira"
+import { definePlugin, defineRule } from "kiira/plugin"
 
 const noWord = defineRule({
   meta: {
@@ -90,7 +90,7 @@ A program rule gets everything above, plus `program` and `checker` for the file'
 This rule flags exported values typed `any`:
 
 ```ts
-import { defineRule } from "kiira-core/plugin"
+import { defineRule } from "kiira/plugin"
 
 export const noAnyExports = defineRule({
   meta: { scope: "program", defaultSeverity: "warn" },
@@ -120,7 +120,7 @@ A project rule gets `options`, `severity`, `config`, `project`, `fs`, `files` (e
 This rule reports on `package.json` when the docs have no index page:
 
 ```ts
-import { defineRule } from "kiira-core/plugin"
+import { defineRule } from "kiira/plugin"
 
 export const docsIndex = defineRule({
   meta: { scope: "project", defaultSeverity: "error" },
@@ -143,7 +143,7 @@ An `edits` fix is a list of text edits. Each edit names a `file` (relative to th
 This `report` call replaces the flagged word with `DONE`:
 
 ```ts
-import { definePlugin, defineRule } from "kiira-core/plugin"
+import { definePlugin, defineRule } from "kiira/plugin"
 
 const rewrite = defineRule({
   meta: { scope: "document", defaultSeverity: "warn" },
@@ -202,7 +202,7 @@ Kiira does not parse YAML, so a plugin brings its own parser, or reads `raw` as 
 This rule requires a `name:` line:
 
 ```ts
-import { defineRule } from "kiira-core/plugin"
+import { defineRule } from "kiira/plugin"
 
 export const requireName = defineRule({
   meta: { scope: "document", defaultSeverity: "error" },
@@ -236,8 +236,8 @@ A plugin or preset can set its own TypeScript options for each Markdown file. Ad
 This plugin checks docs against Kiira's defaults instead of the project tsconfig, resolves `@docs/*` imports to a folder of examples, and drops "cannot find name" errors for a global the docs assume:
 
 ```ts
-import { defineConfig } from "kiira-core"
-import { definePlugin } from "kiira-core/plugin"
+import { defineConfig } from "kiira"
+import { definePlugin } from "kiira/plugin"
 
 const docs = definePlugin({
   name: "docs",
@@ -278,7 +278,7 @@ export default {
       rules: {
         "no-todo": {
           meta: { scope: "document", defaultSeverity: "warn" },
-          /** @param {import("kiira-core/plugin").RuleDocumentContext} ctx */
+          /** @param {import("kiira/plugin").RuleDocumentContext} ctx */
           create(ctx) {
             ctx.text.split("
 ").forEach((line, index) => {

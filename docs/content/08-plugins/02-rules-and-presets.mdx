@@ -17,7 +17,7 @@ The list of built-in rules, with their scopes and default levels, lives on the [
 A rule's entry in `rules`, in a preset, or in an override:
 
 ```ts
-import type { RuleSetting } from "kiira-core/plugin"
+import type { RuleSetting } from "kiira/plugin"
 
 export const levels: Record<string, RuleSetting> = {
   "language-tag": "off",
@@ -49,7 +49,7 @@ This preset builds on a preset named `base`, checks the `docs` folder of every w
 
 ```ts
 import { relative } from "node:path"
-import type { KiiraPreset } from "kiira-core/plugin"
+import type { KiiraPreset } from "kiira/plugin"
 
 export const docs: KiiraPreset = {
   name: "docs",
@@ -76,7 +76,7 @@ An entry of [`overrides`](/latest/configuration/options#overrides) can also set,
 - `codeFenceLanguages` replaces the recognized fence identifiers. The last matching override wins.
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   overrides: [

@@ -55,7 +55,7 @@ touching the app's config.
 `include` is the only required option; everything else has a sensible default.
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   include: ["docs/**/*.{md,mdx}", "README.md"],
@@ -69,7 +69,7 @@ Kiira checks fenced blocks whose language is `ts`, `tsx`, `js`, or `jsx`, in bot
 
 ````md
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 const config = defineConfig({ include: ["docs/**/*.md"] })
 ```

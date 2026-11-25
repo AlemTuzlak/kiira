@@ -1,4 +1,4 @@
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 import { teamPlugin } from "./kiira-plugin"
 
 export default defineConfig({

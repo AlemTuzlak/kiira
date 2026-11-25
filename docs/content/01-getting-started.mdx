@@ -14,7 +14,7 @@ Install the Kiira CLI as a dev dependency in the project whose docs you want to 
 pnpm add -D kiira
 ```
 
-The CLI depends on `kiira-core`, which is installed automatically. You only need to depend on `kiira-core` directly if you want to import `defineConfig` or call the check engine programmatically.
+The CLI depends on `kiira-core`, which is installed automatically. Import `defineConfig` from `kiira`. You only need to depend on `kiira-core` directly if you want to call the check engine programmatically.
 
 The CLI brings `kiira-core`, `typescript`, and `jiti` with it, so there is nothing else to install. If you call `kiira-core` programmatically instead, install `typescript` 5.4+ or 6 alongside it. Kiira uses the copy in your project when it has one.
 
@@ -32,13 +32,13 @@ pnpm kiira init
 
 This creates two files:
 
-- **`kiira.config.ts`** — your Kiira configuration, using `defineConfig` from `kiira-core`.
+- **`kiira.config.ts`** — your Kiira configuration, using `defineConfig` from `kiira`.
 - **`tsconfig.docs.json`** — a TypeScript config Kiira uses when compiling your snippets. Kiira automatically prefers `tsconfig.docs.json` over `tsconfig.json` if it exists, so you can relax or tighten rules for docs without touching your app's config.
 
 A minimal generated `kiira.config.ts` looks like this:
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   include: ["**/*.md", "**/*.mdx"],
@@ -61,7 +61,7 @@ Kiira checks fenced code blocks whose language is one of `ts`, `tsx`, `js`, or `
 
 ````md
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 const config = defineConfig({
   include: ["docs/**/*.md"],

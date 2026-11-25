@@ -10,7 +10,7 @@ import config from "../kiira.config"
 
 const exampleDir = join(dirname(fileURLToPath(import.meta.url)), "..")
 // The built CLI, found through the workspace link. `pnpm test` builds it first.
-const cli = join(dirname(createRequire(import.meta.url).resolve("kiira/package.json")), "dist/index.mjs")
+const cli = join(dirname(createRequire(import.meta.url).resolve("kiira/package.json")), "dist/cli.mjs")
 
 const index = "---\ntitle: Home\nslug: home\n---\n\n# Home\n"
 const page = (frontmatter: string, body = "# Page\n") => `---\n${frontmatter}\n---\n\n${body}`

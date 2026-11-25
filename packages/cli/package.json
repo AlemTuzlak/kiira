@@ -4,7 +4,7 @@
 	"description": "Command-line interface for Kiira: validate TypeScript and JavaScript code fences in your Markdown docs.",
 	"type": "module",
 	"bin": {
-		"kiira": "./dist/index.mjs"
+		"kiira": "./dist/cli.mjs"
 	},
 	"main": "./dist/index.mjs",
 	"types": "./dist/index.d.mts",
@@ -13,6 +13,10 @@
 		".": {
 			"types": "./dist/index.d.mts",
 			"default": "./dist/index.mjs"
+		},
+		"./plugin": {
+			"types": "./dist/plugin.d.mts",
+			"default": "./dist/plugin.mjs"
 		}
 	},
 	"scripts": {

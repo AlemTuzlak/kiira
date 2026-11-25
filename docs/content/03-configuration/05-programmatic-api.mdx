@@ -43,7 +43,7 @@ Pass a plugin without putting it in a config file. Set its rule levels in `rules
 
 ```ts
 import { check } from "kiira-core"
-import { definePlugin, defineRule } from "kiira-core/plugin"
+import { definePlugin, defineRule } from "kiira/plugin"
 
 const noTodo = defineRule({
   meta: { scope: "document", defaultSeverity: "error" },

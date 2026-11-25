@@ -1,7 +1,7 @@
 ---
 title: "Rules"
 summary: "The built-in rules and how to write your own"
-description: "Every built-in Kiira rule with its scope, default level, and what it reports, plus how to write a minimal rule and plugin with kiira-core/plugin."
+description: "Every built-in Kiira rule with its scope, default level, and what it reports, plus how to write a minimal rule and plugin with kiira/plugin."
 ---
 
 <WarningAlert title="Experimental">
@@ -48,7 +48,7 @@ Built-in rule ids have no prefix. They run first, in this order, followed by plu
 The last three rules are off until you turn them on. Nothing in them changes Kiira's output unless you do.
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   rules: {
@@ -82,13 +82,13 @@ export default defineConfig({
 
 This section is a short summary. The [plugin guide](/latest/plugins/writing-a-plugin) covers writing a plugin step by step, and the [reference](/latest/plugins/rules-and-presets) covers rule settings, presets, and the order Kiira merges them in.
 
-Import `defineRule` and `definePlugin` from `kiira-core/plugin`. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
+Import `defineRule` and `definePlugin` from `kiira/plugin`. The entry has no runtime dependencies, so it works from a plain `.mjs` config as well as TypeScript.
 
 This rule flags a word in the prose of every document:
 
 ```ts
-import { defineConfig } from "kiira-core"
-import { definePlugin, defineRule } from "kiira-core/plugin"
+import { defineConfig } from "kiira"
+import { definePlugin, defineRule } from "kiira/plugin"
 
 const noWord = defineRule({
   meta: {
@@ -169,7 +169,7 @@ Kiira does not parse YAML, so a plugin brings its own parser. The block is left 
 This rule requires a `name:` line:
 
 ```ts
-import { defineRule } from "kiira-core/plugin"
+import { defineRule } from "kiira/plugin"
 
 export const requireName = defineRule({
   meta: { scope: "document", defaultSeverity: "error" },
@@ -203,8 +203,8 @@ A plugin or preset can set its own TypeScript options for each Markdown file. Ad
 This plugin checks docs against Kiira's defaults instead of the project tsconfig, resolves `@docs/*` imports to a folder of examples, and drops "cannot find name" errors for a global the docs assume:
 
 ```ts
-import { defineConfig } from "kiira-core"
-import { definePlugin } from "kiira-core/plugin"
+import { defineConfig } from "kiira"
+import { definePlugin } from "kiira/plugin"
 
 const docs = definePlugin({
   name: "docs",

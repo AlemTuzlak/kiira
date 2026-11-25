@@ -18,7 +18,7 @@ sources:
   - "AlemTuzlak/kiira:docs/content/06-ci/01-github-action.mdx"
   - "AlemTuzlak/kiira:docs/content/02-cli/04-fix.mdx"
   - "AlemTuzlak/kiira:docs/content/03-configuration/05-programmatic-api.mdx"
-  - "AlemTuzlak/kiira:packages/cli/src/index.ts"
+  - "AlemTuzlak/kiira:packages/cli/src/cli.ts"
 ---
 
 # Kiira — CI Integration
@@ -102,7 +102,7 @@ kiira check; status=$?
 
 Exit `2` is a setup problem, not a docs problem; conflating them misreports a broken config as "docs broken".
 
-Source: docs/content/02-cli/05-exit-codes.mdx; packages/cli/src/index.ts
+Source: docs/content/02-cli/05-exit-codes.mdx; packages/cli/src/cli.ts
 
 ### MEDIUM Using the pretty reporter for CI annotations
 

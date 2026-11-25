@@ -44,7 +44,7 @@ jobs:
         # not in a from-source checkout (it is built in the step above).
         run: |
           status=0
-          cli="$PWD/packages/cli/dist/index.mjs"
+          cli="$PWD/packages/cli/dist/cli.mjs"
           for example in basic react monorepo; do
             echo "::group::kiira check (examples/${example})"
             (cd "examples/${example}" && node "$cli" check --reporter github) || status=1

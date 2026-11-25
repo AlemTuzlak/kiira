@@ -1,4 +1,4 @@
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
 	include: ["docs/**/*.md", "README.md"],
