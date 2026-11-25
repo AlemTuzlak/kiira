@@ -29,7 +29,7 @@ No special config is needed in a monorepo — docs importing internal `@scope/*`
 packages and third-party libs resolve out of the box:
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   include: ["docs/**/*.{md,mdx}"],

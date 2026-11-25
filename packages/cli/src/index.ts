@@ -1,53 +1,12 @@
-#!/usr/bin/env node
-import { parseArgs } from "./args"
-import { runCheck } from "./commands/check"
-import { runInit } from "./commands/init"
-import { HELP_TEXT, VERSION } from "./help"
-
-async function main(argv: string[]): Promise<number> {
-	let parsed: ReturnType<typeof parseArgs>
-	try {
-		parsed = parseArgs(argv)
-	} catch (error) {
-		console.error((error as Error).message)
-		return 2
-	}
-
-	switch (parsed.command) {
-		case "help":
-			console.log(HELP_TEXT)
-			return 0
-		case "version":
-			console.log(VERSION)
-			return 0
-		case "init":
-			return runInit({ cwd: process.cwd(), log: (m) => console.log(m) })
-		default:
-			return runCheck({
-				cwd: process.cwd(),
-				files: parsed.files,
-				entry: parsed.entry,
-				ignore: parsed.ignore,
-				config: parsed.config,
-				rules: parsed.rules,
-				reporter: parsed.reporter,
-				fix: parsed.fix,
-				dryRun: parsed.dryRun,
-				verbose: parsed.verbose,
-				raw: parsed.raw,
-				static: parsed.static,
-				log: (m) => console.log(m),
-				error: (m) => console.error(m),
-			})
-	}
-}
-
-main(process.argv.slice(2))
-	.then((code) => {
-		process.exitCode = code
-	})
-	.catch((error) => {
-		// Configuration or runtime failure.
-		console.error(`kiira: ${(error as Error).message}`)
-		process.exitCode = 2
-	})
+// Public entry of `kiira`. Users install only `kiira`, and with pnpm the
+// transitive `kiira-core` is not importable from their code, so the config
+// helpers are re-exported here. The CLI lives in ./cli.ts.
+export { defineConfig } from "kiira-core"
+export type {
+	KiiraConfig,
+	KiiraEngine,
+	KiiraFixture,
+	KiiraLanguage,
+	KiiraOverride,
+	RuleSetting,
+} from "kiira-core"

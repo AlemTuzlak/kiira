@@ -57,7 +57,7 @@ Adding the tags yourself is always fine, and it makes intent explicit for reader
 If your docs are **literate** — one fence sets up imports and values, and later fences build on them throughout the page — tagging every fence with `group=` doesn't scale. Set `defaultGroup: "file"` in your [config](/latest/configuration/options) and Kiira groups **every checkable fence in a file** into one implicit group, in document order, as if you'd stamped the same `group=` on each:
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   include: ["docs/**/*.{md,mdx}"],

@@ -22,7 +22,8 @@ describe("runInit", () => {
 		expect(code).toBe(0)
 		expect(existsSync(join(dir, "kiira.config.ts"))).toBe(true)
 		expect(existsSync(join(dir, "tsconfig.docs.json"))).toBe(true)
-		expect(readFileSync(join(dir, "kiira.config.ts"), "utf8")).toContain("defineConfig")
+		// Users install only `kiira`, so the config must not import `kiira-core`.
+		expect(readFileSync(join(dir, "kiira.config.ts"), "utf8")).toContain('import { defineConfig } from "kiira"')
 		expect(JSON.parse(readFileSync(join(dir, "tsconfig.docs.json"), "utf8")).compilerOptions.checkJs).toBe(true)
 	})
 

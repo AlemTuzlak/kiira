@@ -158,11 +158,11 @@ This is an alias for the `relative-imports` [rule](/latest/configuration/rules),
 The rule and plugin API can change between minor releases while it settles.
 </WarningAlert>
 
-Plugins add [rules](/latest/configuration/rules) and presets. A plugin is an object with a `name`, and optionally `rules` and `presets`. Build one with `definePlugin` from `kiira-core/plugin`.
+Plugins add [rules](/latest/configuration/rules) and presets. A plugin is an object with a `name`, and optionally `rules` and `presets`. Build one with `definePlugin` from `kiira/plugin`.
 
 ```ts
-import { defineConfig } from "kiira-core"
-import { definePlugin, defineRule } from "kiira-core/plugin"
+import { defineConfig } from "kiira"
+import { definePlugin, defineRule } from "kiira/plugin"
 
 const noTodo = defineRule({
   meta: { scope: "document", defaultSeverity: "warn" },

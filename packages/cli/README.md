@@ -151,7 +151,7 @@ codes are what make Kiira a CI gate.
 `include`:
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   include: ["docs/**/*.md", "README.md"],

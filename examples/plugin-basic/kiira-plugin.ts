@@ -1,5 +1,5 @@
 import { relative } from "node:path"
-import { type KiiraPreset, definePlugin, defineRule } from "kiira-core/plugin"
+import { type KiiraPreset, definePlugin, defineRule } from "kiira/plugin"
 
 /** `Getting Started!` becomes `getting-started`. */
 export function slugify(title: string): string {

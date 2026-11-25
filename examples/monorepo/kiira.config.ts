@@ -1,4 +1,4 @@
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
 	// One config validating docs across every package in the monorepo.

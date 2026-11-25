@@ -355,7 +355,7 @@ skills:
           kiira check; status=$?
           if [ "$status" -eq 2 ]; then echo "Kiira config/setup problem"; fi
           if [ "$status" -eq 1 ]; then echo "docs have type errors"; fi
-        source: "docs/content/02-cli/05-exit-codes.mdx; packages/cli/src/index.ts"
+        source: "docs/content/02-cli/05-exit-codes.mdx; packages/cli/src/cli.ts"
         priority: HIGH
         status: active
         skills: ["ci-integration"]

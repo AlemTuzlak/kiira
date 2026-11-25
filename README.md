@@ -237,7 +237,7 @@ Exit codes: `0` clean, `1` validation errors, `2` config/runtime failure.
 `kiira.config.ts` (or `.js`/`.json`); all fields are optional except `include`:
 
 ```ts
-import { defineConfig } from "kiira-core"
+import { defineConfig } from "kiira"
 
 export default defineConfig({
   include: ["docs/**/*.{md,mdx}", "README.md"],

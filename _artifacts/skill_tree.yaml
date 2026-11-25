@@ -70,7 +70,7 @@ skills:
       - "AlemTuzlak/kiira:docs/content/02-cli/02-flags.mdx"
       - "AlemTuzlak/kiira:docs/content/06-ci/01-github-action.mdx"
       - "AlemTuzlak/kiira:docs/content/06-ci/02-any-ci.mdx"
-      - "AlemTuzlak/kiira:packages/cli/src/index.ts"
+      - "AlemTuzlak/kiira:packages/cli/src/cli.ts"
       - "AlemTuzlak/kiira:packages/cli/src/reporters.ts"
       - "AlemTuzlak/kiira:packages/cli/src/entries.ts"
 
